@@ -47,7 +47,6 @@ impl RenderOnce for EnvironmentModal {
             .selected_env_modal_id
             .clone()
             .unwrap_or_else(|| "globals".to_string());
-        let var_query = modal.var_filter_query.to_lowercase();
         let ws_clone = self.env_state.clone();
         let modal_clone = self.modal_state.clone();
         let sidebar_clone = self.sidebar_state.clone();
@@ -57,77 +56,25 @@ impl RenderOnce for EnvironmentModal {
         let is_global_selected = selected_id == "globals";
         let active_custom_env = envs.iter().find(|e| e.id == selected_id).cloned();
 
-        // Variable search input holder
-        let var_search_holder = window.use_keyed_state(
-            gpui::SharedString::from(format!("var-modal-search-{}", selected_id)),
-            cx,
-            |window, cx| {
-                let input =
-                    cx.new(|cx| InputState::new(window, cx).placeholder("Filter variables..."));
-                let inp = input.clone();
-                let modal_s = modal_clone.clone();
-                let sub = cx.subscribe_in(&input, window, move |_, _, ev, _, cx| {
-                    if let InputEvent::Change = ev {
-                        let val = inp.read(cx).value().to_string();
-                        modal_s.update(cx, |state, cx| {
-                            state.set_var_filter_query(val, cx);
-                        });
-                    }
-                });
-                (input, sub)
-            },
-        );
-        let var_search_input = var_search_holder.read(cx).0.clone();
-
         let filtered_envs: Vec<Environment> = envs.clone();
 
         // Target variables to display in the right pane
-        let (_target_env_name, target_variables): (String, Vec<(usize, EnvironmentVariable)>) = {
-            if is_global_selected {
-                let vars: Vec<_> = global_env
-                    .variables
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, v)| {
-                        if var_query.is_empty() {
-                            true
-                        } else {
-                            v.key.to_lowercase().contains(&var_query)
-                                || v.initial_value.to_lowercase().contains(&var_query)
-                                || v.current_value.to_lowercase().contains(&var_query)
-                        }
-                    })
-                    .map(|(i, v)| (i, v.clone()))
-                    .collect();
-                ("Globals".to_string(), vars)
-            } else if let Some(custom) = &active_custom_env {
-                let vars: Vec<_> = custom
-                    .variables
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, v)| {
-                        if var_query.is_empty() {
-                            true
-                        } else {
-                            v.key.to_lowercase().contains(&var_query)
-                                || v.initial_value.to_lowercase().contains(&var_query)
-                                || v.current_value.to_lowercase().contains(&var_query)
-                        }
-                    })
-                    .map(|(i, v)| (i, v.clone()))
-                    .collect();
-                (custom.name.clone(), vars)
-            } else {
-                ("No Environment Selected".to_string(), Vec::new())
-            }
-        };
-
-        let total_vars_in_target = if is_global_selected {
-            global_env.variables.len()
+        let target_variables: Vec<(usize, EnvironmentVariable)> = if is_global_selected {
+            global_env
+                .variables
+                .iter()
+                .enumerate()
+                .map(|(i, v)| (i, v.clone()))
+                .collect()
         } else if let Some(custom) = &active_custom_env {
-            custom.variables.len()
+            custom
+                .variables
+                .iter()
+                .enumerate()
+                .map(|(i, v)| (i, v.clone()))
+                .collect()
         } else {
-            0
+            Vec::new()
         };
 
         let is_target_active = !is_global_selected
@@ -328,20 +275,16 @@ impl RenderOnce for EnvironmentModal {
                                                 div()
                                                     .id("btn-new-custom-env")
                                                     .cursor_pointer()
-                                                    .px(px(6.))
-                                                    .py(px(1.))
-                                                    .rounded(px(3.))
-                                                    .bg(t.primary)
-                                                    .text_color(t.primary_foreground)
-                                                    .hover(|s| s.bg(t.primary_hover))
-                                                    .text_xs()
-                                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                                    .p(px(2.))
+                                                    .rounded(px(4.))
+                                                    .text_color(t.text_muted)
+                                                    .hover(|s| s.bg(t.bg_hover).text_color(t.text_primary))
                                                     .on_click(move |_, _, cx| {
                                                         ws_add.update(cx, |state, cx| {
                                                             state.create_environment(None, cx);
                                                         });
                                                     })
-                                                    .child("+ New")
+                                                    .child(Icon::new(IconName::Plus).size(px(14.)))
                                             }),
                                     )
                                     // Custom environments scrollable list
@@ -670,46 +613,6 @@ impl RenderOnce for EnvironmentModal {
                                                     }),
                                             ),
                                     )
-                                    // Variables Search & Summary Bar
-                                    .child(
-                                        div()
-                                            .h(px(38.))
-                                            .px(px(16.))
-                                            .border_b_1()
-                                            .border_color(t.border)
-                                            .flex()
-                                            .items_center()
-                                            .justify_between()
-                                            .child(
-                                                div()
-                                                    .w(px(240.))
-                                                    .h(px(26.))
-                                                    .px(px(6.))
-                                                    .rounded(px(4.))
-                                                    .bg(t.bg_input)
-                                                    .border_1()
-                                                    .border_color(t.border)
-                                                    .flex()
-                                                    .items_center()
-                                                    .child(
-                                                        Input::new(&var_search_input)
-                                                            .id("var-detail-search")
-                                                            .appearance(false)
-                                                            .bordered(false)
-                                                            .focus_bordered(false),
-                                                    ),
-                                            )
-                                            .child(
-                                                div()
-                                                    .text_xs()
-                                                    .text_color(t.text_muted)
-                                                    .child(format!(
-                                                        "Showing {} of {} variables",
-                                                        target_variables.len(),
-                                                        total_vars_in_target
-                                                    )),
-                                            ),
-                                    )
                                     // Variables Table Container
                                     .child(
                                         div()
@@ -758,7 +661,7 @@ impl RenderOnce for EnvironmentModal {
                                                                 .gap(px(8.))
                                                                 .text_xs()
                                                                 .text_color(t.text_muted)
-                                                                .child("No variables match the current filter.")
+                                                                .child("No variables yet.")
                                                                 .child(
                                                                     div()
                                                                         .text_xs()

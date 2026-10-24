@@ -21,7 +21,6 @@ pub struct ModalState {
     pub show_env_modal: bool,
     pub selected_env_modal_id: Option<String>,
     pub env_filter_query: String,
-    pub var_filter_query: String,
     pub show_command_palette: bool,
     pub show_settings_modal: bool,
     pub settings_tab: SettingsTab,
@@ -42,7 +41,6 @@ impl Default for ModalState {
             show_env_modal: false,
             selected_env_modal_id: None,
             env_filter_query: String::new(),
-            var_filter_query: String::new(),
             show_command_palette: false,
             show_settings_modal: false,
             settings_tab: SettingsTab::General,
@@ -123,23 +121,16 @@ impl ModalState {
     pub fn open_env_modal_with_id(&mut self, env_id: Option<String>, cx: &mut Context<Self>) {
         self.show_env_modal = true;
         self.selected_env_modal_id = env_id;
-        self.var_filter_query.clear();
         cx.notify();
     }
 
     pub fn select_modal_environment(&mut self, env_id: Option<String>, cx: &mut Context<Self>) {
         self.selected_env_modal_id = env_id;
-        self.var_filter_query.clear();
         cx.notify();
     }
 
     pub fn set_env_filter_query(&mut self, query: String, cx: &mut Context<Self>) {
         self.env_filter_query = query;
-        cx.notify();
-    }
-
-    pub fn set_var_filter_query(&mut self, query: String, cx: &mut Context<Self>) {
-        self.var_filter_query = query;
         cx.notify();
     }
 
