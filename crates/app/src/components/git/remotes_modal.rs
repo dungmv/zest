@@ -1,4 +1,5 @@
 use super::common::{render_error_banner, render_not_a_repo_view};
+use crate::services::GitService;
 use crate::state::GitState;
 use crate::theme::theme;
 use gpui::prelude::FluentBuilder as _;
@@ -12,16 +13,20 @@ use gpui_component::scroll::ScrollableElement as _;
 #[derive(IntoElement)]
 pub struct GitRemotesModal {
     git_state: Entity<GitState>,
+    git_service: GitService,
 }
 
 impl GitRemotesModal {
-    pub fn new(git_state: Entity<GitState>) -> Self {
-        Self { git_state }
+    pub fn new(git_state: Entity<GitState>, git_service: GitService) -> Self {
+        Self {
+            git_state,
+            git_service,
+        }
     }
 }
 
 pub fn render_remotes_view(
-    git_clone: Entity<GitState>,
+    git_service: GitService,
     remotes: Vec<zest_core::git::GitRemote>,
     remote_name_input: Entity<InputState>,
     remote_url_input: Entity<InputState>,
@@ -53,7 +58,7 @@ pub fn render_remotes_view(
                     )
                 })
                 .children(remotes.into_iter().map(|r| {
-                    let git_del = git_clone.clone();
+                    let svc_del = git_service.clone();
                     let r_name = r.name.clone();
 
                     div()
@@ -109,9 +114,7 @@ pub fn render_remotes_view(
                                     if is_loading {
                                         return;
                                     }
-                                    git_del.update(cx, |git, cx| {
-                                        git.remove_remote(&r_name, cx);
-                                    });
+                                    svc_del.remove_remote(&r_name, cx);
                                 })
                                 .child("Remove"),
                         )
@@ -148,7 +151,7 @@ pub fn render_remotes_view(
                         .child(Input::new(&remote_url_input)),
                 )
                 .child({
-                    let git_add = git_clone.clone();
+                    let svc_add = git_service.clone();
                     let inp_n = remote_name_input.clone();
                     let inp_u = remote_url_input.clone();
                     div()
@@ -177,14 +180,10 @@ pub fn render_remotes_view(
                             if name.is_empty() || url.is_empty() {
                                 return;
                             }
-                            let git_s = git_add.clone();
-                            let inp_u_clear = inp_u.clone();
-                            inp_u_clear.update(cx, |inp_st, cx| {
+                            inp_u.update(cx, |inp_st, cx| {
                                 inp_st.set_value("", window, cx);
                             });
-                            git_s.update(cx, |git, cx| {
-                                git.add_remote(&name, &url, cx);
-                            });
+                            svc_add.add_remote(&name, &url, cx);
                         })
                         .when(is_loading, |s| s.child("Adding..."))
                         .when(!is_loading, |s| s.child("+ Add"))
@@ -197,6 +196,7 @@ impl RenderOnce for GitRemotesModal {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let t = theme();
         let git_clone = self.git_state.clone();
+        let svc_clone = self.git_service.clone();
 
         let (is_repo, remotes, git_error, is_loading) = {
             let git = self.git_state.read(cx);
@@ -340,10 +340,10 @@ impl RenderOnce for GitRemotesModal {
                     })
                     // Body
                     .child(div().flex_1().overflow_hidden().child(if !is_repo {
-                        render_not_a_repo_view(git_clone.clone(), is_loading)
+                        render_not_a_repo_view(svc_clone.clone(), is_loading)
                     } else {
                         render_remotes_view(
-                            git_clone.clone(),
+                            svc_clone.clone(),
                             remotes,
                             remote_name_input,
                             remote_url_input,

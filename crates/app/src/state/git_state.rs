@@ -1,5 +1,4 @@
-use crate::state::toast_state::ToastState;
-use gpui::{Context, Entity};
+use gpui::Context;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
@@ -202,162 +201,6 @@ impl GitState {
                         cx.notify();
                     });
                 }
-            }
-        })
-        .detach();
-    }
-
-    pub fn add_remote(&mut self, name: &str, url: &str, cx: &mut Context<Self>) {
-        if self.loading {
-            return;
-        }
-        self.loading = true;
-        self.error = None;
-        cx.notify();
-
-        let ws_path = self.repo_path.clone();
-        let n = name.to_string();
-        let u = url.to_string();
-        cx.spawn(async move |this, cx| {
-            let res = cx
-                .background_executor()
-                .spawn(async move { zest_core::git::git_add_remote(&ws_path, &n, &u) })
-                .await;
-            if let Some(this) = this.upgrade() {
-                this.update(cx, |git, cx| {
-                    git.loading = false;
-                    match res {
-                        Ok(_) => {
-                            git.error = None;
-                            git.refresh_remotes(cx);
-                        }
-                        Err(e) => {
-                            git.error = Some(e.to_string());
-                            cx.notify();
-                        }
-                    }
-                });
-            }
-        })
-        .detach();
-    }
-
-    pub fn remove_remote(&mut self, name: &str, cx: &mut Context<Self>) {
-        if self.loading {
-            return;
-        }
-        self.loading = true;
-        self.error = None;
-        cx.notify();
-
-        let ws_path = self.repo_path.clone();
-        let n = name.to_string();
-        cx.spawn(async move |this, cx| {
-            let res = cx
-                .background_executor()
-                .spawn(async move { zest_core::git::git_remove_remote(&ws_path, &n) })
-                .await;
-            if let Some(this) = this.upgrade() {
-                this.update(cx, |git, cx| {
-                    git.loading = false;
-                    match res {
-                        Ok(_) => {
-                            git.error = None;
-                            git.refresh_remotes(cx);
-                        }
-                        Err(e) => {
-                            git.error = Some(e.to_string());
-                            cx.notify();
-                        }
-                    }
-                });
-            }
-        })
-        .detach();
-    }
-
-    pub fn delete_branch(&mut self, name: &str, cx: &mut Context<Self>) {
-        if self.loading {
-            return;
-        }
-        self.loading = true;
-        self.error = None;
-        cx.notify();
-
-        let ws_path = self.repo_path.clone();
-        let n = name.to_string();
-        cx.spawn(async move |this, cx| {
-            let res = cx
-                .background_executor()
-                .spawn(async move { zest_core::git::git_delete_branch(&ws_path, &n, false) })
-                .await;
-            if let Some(this) = this.upgrade() {
-                this.update(cx, |git, cx| {
-                    git.loading = false;
-                    match res {
-                        Ok(_) => {
-                            git.error = None;
-                            git.refresh_branches(cx);
-                        }
-                        Err(e) => {
-                            git.error = Some(e.to_string());
-                            cx.notify();
-                        }
-                    }
-                });
-            }
-        })
-        .detach();
-    }
-
-    pub fn fetch(&mut self, toast: Option<Entity<ToastState>>, cx: &mut Context<Self>) {
-        if self.is_syncing {
-            return;
-        }
-        self.is_syncing = true;
-        self.error = None;
-        cx.notify();
-
-        let ws_path = self.repo_path.clone();
-        cx.spawn(async move |this, cx| {
-            let res = cx
-                .background_executor()
-                .spawn(async move { zest_core::git::git_fetch(&ws_path) })
-                .await;
-            if let Some(this) = this.upgrade() {
-                this.update(cx, |git, cx| {
-                    git.is_syncing = false;
-                    match res {
-                        Ok(msg) => {
-                            git.error = None;
-                            git.refresh_all(cx);
-                            if let Some(toast) = &toast {
-                                let trimmed = msg.trim();
-                                toast.update(cx, |ts, cx| {
-                                    ts.push_success(
-                                        "Git Fetch",
-                                        if trimmed.is_empty() {
-                                            "Fetched latest references.".to_string()
-                                        } else {
-                                            trimmed.to_string()
-                                        },
-                                        cx,
-                                    );
-                                });
-                            }
-                        }
-                        Err(e) => {
-                            let err_str = e.to_string();
-                            git.error = Some(err_str.clone());
-                            if let Some(toast) = &toast {
-                                toast.update(cx, |ts, cx| {
-                                    ts.push_error("Git Fetch Failed", err_str, cx);
-                                });
-                            }
-                            cx.notify();
-                        }
-                    }
-                });
             }
         })
         .detach();
@@ -585,6 +428,37 @@ impl GitState {
         } else {
             self.expanded_history_files.insert(file_path.to_string());
         }
+        cx.notify();
+    }
+
+    pub fn toggle_file_selection(&mut self, path: &str, cx: &mut Context<Self>) {
+        if self.selected_commit_files.contains(path) {
+            self.selected_commit_files.remove(path);
+        } else {
+            self.selected_commit_files.insert(path.to_string());
+        }
+        cx.notify();
+    }
+
+    pub fn toggle_all_files_selection(&mut self, select: bool, cx: &mut Context<Self>) {
+        if select {
+            if let Some(st) = &self.status {
+                self.selected_commit_files = st
+                    .staged_files
+                    .iter()
+                    .chain(&st.unstaged_files)
+                    .chain(&st.untracked_files)
+                    .map(|f| f.path.clone())
+                    .collect();
+            }
+        } else {
+            self.selected_commit_files.clear();
+        }
+        cx.notify();
+    }
+
+    pub fn set_commit_and_push(&mut self, value: bool, cx: &mut Context<Self>) {
+        self.commit_and_push = value;
         cx.notify();
     }
 }

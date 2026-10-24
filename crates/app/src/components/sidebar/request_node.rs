@@ -4,6 +4,7 @@ use super::git_status::{calculate_request_git_status, SidebarGitStatus};
 use super::item_actions::delete_request_item;
 use super::SidebarRenderContext;
 use crate::components::{MethodBadge, StatusCodeBadge};
+use crate::services::GitService;
 use crate::theme::theme;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -236,6 +237,7 @@ pub fn render_request_node(
 
                 if is_dirty_git {
                     let git_disc = git_menu.clone();
+                    let svc_disc = GitService::new(git_menu.clone(), toast_menu.clone());
                     let ws_disc = ws_menu.clone();
                     let per_disc = per_menu.clone();
                     let ed_disc = ed_menu.clone();
@@ -283,9 +285,7 @@ pub fn render_request_node(
                                     }
                                 };
 
-                                git_disc.update(cx, |git, cx| {
-                                    git.discard_file(&path_to_discard, cx);
-                                });
+                                svc_disc.discard_file(&path_to_discard, cx);
                                 per_disc.update(cx, |per, cx| {
                                     per.mark_clean(&r_id_disc, cx);
                                 });

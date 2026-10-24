@@ -2,7 +2,8 @@ use super::common::{
     render_checkbox, render_error_banner, render_not_a_repo_view, render_status_badge,
 };
 use super::diff_view::{render_diff_content, render_diff_view_toggle, DiffViewMode};
-use crate::state::{GitState, ToastState, WorkspaceDataState};
+use crate::services::GitService;
+use crate::state::{GitState, WorkspaceDataState};
 use crate::theme::theme;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -20,19 +21,19 @@ use zest_core::git::{GitFileStatus, GitStatusResult};
 pub struct GitCommitModal {
     git_state: Entity<GitState>,
     workspace_state: Entity<WorkspaceDataState>,
-    toast_state: Entity<ToastState>,
+    git_service: GitService,
 }
 
 impl GitCommitModal {
     pub fn new(
         git_state: Entity<GitState>,
         workspace_state: Entity<WorkspaceDataState>,
-        toast_state: Entity<ToastState>,
+        git_service: GitService,
     ) -> Self {
         Self {
             git_state,
             workspace_state,
-            toast_state,
+            git_service,
         }
     }
 }
@@ -88,7 +89,7 @@ pub struct ChangesViewProps {
     pub mode_entity: Entity<DiffViewMode>,
     pub selected_files: HashSet<String>,
     pub commit_and_push: bool,
-    pub toast: Entity<ToastState>,
+    pub service: GitService,
     pub is_loading: bool,
 }
 
@@ -103,7 +104,7 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui::AnyElement {
     let mode_entity = props.mode_entity;
     let selected_files = props.selected_files;
     let commit_and_push = props.commit_and_push;
-    let toast = props.toast;
+    let service = props.service;
     let is_loading = props.is_loading;
 
     let all_files = props
@@ -229,7 +230,7 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui::AnyElement {
                                         ),
                                 )
                                 .when(item.has_worktree_changes, |this| {
-                                    let git_disc = git_clone.clone();
+                                    let svc_disc = service.clone();
                                     let ws_disc = ws_clone.clone();
                                     let p_disc = item.path.clone();
 
@@ -245,9 +246,7 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui::AnyElement {
                                             .hover(|s| s.bg(t.bg_card).text_color(t.status_5xx))
                                             .on_click(move |_, _, cx| {
                                                 cx.stop_propagation();
-                                                git_disc.update(cx, |git, cx| {
-                                                    git.discard_file(&p_disc, cx);
-                                                });
+                                                svc_disc.discard_file(&p_disc, cx);
                                                 ws_disc.update(cx, |ws, cx| {
                                                     ws.reload_all();
                                                     cx.notify();
@@ -281,7 +280,7 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui::AnyElement {
                                 .child(Input::new(&commit_input).appearance(false).bordered(false)),
                         )
                         .child({
-                            let git_commit = git_clone.clone();
+                            let svc_commit = service.clone();
                             let git_push_flag = git_clone.clone();
                             let git_push_label = git_clone.clone();
                             let inp = commit_input.clone();
@@ -353,15 +352,10 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui::AnyElement {
                                             if msg.trim().is_empty() {
                                                 return;
                                             }
-                                            let inp_clear = inp.clone();
-                                            inp_clear.update(cx, |inp_st, cx| {
+                                            inp.update(cx, |inp_st, cx| {
                                                 inp_st.set_value("", window, cx);
                                             });
-                                            let git_s = git_commit.clone();
-                                            let toast_s = toast.clone();
-                                            git_s.update(cx, |git, cx| {
-                                                git.commit(&msg, Some(toast_s.clone()), cx);
-                                            });
+                                            svc_commit.commit(&msg, cx);
                                         })
                                         .when(is_loading, |s| {
                                             s.child(
@@ -459,7 +453,7 @@ impl RenderOnce for GitCommitModal {
         let t = theme();
         let git_clone = self.git_state.clone();
         let ws_clone = self.workspace_state.clone();
-        let toast_clone = self.toast_state.clone();
+        let svc_clone = self.git_service.clone();
 
         let (
             is_repo,
@@ -643,7 +637,7 @@ impl RenderOnce for GitCommitModal {
                     })
                     // Body
                     .child(div().flex_1().overflow_hidden().child(if !is_repo {
-                        render_not_a_repo_view(git_clone.clone(), is_loading)
+                        render_not_a_repo_view(svc_clone.clone(), is_loading)
                     } else {
                         render_changes_view(ChangesViewProps {
                             git_clone: git_clone.clone(),
@@ -656,7 +650,7 @@ impl RenderOnce for GitCommitModal {
                             mode_entity: view_mode_entity,
                             selected_files,
                             commit_and_push,
-                            toast: toast_clone,
+                            service: svc_clone.clone(),
                             is_loading,
                         })
                     })),

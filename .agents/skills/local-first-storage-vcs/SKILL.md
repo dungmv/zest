@@ -7,7 +7,7 @@ description: >-
 
 # Local-First Storage & Git VCS Guide
 
-This skill governs the local-first filesystem storage layer (`zest-core::storage`), disk persistence state (`PersistenceState`), and Git version control operations (`zest-core::git` and `crates/app/src/state/git_ops.rs`).
+This skill governs the local-first filesystem storage layer (`zest-core::storage`), disk persistence state (`PersistenceState`), and Git version control operations (`zest-core::git`, dispatched from `crates/app/src/services/git_service.rs` into `crates/app/src/state/git_state.rs`).
 
 ---
 

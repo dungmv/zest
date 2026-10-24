@@ -31,7 +31,7 @@ zest/
 │       │   ├── app/           # AppView, composer inputs, inspector displays, subscriptions
 │       │   ├── components/    # Modular GPUI UI components (< 650 LOC per module)
 │       │   ├── state/         # Multi-entity state management (9 isolated entities)
-│       │   ├── services/      # HttpEngine & event-driven background Runner
+│       │   ├── services/      # HttpEngine, background Runner, Git command service
 │       │   ├── settings.rs    # User preferences persistence
 │       │   ├── theme.rs       # Theme definitions and dark/light switching
 │       │   └── main.rs        # Application entrypoint & GPUI bootstrap
@@ -73,7 +73,7 @@ These principles were forged through major refactoring milestones (SL-001 throug
 ### 2.4 Non-Blocking Asynchronous Concurrency
 - **UI Thread Safety**: Never execute blocking I/O, `std::process::Command`, filesystem directory scans, or JavaScript evaluation on the main UI thread.
 - Always dispatch background work using `cx.background_executor().spawn(...)`.
-- Git operations in `git_ops.rs` must set `loading` or `is_syncing` and execute asynchronously.
+- Git operations in `services/git_service.rs` must set `loading` or `is_syncing` (via `GitState`) and execute asynchronously.
 
 ### 2.5 Bounded Memory Caching (SL-002, SL-006)
 - All session caches storing responses or heavy payloads must use `zest_core::cache::LruMemoryCache` with dual bounds:

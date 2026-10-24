@@ -12,26 +12,27 @@ pub use diff_view::*;
 pub use history_modal::*;
 pub use remotes_modal::*;
 
-use crate::state::{GitActiveModal, GitState, ToastState, WorkspaceDataState};
+use crate::services::GitService;
+use crate::state::{GitActiveModal, GitState, WorkspaceDataState};
 use gpui::{div, App, AppContext as _, Entity, IntoElement, RenderOnce, Window};
 
 #[derive(IntoElement)]
 pub struct GitModal {
     git_state: Entity<GitState>,
     workspace_state: Entity<WorkspaceDataState>,
-    toast_state: Entity<ToastState>,
+    git_service: GitService,
 }
 
 impl GitModal {
     pub fn new(
         git_state: Entity<GitState>,
         workspace_state: Entity<WorkspaceDataState>,
-        toast_state: Entity<ToastState>,
+        git_service: GitService,
     ) -> Self {
         Self {
             git_state,
             workspace_state,
-            toast_state,
+            git_service,
         }
     }
 }
@@ -44,17 +45,20 @@ impl RenderOnce for GitModal {
             Some(GitActiveModal::Commit) => GitCommitModal::new(
                 self.git_state.clone(),
                 self.workspace_state.clone(),
-                self.toast_state.clone(),
+                self.git_service.clone(),
             )
             .into_any_element(),
             Some(GitActiveModal::History) => {
-                GitHistoryModal::new(self.git_state.clone()).into_any_element()
+                GitHistoryModal::new(self.git_state.clone(), self.git_service.clone())
+                    .into_any_element()
             }
             Some(GitActiveModal::NewBranch) => {
-                GitBranchModal::new(self.git_state.clone()).into_any_element()
+                GitBranchModal::new(self.git_state.clone(), self.git_service.clone())
+                    .into_any_element()
             }
             Some(GitActiveModal::Remotes) => {
-                GitRemotesModal::new(self.git_state.clone()).into_any_element()
+                GitRemotesModal::new(self.git_state.clone(), self.git_service.clone())
+                    .into_any_element()
             }
             None => div().into_any_element(),
         }

@@ -2,6 +2,7 @@ use super::common::{render_error_banner, render_not_a_repo_view};
 use super::diff_view::{
     render_diff_content, render_diff_view_toggle, split_diff_into_files, DiffViewMode,
 };
+use crate::services::GitService;
 use crate::state::GitState;
 use crate::theme::theme;
 use gpui::prelude::FluentBuilder as _;
@@ -15,11 +16,15 @@ use std::collections::HashSet;
 #[derive(IntoElement)]
 pub struct GitHistoryModal {
     git_state: Entity<GitState>,
+    git_service: GitService,
 }
 
 impl GitHistoryModal {
-    pub fn new(git_state: Entity<GitState>) -> Self {
-        Self { git_state }
+    pub fn new(git_state: Entity<GitState>, git_service: GitService) -> Self {
+        Self {
+            git_state,
+            git_service,
+        }
     }
 }
 
@@ -298,6 +303,7 @@ impl RenderOnce for GitHistoryModal {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let t = theme();
         let git_clone = self.git_state.clone();
+        let svc_clone = self.git_service.clone();
 
         let (is_repo, branch_name, history, selected_commit, git_error, expanded_files, is_loading) = {
             let git = self.git_state.read(cx);
@@ -451,7 +457,7 @@ impl RenderOnce for GitHistoryModal {
                     })
                     // Body
                     .child(div().flex_1().overflow_hidden().child(if !is_repo {
-                        render_not_a_repo_view(git_clone.clone(), is_loading)
+                        render_not_a_repo_view(svc_clone.clone(), is_loading)
                     } else {
                         render_history_view(
                             git_clone.clone(),

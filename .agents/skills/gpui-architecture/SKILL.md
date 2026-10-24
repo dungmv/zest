@@ -22,7 +22,7 @@ This skill guides the design, implementation, and maintenance of the GPUI-based 
 | `PersistenceState` | Disk persistence, file watcher (`FsWatcher`), dirty flags, external conflict detection | `state/persistence_state.rs` |
 | `SidebarState` | Sidebar layout, collapse states, back/forward history navigation, inline renaming | `state/sidebar_state.rs` |
 | `ModalState` | Modal overlay visibility (`env`, `git`, `settings`, `import`, `cookies`), theme preference | `state/modal_state.rs` |
-| `GitState` | Git VCS operations, status cache, staging, diff content, branches, remotes | `state/git_state.rs`, `state/git_ops.rs` |
+| `GitState` | Git VCS status cache, staging/diff/branches/remotes data, modal & tab state; CLI commands dispatched via `GitService` (`services/git_service.rs`, Runner-style) | `state/git_state.rs` |
 | `RequestSessionState` | Pointer to active request (`active_request_id`), UI tab selections | `state/request_session_state.rs` |
 | `ResponseState` | Active HTTP response, LRU cache (`ResponseCache`), test results, logs | `state/response_state.rs` |
 | `ToastState` | Transient notification banners and error toasts | `state/toast_state.rs` |

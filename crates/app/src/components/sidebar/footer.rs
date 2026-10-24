@@ -1,3 +1,4 @@
+use crate::services::GitService;
 use crate::state::{GitActiveModal, GitState, ToastState};
 use crate::theme::theme;
 use gpui::prelude::FluentBuilder as _;
@@ -24,7 +25,7 @@ pub fn render_sidebar_footer(
     let ahead = git_status.map(|s| s.ahead).unwrap_or(0);
 
     let git_footer = git.clone();
-    let toast_footer = toast.clone();
+    let git_service = GitService::new(git.clone(), toast.clone());
     let current_branch_name = git_branch.to_string();
 
     div()
@@ -42,7 +43,7 @@ pub fn render_sidebar_footer(
         // Branch chip & dropdown menu
         .child(if is_repo {
             let git_menu = git_footer.clone();
-            let toast_menu = toast_footer.clone();
+            let svc_menu = git_service.clone();
             let active_b = current_branch_name.clone();
 
             Button::new("sidebar-footer-branch-chip")
@@ -132,15 +133,11 @@ pub fn render_sidebar_footer(
                     let git_history = git_menu.clone();
                     let git_new_branch = git_menu.clone();
                     let git_remotes = git_menu.clone();
-                    let git_fetch = git_menu.clone();
-                    let git_pull = git_menu.clone();
-                    let git_push = git_menu.clone();
-                    let toast_fetch = toast_menu.clone();
-                    let toast_pull = toast_menu.clone();
-                    let toast_push = toast_menu.clone();
+                    let svc_checkout_parent = svc_menu.clone();
+                    let svc_fetch = svc_menu.clone();
+                    let svc_pull = svc_menu.clone();
+                    let svc_push = svc_menu.clone();
 
-                    let git_checkout_parent = git_menu.clone();
-                    let toast_checkout_parent = toast_menu.clone();
                     let (branches_list, current_b) = {
                         let g = git_menu.read(cx);
                         let branches = g.branches.clone();
@@ -188,16 +185,13 @@ pub fn render_sidebar_footer(
                             for b in &branches_list {
                                 let b_name = b.name.clone();
                                 let is_curr = b.is_current || b.name == current_b;
-                                let git_b = git_checkout_parent.clone();
-                                let toast_b = toast_checkout_parent.clone();
+                                let svc_b = svc_checkout_parent.clone();
                                 let b_target = b_name.clone();
 
                                 s = s.item(PopupMenuItem::new(b_name).checked(is_curr).on_click(
                                     move |_, _, cx| {
                                         if !is_curr {
-                                            git_b.update(cx, |git, cx| {
-                                                git.checkout(&b_target, Some(toast_b.clone()), cx);
-                                            });
+                                            svc_b.checkout(&b_target, cx);
                                         }
                                     },
                                 ));
@@ -225,11 +219,7 @@ pub fn render_sidebar_footer(
                             .icon(IconName::CloudDownload)
                             .disabled(is_syncing)
                             .on_click(move |_, _, cx| {
-                                let git_s = git_fetch.clone();
-                                let toast_s = toast_fetch.clone();
-                                git_s.update(cx, |git, cx| {
-                                    git.fetch(Some(toast_s.clone()), cx);
-                                });
+                                svc_fetch.fetch(cx);
                             }),
                     );
 
@@ -239,11 +229,7 @@ pub fn render_sidebar_footer(
                             .icon(IconName::ArrowDown)
                             .disabled(is_syncing)
                             .on_click(move |_, _, cx| {
-                                let git_s = git_pull.clone();
-                                let toast_s = toast_pull.clone();
-                                git_s.update(cx, |git, cx| {
-                                    git.pull(Some(toast_s.clone()), cx);
-                                });
+                                svc_pull.pull(cx);
                             }),
                     );
 
@@ -253,11 +239,7 @@ pub fn render_sidebar_footer(
                             .icon(IconName::ArrowUp)
                             .disabled(is_syncing)
                             .on_click(move |_, _, cx| {
-                                let git_s = git_push.clone();
-                                let toast_s = toast_push.clone();
-                                git_s.update(cx, |git, cx| {
-                                    git.push(Some(toast_s.clone()), cx);
-                                });
+                                svc_push.push(cx);
                             }),
                     );
 

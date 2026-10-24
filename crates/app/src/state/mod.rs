@@ -2,7 +2,6 @@
 
 pub mod app_state;
 pub mod environment_state;
-pub mod git_ops;
 pub mod git_state;
 pub mod modal_state;
 pub mod persistence_state;

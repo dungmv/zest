@@ -1,3 +1,4 @@
+use crate::services::GitService;
 use crate::state::GitState;
 use crate::theme::theme;
 use gpui::prelude::FluentBuilder as _;
@@ -125,9 +126,9 @@ pub fn render_error_banner(git_state: Entity<GitState>, err: String) -> gpui::An
         .into_any_element()
 }
 
-pub fn render_not_a_repo_view(git_state: Entity<GitState>, is_loading: bool) -> gpui::AnyElement {
+pub fn render_not_a_repo_view(git_service: GitService, is_loading: bool) -> gpui::AnyElement {
     let t = theme();
-    let git_init = git_state.clone();
+    let svc_init = git_service;
 
     div()
         .size_full()
@@ -174,9 +175,7 @@ pub fn render_not_a_repo_view(git_state: Entity<GitState>, is_loading: bool) -> 
                     if is_loading {
                         return;
                     }
-                    git_init.update(cx, |git, cx| {
-                        git.init_repo(cx);
-                    });
+                    svc_init.init_repo(cx);
                 })
                 .child(
                     div()

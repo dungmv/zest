@@ -1,4 +1,5 @@
 use super::common::{render_error_banner, render_not_a_repo_view};
+use crate::services::GitService;
 use crate::state::GitState;
 use crate::theme::theme;
 use gpui::prelude::FluentBuilder as _;
@@ -11,23 +12,28 @@ use gpui_component::input::{Input, InputState};
 #[derive(IntoElement)]
 pub struct GitBranchModal {
     git_state: Entity<GitState>,
+    git_service: GitService,
 }
 
 impl GitBranchModal {
-    pub fn new(git_state: Entity<GitState>) -> Self {
-        Self { git_state }
+    pub fn new(git_state: Entity<GitState>, git_service: GitService) -> Self {
+        Self {
+            git_state,
+            git_service,
+        }
     }
 }
 
 pub fn render_new_branch_view(
     git_clone: Entity<GitState>,
+    git_service: GitService,
     current_branch: String,
     branch_input: Entity<InputState>,
     is_loading: bool,
 ) -> gpui::AnyElement {
     let t = theme();
-    let git_create = git_clone.clone();
     let git_cancel = git_clone.clone();
+    let svc_create = git_service;
     let inp = branch_input.clone();
     let inp_val = branch_input.clone();
 
@@ -111,14 +117,10 @@ pub fn render_new_branch_view(
                             if name.is_empty() {
                                 return;
                             }
-                            let git_s = git_create.clone();
-                            let inp_clear = inp.clone();
-                            inp_clear.update(cx, |inp_st, cx| {
+                            inp.update(cx, |inp_st, cx| {
                                 inp_st.set_value("", window, cx);
                             });
-                            git_s.update(cx, |git, cx| {
-                                git.create_branch(&name, cx);
-                            });
+                            svc_create.create_branch(&name, cx);
                         })
                         .when(is_loading, |s| s.child("Creating..."))
                         .when(!is_loading, |s| s.child("Create Branch")),
@@ -131,6 +133,7 @@ impl RenderOnce for GitBranchModal {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let t = theme();
         let git_clone = self.git_state.clone();
+        let svc_clone = self.git_service.clone();
 
         let (is_repo, current_branch, git_error, is_loading) = {
             let git = self.git_state.read(cx);
@@ -258,10 +261,11 @@ impl RenderOnce for GitBranchModal {
                     })
                     // Body
                     .child(if !is_repo {
-                        render_not_a_repo_view(git_clone.clone(), is_loading)
+                        render_not_a_repo_view(svc_clone.clone(), is_loading)
                     } else {
                         render_new_branch_view(
                             git_clone.clone(),
+                            svc_clone.clone(),
                             current_branch,
                             branch_input,
                             is_loading,

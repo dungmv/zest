@@ -1,4 +1,5 @@
 use crate::components::*;
+use crate::services::GitService;
 use crate::state::{
     EnvironmentState, GitState, ModalState, PersistenceState, RequestSessionState, SidebarState,
     ToastState, WorkspaceDataState,
@@ -71,7 +72,7 @@ pub fn attach_modal_overlays(
         this.child(GitModal::new(
             git_entity.clone(),
             ws_entity.clone(),
-            toast_entity.clone(),
+            GitService::new(git_entity.clone(), toast_entity.clone()),
         ))
     })
     .when(show_import_modal, |this| {
