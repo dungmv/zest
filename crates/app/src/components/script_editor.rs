@@ -1002,10 +1002,12 @@ impl CompletionProvider for ScriptCompletionProvider {
                         label: format!("{{{{{}}}}}", c.name),
                         filter_text: Some(c.name.clone()),
                         kind: Some(CompletionItemKind::VARIABLE),
-                        detail: Some(format!("{} • {}", c.value, c.scope)),
+                        detail: Some(format!("{} • {}", c.detail_text(), c.scope)),
                         documentation: Some(Documentation::String(format!(
                             "Environment Variable: {}\nValue: {}\nScope: {}",
-                            c.name, c.value, c.scope
+                            c.name,
+                            c.detail_text(),
+                            c.scope
                         ))),
                         text_edit: Some(CompletionTextEdit::Edit(TextEdit {
                             range: LspRange {
@@ -1042,10 +1044,12 @@ impl CompletionProvider for ScriptCompletionProvider {
                                 label: c.name.clone(),
                                 filter_text: Some(c.name.clone()),
                                 kind: Some(CompletionItemKind::VARIABLE),
-                                detail: Some(format!("{} • {}", c.value, c.scope)),
+                                detail: Some(format!("{} • {}", c.detail_text(), c.scope)),
                                 documentation: Some(Documentation::String(format!(
                                     "Environment Variable: {}\nValue: {}\nScope: {}",
-                                    c.name, c.value, c.scope
+                                    c.name,
+                                    c.detail_text(),
+                                    c.scope
                                 ))),
                                 text_edit: Some(CompletionTextEdit::Edit(TextEdit {
                                     range: LspRange {

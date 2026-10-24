@@ -1,3 +1,10 @@
+mod render;
+
+pub use render::{
+    candidate_type_badge, render_candidate_detail_card, render_candidate_row, CANDIDATE_DETAIL_GAP,
+    CANDIDATE_DETAIL_WIDTH, CANDIDATE_LIST_WIDTH,
+};
+
 use crate::state::EnvironmentState;
 use anyhow::Result;
 use gpui::{
@@ -14,9 +21,21 @@ use lsp_types::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EnvVarCandidate {
     pub name: String,
+    /// Resolved value for environment variables; generated sample for dynamic ones.
     pub value: String,
     pub scope: String,
     pub is_secret: bool,
+    /// Pre-computed source kind, so consumers never re-parse the scope string.
+    pub kind: EnvVarKind,
+    /// Human-readable description (dynamic variables only).
+    pub description: Option<String>,
+}
+
+impl EnvVarCandidate {
+    /// Human-readable summary: description for dynamic variables, resolved value otherwise.
+    pub fn detail_text(&self) -> &str {
+        self.description.as_deref().unwrap_or(&self.value)
+    }
 }
 
 /// Detects if `text` contains an unclosed `{{` or `{{prefix` (at the end, middle, or cursor).
@@ -112,6 +131,8 @@ pub fn get_env_completions(env: &EnvironmentState, query: &str) -> Vec<EnvVarCan
                         },
                         scope: format!("Active: {}", active_env.name),
                         is_secret: v.secret,
+                        kind: EnvVarKind::Active,
+                        description: None,
                     });
                 }
                 seen_keys.insert(v.key.clone());
@@ -132,6 +153,8 @@ pub fn get_env_completions(env: &EnvironmentState, query: &str) -> Vec<EnvVarCan
                     },
                     scope: "Global".to_string(),
                     is_secret: v.secret,
+                    kind: EnvVarKind::Global,
+                    description: None,
                 });
             }
             seen_keys.insert(v.key.clone());
@@ -139,27 +162,18 @@ pub fn get_env_completions(env: &EnvironmentState, query: &str) -> Vec<EnvVarCan
     }
 
     // 3. Dynamic variables ($guid, $timestamp, etc.)
-    let dynamic_vars = [
-        ("$guid", "Generates random UUID v4"),
-        ("$uuid", "Generates random UUID v4"),
-        ("$timestamp", "Current UNIX timestamp in seconds"),
-        ("$isoTimestamp", "Current UTC timestamp in ISO 8601"),
-        ("$randomInt", "Random integer between 1 and 1000"),
-        ("$randomEmail", "Random email e.g. user1234@example.com"),
-        ("$randomName", "Random sample full name"),
-        ("$randomPhoneNumber", "Random phone number"),
-    ];
-
-    for (d_name, d_desc) in dynamic_vars {
+    for (d_name, d_desc) in zest_core::scripting::FAKE_VAR_CATALOG {
         if q.is_empty()
             || d_name.to_lowercase().contains(&q)
             || d_name.trim_start_matches('$').to_lowercase().contains(&q)
         {
             candidates.push(EnvVarCandidate {
                 name: d_name.to_string(),
-                value: d_desc.to_string(),
+                value: zest_core::scripting::generate_fake_var_value(d_name).unwrap_or_default(),
                 scope: "Dynamic".to_string(),
                 is_secret: false,
+                kind: EnvVarKind::Dynamic,
+                description: Some(d_desc.to_string()),
             });
         }
     }
@@ -347,10 +361,12 @@ impl CompletionProvider for EnvCompletionProvider {
                             label: label.clone(),
                             filter_text: Some(c.name.clone()),
                             kind: Some(CompletionItemKind::VARIABLE),
-                            detail: Some(format!("{} • {}", c.value, c.scope)),
+                            detail: Some(format!("{} • {}", c.detail_text(), c.scope)),
                             documentation: Some(Documentation::String(format!(
                                 "Environment Variable: {}\nValue: {}\nScope: {}",
-                                c.name, c.value, c.scope
+                                c.name,
+                                c.detail_text(),
+                                c.scope
                             ))),
                             text_edit: Some(CompletionTextEdit::Edit(TextEdit {
                                 range: LspRange {
@@ -542,20 +558,22 @@ mod tests {
 
         // 1. Completion test
         let completions = get_env_completions(&env, "base");
-        assert!(completions
-            .iter()
-            .any(|c| c.name == "baseUrl" && c.scope.contains("Staging")));
+        assert!(completions.iter().any(|c| c.name == "baseUrl"
+            && c.scope.contains("Staging")
+            && c.kind == EnvVarKind::Active
+            && c.description.is_none()));
 
         let global_comp = get_env_completions(&env, "api");
         assert!(global_comp
             .iter()
-            .any(|c| c.name == "apiKey" && c.is_secret));
+            .any(|c| c.name == "apiKey" && c.is_secret && c.kind == EnvVarKind::Global));
 
         // Dynamic completion test
         let dyn_comp = get_env_completions(&env, "guid");
-        assert!(dyn_comp
-            .iter()
-            .any(|c| c.name == "$guid" && c.scope == "Dynamic"));
+        assert!(dyn_comp.iter().any(|c| c.name == "$guid"
+            && c.kind == EnvVarKind::Dynamic
+            && c.description.as_deref() == Some("Generates random UUID v4")
+            && c.detail_text() == "Generates random UUID v4"));
 
         // 2. Variable details test
         let (val, scope, is_res) = get_variable_details(&env, "baseUrl");

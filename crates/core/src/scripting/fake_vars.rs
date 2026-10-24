@@ -7,8 +7,26 @@ use uuid::Uuid;
 
 use crate::models::{Auth, HttpRequestItem, RequestBody};
 
+/// Catalog of dynamic variables: `(name with $ prefix, description)` pairs.
+/// Single source of truth shared by the regex matcher and the UI autocomplete.
+pub const FAKE_VAR_CATALOG: &[(&str, &str)] = &[
+    ("$guid", "Generates random UUID v4"),
+    ("$uuid", "Generates random UUID v4"),
+    ("$timestamp", "Current UNIX timestamp in seconds"),
+    ("$isoTimestamp", "Current UTC timestamp in ISO 8601"),
+    ("$randomInt", "Random integer between 1 and 1000"),
+    ("$randomEmail", "Random email e.g. user1234@example.com"),
+    ("$randomName", "Random sample full name"),
+    ("$randomPhoneNumber", "Random phone number"),
+];
+
 static FAKE_VAR_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\{\{\$(uuid|guid|timestamp|isoTimestamp|randomInt|randomEmail|randomName|randomPhoneNumber)\}\}").unwrap()
+    let alternation = FAKE_VAR_CATALOG
+        .iter()
+        .map(|(name, _)| name.trim_start_matches('$'))
+        .collect::<Vec<_>>()
+        .join("|");
+    Regex::new(&format!(r"\{{\{{\$({alternation})\}}\}}")).unwrap()
 });
 
 /// Generate dynamic values for fake/mock variables by name (with or without `$` prefix).
@@ -142,6 +160,17 @@ mod tests {
     fn test_random_int_and_email() {
         let out = resolve_fake_vars("num={{$randomInt}}&email={{$randomEmail}}");
         assert!(out.contains("@example.com"));
+    }
+
+    #[test]
+    fn test_fake_var_catalog_names_generate() {
+        for (name, desc) in FAKE_VAR_CATALOG {
+            assert!(!desc.is_empty(), "empty description for {name}");
+            assert!(
+                generate_fake_var_value(name).is_some(),
+                "no generator for {name}"
+            );
+        }
     }
 
     #[test]

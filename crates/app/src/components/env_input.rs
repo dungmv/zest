@@ -1,7 +1,8 @@
 use crate::components::env_autocomplete::{
     build_tokenized_content, detect_unclosed_env_var, get_env_completions, get_variable_details,
-    get_variable_kind_and_color, handle_autocomplete_keydown, variable_value_tooltip,
-    AutocompleteNavState,
+    get_variable_kind_and_color, handle_autocomplete_keydown, render_candidate_detail_card,
+    render_candidate_row, variable_value_tooltip, AutocompleteNavState, CANDIDATE_DETAIL_GAP,
+    CANDIDATE_LIST_WIDTH,
 };
 use crate::state::{EnvironmentState, ModalState};
 use crate::theme::theme;
@@ -240,6 +241,7 @@ where
             let on_up = on_update.clone();
             let auto_s = auto_state.clone();
             let scr_h = scroll_handle.read(cx).clone();
+            let selected_cand = completion_candidates.get(selected_index).cloned();
 
             this.child(
                 deferred(
@@ -247,7 +249,7 @@ where
                         .absolute()
                         .top(px(32.))
                         .left(px(0.))
-                        .w(px(340.))
+                        .w(px(CANDIDATE_LIST_WIDTH))
                         .max_h(px(200.))
                         .rounded(px(6.))
                         .bg(t.bg_card)
@@ -275,41 +277,19 @@ where
                                 .gap(px(2.))
                                 .children(completion_candidates.into_iter().enumerate().map(
                                     |(idx, cand)| {
-                                        let cand_name = cand.name.clone();
-                                        let cand_val = cand.value.clone();
-                                        let cand_scope = cand.scope.clone();
                                         let cur_text = current_text.clone();
                                         let inp_c = inp_target.clone();
                                         let env_c = env_target.clone();
                                         let on_up_c = on_up.clone();
-                                        let auto_s_c = auto_s.clone();
                                         let is_selected = idx == selected_index;
-                                        let (_kind, cand_color, cand_bg_tint) =
-                                            get_variable_kind_and_color(&cand_scope, true);
 
-                                        div()
-                                            .id(SharedString::from(format!(
-                                                "{}-cand-{}",
-                                                input_id, cand.name
-                                            )))
-                                            .cursor_pointer()
-                                            .px(px(8.))
-                                            .py(px(5.))
-                                            .rounded(px(4.))
-                                            .bg(if is_selected {
-                                                t.bg_selected
-                                            } else {
-                                                gpui::transparent_black()
-                                            })
-                                            .hover(|s| s.bg(t.bg_hover))
-                                            .flex()
-                                            .items_center()
-                                            .justify_between()
-                                            .on_click(move |_, window, cx| {
-                                                auto_s_c.update(cx, |st, cx| {
-                                                    st.dismissed = true;
-                                                    cx.notify();
-                                                });
+                                        render_candidate_row(
+                                            &input_id,
+                                            idx,
+                                            &cand,
+                                            is_selected,
+                                            &auto_s,
+                                            move |cand, window, cx| {
                                                 let mut new_text = cur_text.clone();
                                                 if start_idx <= new_text.len()
                                                     && end_idx <= new_text.len()
@@ -317,7 +297,7 @@ where
                                                 {
                                                     new_text.replace_range(
                                                         start_idx..end_idx,
-                                                        &format!("{{{{{}}}}}", cand_name),
+                                                        &format!("{{{{{}}}}}", cand.name),
                                                     );
                                                     let content = if let Some(env_ent) = &env_c {
                                                         let env = env_ent.read(cx);
@@ -332,48 +312,25 @@ where
                                                     });
                                                     on_up_c(new_text, window, cx);
                                                 }
-                                            })
-                                            .child(
-                                                div()
-                                                    .flex()
-                                                    .items_center()
-                                                    .gap(px(8.))
-                                                    .child(
-                                                        div()
-                                                            .text_xs()
-                                                            .font_weight(gpui::FontWeight::BOLD)
-                                                            .font_family(".SystemMonoFont")
-                                                            .text_color(cand_color)
-                                                            .child(format!(
-                                                                "{{{{{}}}}}",
-                                                                cand.name
-                                                            )),
-                                                    )
-                                                    .child(
-                                                        div()
-                                                            .text_xs()
-                                                            .font_family(".SystemMonoFont")
-                                                            .text_color(t.text_muted)
-                                                            .child(format!("= \"{}\"", cand_val)),
-                                                    ),
-                                            )
-                                            .child(
-                                                div()
-                                                    .px(px(6.))
-                                                    .py(px(1.))
-                                                    .rounded(px(3.))
-                                                    .bg(cand_bg_tint)
-                                                    .border_1()
-                                                    .border_color(cand_color)
-                                                    .text_xs()
-                                                    .font_weight(gpui::FontWeight::MEDIUM)
-                                                    .text_color(cand_color)
-                                                    .child(cand_scope),
-                                            )
+                                            },
+                                        )
                                     },
                                 )),
                         )
+                        // The scrollbar layer must stay outside the tracked list div,
+                        // otherwise it shifts `scroll_to_item` child indices.
                         .vertical_scrollbar(&scr_h),
+                )
+                .with_priority(100),
+            )
+            // Compact detail card beside the popup, following the selection.
+            .child(
+                deferred(
+                    div()
+                        .absolute()
+                        .top(px(32.))
+                        .left(px(CANDIDATE_LIST_WIDTH + CANDIDATE_DETAIL_GAP))
+                        .child(render_candidate_detail_card(selected_cand.as_ref())),
                 )
                 .with_priority(100),
             )
