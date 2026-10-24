@@ -221,25 +221,23 @@ impl RenderOnce for RequestBar {
                         let ed_s = ed_clone.clone();
                         div()
                             .id("method-dropdown-btn")
-                            .pl(px(6.))
-                            .pr(px(3.))
+                            .pl(px(4.))
+                            .pr(px(1.))
                             .py(px(3.))
                             .rounded(px(4.))
                             .cursor_pointer()
                             .hover(|s| s.bg(t.bg_hover))
                             .flex()
                             .items_center()
-                            .gap(px(3.))
                             .on_click(move |_, _, cx| {
                                 ed_s.update(cx, |state, cx| {
                                     state.toggle_method_dropdown(cx);
                                 });
                             })
                             .child(MethodBadge::new(method).font_weight(gpui::FontWeight::SEMIBOLD))
-                            .child(div().text_xs().text_color(t.text_muted).child("▾"))
                     })
                     // Subtle vertical separator
-                    .child(div().w(px(1.)).h(px(16.)).bg(t.border).mx(px(2.)))
+                    .child(div().w(px(1.)).h(px(16.)).bg(t.border))
                     // URL Input Box - with inline tokens for environment variables
                     .child(
                         div()
@@ -249,7 +247,6 @@ impl RenderOnce for RequestBar {
                             .relative()
                             .flex()
                             .items_center()
-                            .pl(px(2.))
                             .child({
                                 let ws_env = ws_clone.clone();
                                 let modal_click = modal_clone.clone();
