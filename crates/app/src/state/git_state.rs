@@ -31,13 +31,12 @@ pub struct GitState {
     pub history: Vec<zest_core::git::GitCommitInfo>,
     pub branches: Vec<zest_core::git::GitBranchInfo>,
     pub remotes: Vec<zest_core::git::GitRemote>,
-    pub selected_staged_files: HashSet<String>,
-    pub selected_unstaged_files: HashSet<String>,
+    pub selected_commit_files: HashSet<String>,
+    pub commit_and_push: bool,
     pub selected_file: Option<(String, bool)>,
     pub diff_content: Option<String>,
     pub selected_commit: Option<zest_core::git::GitCommitDetail>,
     pub expanded_history_files: HashSet<String>,
-    pub commit_message: String,
     pub error: Option<String>,
     pub loading: bool,
     pub is_syncing: bool,
@@ -56,13 +55,12 @@ impl Default for GitState {
             history: Vec::new(),
             branches: Vec::new(),
             remotes: Vec::new(),
-            selected_staged_files: HashSet::new(),
-            selected_unstaged_files: HashSet::new(),
+            selected_commit_files: HashSet::new(),
+            commit_and_push: false,
             selected_file: None,
             diff_content: None,
             selected_commit: None,
             expanded_history_files: HashSet::new(),
-            commit_message: String::new(),
             error: None,
             loading: false,
             is_syncing: false,
@@ -132,8 +130,8 @@ impl GitState {
         self.error = None;
         match modal {
             GitActiveModal::Commit => {
-                self.selected_unstaged_files.clear();
-                self.selected_staged_files.clear();
+                self.selected_commit_files.clear();
+                self.commit_and_push = false;
                 self.refresh_status(cx);
             }
             GitActiveModal::History => {
@@ -155,8 +153,8 @@ impl GitState {
             self.active_modal = None;
             self.show_modal = false;
             self.error = None;
-            self.selected_unstaged_files.clear();
-            self.selected_staged_files.clear();
+            self.selected_commit_files.clear();
+            self.commit_and_push = false;
             self.expanded_history_files.clear();
             cx.notify();
             true
@@ -391,34 +389,28 @@ impl GitState {
             };
 
             let diff_result = if show_modal {
-                let valid_staged: HashSet<String> =
+                let staged_paths: HashSet<String> =
                     st.staged_files.iter().map(|f| f.path.clone()).collect();
-                let valid_unstaged: HashSet<String> = st
+                let worktree_paths: HashSet<String> = st
                     .unstaged_files
                     .iter()
                     .chain(&st.untracked_files)
                     .map(|f| f.path.clone())
                     .collect();
 
-                let file_and_staged = if let Some((path, staged)) = selected_file {
-                    if valid_staged.contains(&path) {
-                        Some((path, true))
-                    } else if valid_unstaged.contains(&path) {
-                        Some((path, false))
-                    } else {
-                        Some((path, staged))
-                    }
-                } else if let Some(first) = st.staged_files.first() {
-                    Some((first.path.clone(), true))
-                } else if let Some(first) = st.unstaged_files.first() {
-                    Some((first.path.clone(), false))
-                } else {
-                    st.untracked_files
-                        .first()
-                        .map(|first| (first.path.clone(), false))
-                };
+                // Keep the selected file if it still has pending changes; the diff
+                // mode follows its current category (working tree takes priority).
+                let picked_path = selected_file
+                    .filter(|(path, _)| {
+                        staged_paths.contains(path) || worktree_paths.contains(path)
+                    })
+                    .map(|(path, _)| path)
+                    .or_else(|| st.staged_files.first().map(|f| f.path.clone()))
+                    .or_else(|| st.unstaged_files.first().map(|f| f.path.clone()))
+                    .or_else(|| st.untracked_files.first().map(|f| f.path.clone()));
 
-                if let Some((path, staged)) = file_and_staged {
+                if let Some(path) = picked_path {
+                    let staged = !worktree_paths.contains(&path);
                     let ws_diff = ws_path.clone();
                     let p = path.clone();
                     let diff_content = cx
@@ -457,19 +449,15 @@ impl GitState {
                     if st.is_repo && !st.branch.is_empty() {
                         git.branch = Some(st.branch.clone());
                     }
-                    let valid_unstaged: HashSet<String> = st
-                        .unstaged_files
+                    let valid_paths: HashSet<String> = st
+                        .staged_files
                         .iter()
+                        .chain(&st.unstaged_files)
                         .chain(&st.untracked_files)
                         .map(|f| f.path.clone())
                         .collect();
-                    git.selected_unstaged_files
-                        .retain(|p| valid_unstaged.contains(p));
-
-                    let valid_staged: HashSet<String> =
-                        st.staged_files.iter().map(|f| f.path.clone()).collect();
-                    git.selected_staged_files
-                        .retain(|p| valid_staged.contains(p));
+                    git.selected_commit_files
+                        .retain(|p| valid_paths.contains(p));
 
                     if let Some((file_sel, diff_content)) = diff_result {
                         git.selected_file = file_sel;

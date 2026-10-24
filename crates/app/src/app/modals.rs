@@ -68,7 +68,11 @@ pub fn attach_modal_overlays(
         ))
     })
     .when(show_git_modal, |this| {
-        this.child(GitModal::new(git_entity.clone(), ws_entity.clone()))
+        this.child(GitModal::new(
+            git_entity.clone(),
+            ws_entity.clone(),
+            toast_entity.clone(),
+        ))
     })
     .when(show_import_modal, |this| {
         this.child(ImportModal::new(

@@ -479,6 +479,25 @@ pub fn git_commit(repo_dir: &Path, message: &str) -> Result<String> {
     run_git_cmd(&root, &["commit", "-m", trimmed])
 }
 
+/// Stage the given paths, then commit exactly those paths. Other files that
+/// were already staged remain in the index and are not part of the commit.
+pub fn git_commit_files(repo_dir: &Path, message: &str, file_paths: &[&str]) -> Result<String> {
+    let root = find_git_root(repo_dir).unwrap_or_else(|| repo_dir.to_path_buf());
+    let trimmed = message.trim();
+    if trimmed.is_empty() {
+        return Err(anyhow!("Commit message cannot be empty"));
+    }
+    if file_paths.is_empty() {
+        return Err(anyhow!("No files selected to commit"));
+    }
+    // Stage first so untracked paths become known to git and the working-tree
+    // content of each selected path is what gets committed.
+    git_stage_files(repo_dir, file_paths)?;
+    let mut args = vec!["commit", "-m", trimmed, "--only", "--"];
+    args.extend_from_slice(file_paths);
+    run_git_cmd(&root, &args)
+}
+
 /// Retrieve recent commit history
 pub fn git_history(repo_dir: &Path, limit: usize) -> Result<Vec<GitCommitInfo>> {
     let root = match find_git_root(repo_dir) {
@@ -807,6 +826,25 @@ mod tests {
         let history = git_history(&temp_dir, 10).unwrap();
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].message, "feat: initial test request");
+
+        // 7b. commit only selected files (untracked path is staged implicitly)
+        std::fs::write(temp_dir.join("extra.yaml"), "name: Extra\n").unwrap();
+        std::fs::write(&file_path, "name: Test Request\nmethod: DELETE\n").unwrap();
+        assert!(git_commit_files(&temp_dir, "feat: add extra request", &["extra.yaml"]).is_ok());
+        let status = git_status(&temp_dir).unwrap();
+        assert!(status
+            .unstaged_files
+            .iter()
+            .any(|f| f.path == "request.yaml"));
+        assert!(!status
+            .staged_files
+            .iter()
+            .chain(&status.unstaged_files)
+            .chain(&status.untracked_files)
+            .any(|f| f.path == "extra.yaml"));
+        let history = git_history(&temp_dir, 10).unwrap();
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].message, "feat: add extra request");
 
         // 8. modify file and check diff
         std::fs::write(&file_path, "name: Test Request\nmethod: POST\n").unwrap();

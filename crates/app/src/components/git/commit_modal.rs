@@ -2,7 +2,7 @@ use super::common::{
     render_checkbox, render_error_banner, render_not_a_repo_view, render_status_badge,
 };
 use super::diff_view::{render_diff_content, render_diff_view_toggle, DiffViewMode};
-use crate::state::{GitState, WorkspaceDataState};
+use crate::state::{GitState, ToastState, WorkspaceDataState};
 use crate::theme::theme;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -13,34 +13,82 @@ use gpui_component::input::{Input, InputState};
 use gpui_component::scroll::ScrollableElement as _;
 use gpui_component::Icon;
 use gpui_kit::assets::IconName;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use zest_core::git::{GitFileStatus, GitStatusResult};
 
 #[derive(IntoElement)]
 pub struct GitCommitModal {
     git_state: Entity<GitState>,
     workspace_state: Entity<WorkspaceDataState>,
+    toast_state: Entity<ToastState>,
 }
 
 impl GitCommitModal {
-    pub fn new(git_state: Entity<GitState>, workspace_state: Entity<WorkspaceDataState>) -> Self {
+    pub fn new(
+        git_state: Entity<GitState>,
+        workspace_state: Entity<WorkspaceDataState>,
+        toast_state: Entity<ToastState>,
+    ) -> Self {
         Self {
             git_state,
             workspace_state,
+            toast_state,
         }
     }
+}
+
+/// A single pending change shown in the unified file list. A path that has both
+/// staged and working-tree changes collapses into one item; the working-tree
+/// state wins because that is what a commit includes.
+struct UnifiedChangeItem {
+    path: String,
+    status: GitFileStatus,
+    has_worktree_changes: bool,
+}
+
+fn collect_unified_changes(status: &GitStatusResult) -> Vec<UnifiedChangeItem> {
+    let mut items: Vec<UnifiedChangeItem> = Vec::new();
+    let mut index: HashMap<String, usize> = HashMap::new();
+
+    for f in &status.staged_files {
+        index.insert(f.path.clone(), items.len());
+        items.push(UnifiedChangeItem {
+            path: f.path.clone(),
+            status: f.status,
+            has_worktree_changes: false,
+        });
+    }
+    for f in status.unstaged_files.iter().chain(&status.untracked_files) {
+        match index.get(&f.path) {
+            Some(&i) => {
+                items[i].status = f.status;
+                items[i].has_worktree_changes = true;
+            }
+            None => {
+                index.insert(f.path.clone(), items.len());
+                items.push(UnifiedChangeItem {
+                    path: f.path.clone(),
+                    status: f.status,
+                    has_worktree_changes: true,
+                });
+            }
+        }
+    }
+    items
 }
 
 pub struct ChangesViewProps {
     pub git_clone: Entity<GitState>,
     pub ws_clone: Entity<WorkspaceDataState>,
-    pub status_opt: Option<zest_core::git::GitStatusResult>,
+    pub status_opt: Option<GitStatusResult>,
     pub selected_file: Option<(String, bool)>,
     pub diff_content: Option<String>,
     pub commit_input: Entity<InputState>,
     pub view_mode: DiffViewMode,
     pub mode_entity: Entity<DiffViewMode>,
-    pub selected_staged: HashSet<String>,
-    pub selected_unstaged: HashSet<String>,
+    pub selected_files: HashSet<String>,
+    pub commit_and_push: bool,
+    pub toast: Entity<ToastState>,
     pub is_loading: bool,
 }
 
@@ -53,32 +101,28 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui::AnyElement {
     let commit_input = props.commit_input;
     let view_mode = props.view_mode;
     let mode_entity = props.mode_entity;
-    let selected_staged = props.selected_staged;
-    let selected_unstaged = props.selected_unstaged;
+    let selected_files = props.selected_files;
+    let commit_and_push = props.commit_and_push;
+    let toast = props.toast;
     let is_loading = props.is_loading;
 
-    let staged_files = props
+    let all_files = props
         .status_opt
         .as_ref()
-        .map(|s| s.staged_files.clone())
+        .map(collect_unified_changes)
         .unwrap_or_default();
-    let unstaged_files = props
-        .status_opt
-        .as_ref()
-        .map(|s| s.unstaged_files.clone())
-        .unwrap_or_default();
-    let untracked_files = props
-        .status_opt
-        .as_ref()
-        .map(|s| s.untracked_files.clone())
-        .unwrap_or_default();
-
-    let total_staged = staged_files.len();
+    let total_files = all_files.len();
+    let selected_count = all_files
+        .iter()
+        .filter(|f| selected_files.contains(&f.path))
+        .count();
+    let all_selected = total_files > 0 && selected_count == total_files;
+    let partial_selected = selected_count > 0 && !all_selected;
 
     div()
         .size_full()
         .flex()
-        // Left Column: Staging lists and Commit input (width: 350px)
+        // Left Column: Unified file list and Commit input (width: 350px)
         .child(
             div()
                 .w(px(350.))
@@ -91,7 +135,7 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui::AnyElement {
                 .bg(t.bg_sidebar)
                 .flex()
                 .flex_col()
-                // 1. Staged & Working Files Lists (Scrollable top area)
+                // 1. Unified Changes List (Scrollable top area)
                 .child(
                     div()
                         .flex_1()
@@ -99,284 +143,122 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui::AnyElement {
                         .p(px(10.))
                         .flex()
                         .flex_col()
-                        .gap(px(12.))
-                        // Staged Changes Section
-                        .child({
-                            let staged_selected_count = staged_files.iter().filter(|f| selected_staged.contains(&f.path)).count();
-                            let all_staged_selected = total_staged > 0 && staged_selected_count == total_staged;
-                            let partial_staged_selected = staged_selected_count > 0 && !all_staged_selected;
-                            let git_toggle_all_staged = git_clone.clone();
-
+                        .gap(px(8.))
+                        .child(
                             div()
                                 .flex()
-                                .flex_col()
-                                .gap(px(4.))
-                                .child(
-                                    div()
-                                        .flex()
-                                        .items_center()
-                                        .justify_between()
-                                        .px(px(4.))
-                                        .child(
-                                            div()
-                                                .flex()
-                                                .items_center()
-                                                .gap(px(6.))
-                                                .when(total_staged > 0, |this| {
-                                                    this.child(render_checkbox(
-                                                        "chk-select-all-staged",
-                                                        all_staged_selected,
-                                                        partial_staged_selected,
-                                                        move |_, _, cx| {
-                                                            let select = !all_staged_selected;
-                                                            git_toggle_all_staged.update(cx, |git, cx| {
-                                                                git.toggle_all_staged_selection(select, cx);
-                                                            });
-                                                        },
-                                                    ))
-                                                })
-                                                .child(
-                                                    div()
-                                                        .text_xs()
-                                                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                        .text_color(t.text_secondary)
-                                                        .child(format!("Staged ({})", total_staged)),
-                                                ),
-                                        )
-                                        .when(total_staged > 0, |this| {
-                                            let git_unstage = git_clone.clone();
-                                            let has_sel = staged_selected_count > 0;
-                                            let btn_label = if has_sel {
-                                                format!("Unstage Selected ({})", staged_selected_count)
-                                            } else {
-                                                "Unstage Selected".to_string()
-                                            };
-                                            this.child(
-                                                div()
-                                                    .id("btn-unstage-selected")
-                                                    .text_xs()
-                                                    .when(has_sel, |s| {
-                                                        s.cursor_pointer()
-                                                            .text_color(t.primary)
-                                                            .hover(|h| h.underline())
-                                                            .on_click(move |_, _, cx| {
-                                                                git_unstage.update(cx, |git, cx| {
-                                                                    git.unstage_selected(cx);
-                                                                });
-                                                            })
-                                                    })
-                                                    .when(!has_sel, |s| {
-                                                        s.text_color(t.text_muted)
-                                                    })
-                                                    .child(btn_label),
-                                            )
-                                        }),
-                                )
-                                .children(staged_files.into_iter().map(|item| {
-                                    let git_sel = git_clone.clone();
-                                    let git_chk = git_clone.clone();
-                                    let p_chk = item.path.clone();
-                                    let p_sel = item.path.clone();
-                                    let is_checked = selected_staged.contains(&item.path);
-                                    let is_selected = selected_file.as_ref().map(|(sel, st)| sel == &item.path && *st).unwrap_or(false);
-
-                                    div()
-                                        .id(format!("staged-item-{}", item.path))
-                                        .px(px(6.))
-                                        .py(px(4.))
-                                        .rounded(px(4.))
-                                        .flex()
-                                        .items_center()
-                                        .justify_between()
-                                        .cursor_pointer()
-                                        .when(is_selected, |s| s.bg(t.bg_hover))
-                                        .hover(|s| s.bg(t.bg_hover))
-                                        .on_click(move |_, _, cx| {
-                                            git_sel.update(cx, |git, cx| {
-                                                git.select_file(p_sel.clone(), true, cx);
+                                .items_center()
+                                .gap(px(6.))
+                                .px(px(4.))
+                                .when(total_files > 0, |this| {
+                                    let git_toggle_all = git_clone.clone();
+                                    this.child(render_checkbox(
+                                        "chk-select-all-files",
+                                        all_selected,
+                                        partial_selected,
+                                        move |_, _, cx| {
+                                            let select = !all_selected;
+                                            git_toggle_all.update(cx, |git, cx| {
+                                                git.toggle_all_files_selection(select, cx);
                                             });
-                                        })
-                                        .child(
-                                            div()
-                                                .flex()
-                                                .items_center()
-                                                .gap(px(6.))
-                                                .overflow_hidden()
-                                                .child(render_checkbox(
-                                                    &format!("chk-staged-{}", item.path),
-                                                    is_checked,
-                                                    false,
-                                                    move |_, _, cx| {
-                                                        git_chk.update(cx, |git, cx| {
-                                                            git.toggle_staged_selection(&p_chk, cx);
-                                                        });
-                                                    },
-                                                ))
-                                                .child(render_status_badge(item.status))
-                                                .child(
-                                                    div()
-                                                        .text_xs()
-                                                        .font_family(".SystemMonoFont")
-                                                        .text_color(t.text_primary)
-                                                        .truncate()
-                                                        .child(item.path.clone()),
-                                                ),
-                                        )
-                                }))
-                        })
-                        // Working Changes Section
-                        .child({
-                            let all_changes: Vec<_> = unstaged_files.into_iter().chain(untracked_files).collect();
-                            let total_changes = all_changes.len();
-                            let changes_selected_count = all_changes.iter().filter(|f| selected_unstaged.contains(&f.path)).count();
-                            let all_changes_selected = total_changes > 0 && changes_selected_count == total_changes;
-                            let partial_changes_selected = changes_selected_count > 0 && !all_changes_selected;
-                            let git_toggle_all_unstaged = git_clone.clone();
+                                        },
+                                    ))
+                                })
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .text_color(t.text_secondary)
+                                        .child("Changes"),
+                                ),
+                        )
+                        .children(all_files.into_iter().map(|item| {
+                            let git_sel = git_clone.clone();
+                            let git_chk = git_clone.clone();
+                            let p_chk = item.path.clone();
+                            let p_sel = item.path.clone();
+                            let is_checked = selected_files.contains(&item.path);
+                            // Diff mode: working tree when the file has unstaged or
+                            // untracked changes, staged otherwise.
+                            let staged_diff = !item.has_worktree_changes;
+                            let is_selected = selected_file
+                                .as_ref()
+                                .map(|(sel, st)| sel == &item.path && *st == staged_diff)
+                                .unwrap_or(false);
 
                             div()
+                                .id(format!("change-item-{}", item.path))
+                                .px(px(6.))
+                                .py(px(4.))
+                                .rounded(px(4.))
                                 .flex()
-                                .flex_col()
-                                .gap(px(4.))
+                                .items_center()
+                                .justify_between()
+                                .cursor_pointer()
+                                .when(is_selected, |s| s.bg(t.bg_hover))
+                                .hover(|s| s.bg(t.bg_hover))
+                                .on_click(move |_, _, cx| {
+                                    git_sel.update(cx, |git, cx| {
+                                        git.select_file(p_sel.clone(), staged_diff, cx);
+                                    });
+                                })
                                 .child(
                                     div()
                                         .flex()
                                         .items_center()
-                                        .justify_between()
-                                        .px(px(4.))
+                                        .gap(px(6.))
+                                        .overflow_hidden()
+                                        .child(render_checkbox(
+                                            &format!("chk-file-{}", item.path),
+                                            is_checked,
+                                            false,
+                                            move |_, _, cx| {
+                                                git_chk.update(cx, |git, cx| {
+                                                    git.toggle_file_selection(&p_chk, cx);
+                                                });
+                                            },
+                                        ))
+                                        .child(render_status_badge(item.status))
                                         .child(
                                             div()
-                                                .flex()
-                                                .items_center()
-                                                .gap(px(6.))
-                                                .when(total_changes > 0, |this| {
-                                                    this.child(render_checkbox(
-                                                        "chk-select-all-changes",
-                                                        all_changes_selected,
-                                                        partial_changes_selected,
-                                                        move |_, _, cx| {
-                                                            let select = !all_changes_selected;
-                                                            git_toggle_all_unstaged.update(cx, |git, cx| {
-                                                                git.toggle_all_unstaged_selection(select, cx);
-                                                            });
-                                                        },
-                                                    ))
-                                                })
-                                                .child(
-                                                    div()
-                                                        .text_xs()
-                                                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                        .text_color(t.text_secondary)
-                                                        .child(format!("Changes ({})", total_changes)),
-                                                ),
-                                        )
-                                        .when(total_changes > 0, |this| {
-                                            let git_stage = git_clone.clone();
-                                            let has_sel = changes_selected_count > 0;
-                                            let btn_label = if has_sel {
-                                                format!("Stage Selected ({})", changes_selected_count)
-                                            } else {
-                                                "Stage Selected".to_string()
-                                            };
-                                            this.child(
-                                                div()
-                                                    .id("btn-stage-selected")
-                                                    .text_xs()
-                                                    .when(has_sel, |s| {
-                                                        s.cursor_pointer()
-                                                            .text_color(t.primary)
-                                                            .hover(|h| h.underline())
-                                                            .on_click(move |_, _, cx| {
-                                                                git_stage.update(cx, |git, cx| {
-                                                                    git.stage_selected(cx);
-                                                                });
-                                                            })
-                                                    })
-                                                    .when(!has_sel, |s| {
-                                                        s.text_color(t.text_muted)
-                                                    })
-                                                    .child(btn_label),
-                                            )
-                                        }),
+                                                .text_xs()
+                                                .font_family(".SystemMonoFont")
+                                                .text_color(t.text_primary)
+                                                .truncate()
+                                                .child(item.path.clone()),
+                                        ),
                                 )
-                                .children(all_changes.into_iter().map(|item| {
-                                    let git_sel = git_clone.clone();
-                                    let git_chk = git_clone.clone();
+                                .when(item.has_worktree_changes, |this| {
                                     let git_disc = git_clone.clone();
                                     let ws_disc = ws_clone.clone();
-                                    let p_chk = item.path.clone();
                                     let p_disc = item.path.clone();
-                                    let p_sel = item.path.clone();
-                                    let is_checked = selected_unstaged.contains(&item.path);
-                                    let is_selected = selected_file.as_ref().map(|(sel, st)| sel == &item.path && !*st).unwrap_or(false);
 
-                                    div()
-                                        .id(format!("unstaged-item-{}", item.path))
-                                        .px(px(6.))
-                                        .py(px(4.))
-                                        .rounded(px(4.))
-                                        .flex()
-                                        .items_center()
-                                        .justify_between()
-                                        .cursor_pointer()
-                                        .when(is_selected, |s| s.bg(t.bg_hover))
-                                        .hover(|s| s.bg(t.bg_hover))
-                                        .on_click(move |_, _, cx| {
-                                            git_sel.update(cx, |git, cx| {
-                                                git.select_file(p_sel.clone(), false, cx);
-                                            });
-                                        })
-                                        .child(
-                                            div()
-                                                .flex()
-                                                .items_center()
-                                                .gap(px(6.))
-                                                .overflow_hidden()
-                                                .child(render_checkbox(
-                                                    &format!("chk-unstaged-{}", item.path),
-                                                    is_checked,
-                                                    false,
-                                                    move |_, _, cx| {
-                                                        git_chk.update(cx, |git, cx| {
-                                                            git.toggle_unstaged_selection(&p_chk, cx);
-                                                        });
-                                                    },
-                                                ))
-                                                .child(render_status_badge(item.status))
-                                                .child(
-                                                    div()
-                                                        .text_xs()
-                                                        .font_family(".SystemMonoFont")
-                                                        .text_color(t.text_primary)
-                                                        .truncate()
-                                                        .child(item.path.clone()),
-                                                ),
-                                        )
-                                        .child(
-                                            // Discard button (↺)
-                                            div()
-                                                .id(format!("btn-discard-{}", item.path))
-                                                .cursor_pointer()
-                                                .p(px(2.))
-                                                .rounded(px(3.))
-                                                .text_xs()
-                                                .text_color(t.text_muted)
-                                                .hover(|s| s.bg(t.bg_card).text_color(t.status_5xx))
-                                                .on_click(move |_, _, cx| {
-                                                    cx.stop_propagation();
-                                                    git_disc.update(cx, |git, cx| {
-                                                        git.discard_file(&p_disc, cx);
-                                                    });
-                                                    ws_disc.update(cx, |ws, cx| {
-                                                        ws.reload_all();
-                                                        cx.notify();
-                                                    });
-                                                })
-                                                .child("↺"),
-                                        )
-                                }))
-                        }),
+                                    this.child(
+                                        // Discard button (↺)
+                                        div()
+                                            .id(format!("btn-discard-{}", item.path))
+                                            .cursor_pointer()
+                                            .p(px(2.))
+                                            .rounded(px(3.))
+                                            .text_xs()
+                                            .text_color(t.text_muted)
+                                            .hover(|s| s.bg(t.bg_card).text_color(t.status_5xx))
+                                            .on_click(move |_, _, cx| {
+                                                cx.stop_propagation();
+                                                git_disc.update(cx, |git, cx| {
+                                                    git.discard_file(&p_disc, cx);
+                                                });
+                                                ws_disc.update(cx, |ws, cx| {
+                                                    ws.reload_all();
+                                                    cx.notify();
+                                                });
+                                            })
+                                            .child("↺"),
+                                    )
+                                })
+                        })),
                 )
-                // 2. Commit Section (Moved to bottom with taller input)
+                // 2. Commit Section (Message input + commit controls)
                 .child(
                     div()
                         .p(px(10.))
@@ -396,66 +278,106 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui::AnyElement {
                                 .h(px(68.))
                                 .flex()
                                 .flex_col()
-                                .child(
-                                    Input::new(&commit_input)
-                                        .appearance(false)
-                                        .bordered(false)
-                                ),
+                                .child(Input::new(&commit_input).appearance(false).bordered(false)),
                         )
                         .child({
                             let git_commit = git_clone.clone();
+                            let git_push_flag = git_clone.clone();
+                            let git_push_label = git_clone.clone();
                             let inp = commit_input.clone();
-                            let can_commit = total_staged > 0 && !is_loading;
+                            let can_commit = selected_count > 0 && !is_loading;
 
                             div()
-                                .id("btn-commit-action")
-                                .h(px(32.))
-                                .rounded(px(6.))
                                 .flex()
                                 .items_center()
-                                .justify_center()
-                                .when(can_commit, |s| {
-                                    s.bg(t.primary)
+                                .justify_between()
+                                .child(
+                                    // "commit and push" toggle: commit also pushes to remote.
+                                    // The whole cluster (checkbox + label) toggles together.
+                                    div()
+                                        .id("btn-toggle-commit-and-push")
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(6.))
                                         .cursor_pointer()
-                                        .text_color(t.primary_foreground)
-                                        .hover(|h| h.opacity(0.9))
-                                })
-                                .when(!can_commit, |s| {
-                                    s.bg(t.bg_hover)
-                                        .text_color(t.text_muted)
-                                })
-                                .text_xs()
-                                .font_weight(gpui::FontWeight::BOLD)
-                                .on_click(move |_, window, cx| {
-                                    if !can_commit {
-                                        return;
-                                    }
-                                    let msg = inp.read(cx).value().to_string();
-                                    if msg.trim().is_empty() {
-                                        return;
-                                    }
-                                    let inp_clear = inp.clone();
-                                    inp_clear.update(cx, |inp_st, cx| {
-                                        inp_st.set_value("", window, cx);
-                                    });
-                                    let git_s = git_commit.clone();
-                                    git_s.update(cx, |git, cx| {
-                                        git.commit(&msg, cx);
-                                    });
-                                })
-                                .when(is_loading, |s| {
-                                    s.child(
-                                        div()
-                                            .flex()
-                                            .items_center()
-                                            .gap(px(6.))
-                                            .child(Icon::new(IconName::RefreshCw).size(px(14.)))
-                                            .child("Committing..."),
-                                    )
-                                })
-                                .when(!is_loading, |s| {
-                                    s.child(format!("✓ Commit Changes ({} staged)", total_staged))
-                                })
+                                        .hover(|s| s.opacity(0.85))
+                                        .on_click(move |_, _, cx| {
+                                            let next = !commit_and_push;
+                                            git_push_label.update(cx, |git, cx| {
+                                                git.set_commit_and_push(next, cx);
+                                            });
+                                        })
+                                        .child(render_checkbox(
+                                            "chk-commit-and-push",
+                                            commit_and_push,
+                                            false,
+                                            move |_, _, cx| {
+                                                let next = !commit_and_push;
+                                                git_push_flag.update(cx, |git, cx| {
+                                                    git.set_commit_and_push(next, cx);
+                                                });
+                                            },
+                                        ))
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(t.text_secondary)
+                                                .child("commit and push"),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .id("btn-commit-action")
+                                        .h(px(28.))
+                                        .px(px(16.))
+                                        .rounded(px(6.))
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .when(can_commit, |s| {
+                                            s.bg(t.primary)
+                                                .cursor_pointer()
+                                                .text_color(t.primary_foreground)
+                                                .hover(|h| h.opacity(0.9))
+                                        })
+                                        .when(!can_commit, |s| {
+                                            s.bg(t.bg_hover).text_color(t.text_muted)
+                                        })
+                                        .text_xs()
+                                        .font_weight(gpui::FontWeight::BOLD)
+                                        .on_click(move |_, window, cx| {
+                                            if !can_commit {
+                                                return;
+                                            }
+                                            let msg = inp.read(cx).value().to_string();
+                                            if msg.trim().is_empty() {
+                                                return;
+                                            }
+                                            let inp_clear = inp.clone();
+                                            inp_clear.update(cx, |inp_st, cx| {
+                                                inp_st.set_value("", window, cx);
+                                            });
+                                            let git_s = git_commit.clone();
+                                            let toast_s = toast.clone();
+                                            git_s.update(cx, |git, cx| {
+                                                git.commit(&msg, Some(toast_s.clone()), cx);
+                                            });
+                                        })
+                                        .when(is_loading, |s| {
+                                            s.child(
+                                                div()
+                                                    .flex()
+                                                    .items_center()
+                                                    .gap(px(6.))
+                                                    .child(
+                                                        Icon::new(IconName::RefreshCw)
+                                                            .size(px(14.)),
+                                                    )
+                                                    .child("Committing..."),
+                                            )
+                                        })
+                                        .when(!is_loading, |s| s.child("✓ Commit")),
+                                )
                         }),
                 ),
         )
@@ -494,7 +416,11 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui::AnyElement {
                                             .border_1()
                                             .border_color(t.border)
                                             .text_xs()
-                                            .text_color(if *staged { t.primary } else { t.text_secondary })
+                                            .text_color(if *staged {
+                                                t.primary
+                                            } else {
+                                                t.text_secondary
+                                            })
                                             .child(if *staged { "staged" } else { "working tree" }),
                                     )
                                     .child(
@@ -533,6 +459,7 @@ impl RenderOnce for GitCommitModal {
         let t = theme();
         let git_clone = self.git_state.clone();
         let ws_clone = self.workspace_state.clone();
+        let toast_clone = self.toast_state.clone();
 
         let (
             is_repo,
@@ -541,8 +468,8 @@ impl RenderOnce for GitCommitModal {
             selected_file,
             diff_content,
             git_error,
-            selected_unstaged,
-            selected_staged,
+            selected_files,
+            commit_and_push,
             is_loading,
         ) = {
             let git = self.git_state.read(cx);
@@ -553,25 +480,16 @@ impl RenderOnce for GitCommitModal {
                 git.selected_file.clone(),
                 git.diff_content.clone(),
                 git.error.clone(),
-                git.selected_unstaged_files.clone(),
-                git.selected_staged_files.clone(),
+                git.selected_commit_files.clone(),
+                git.commit_and_push,
                 git.loading,
             )
         };
 
-        let staged_count = status_opt
+        let total_changes = status_opt
             .as_ref()
-            .map(|s| s.staged_files.len())
+            .map(|s| s.staged_files.len() + s.unstaged_files.len() + s.untracked_files.len())
             .unwrap_or(0);
-        let unstaged_count = status_opt
-            .as_ref()
-            .map(|s| s.unstaged_files.len())
-            .unwrap_or(0);
-        let untracked_count = status_opt
-            .as_ref()
-            .map(|s| s.untracked_files.len())
-            .unwrap_or(0);
-        let total_changes = staged_count + unstaged_count + untracked_count;
 
         let commit_input_holder = window.use_keyed_state(
             gpui::SharedString::from("git-commit-msg-input"),
@@ -736,8 +654,9 @@ impl RenderOnce for GitCommitModal {
                             commit_input,
                             view_mode,
                             mode_entity: view_mode_entity,
-                            selected_staged,
-                            selected_unstaged,
+                            selected_files,
+                            commit_and_push,
+                            toast: toast_clone,
                             is_loading,
                         })
                     })),

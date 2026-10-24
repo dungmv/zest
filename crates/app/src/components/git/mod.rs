@@ -12,20 +12,26 @@ pub use diff_view::*;
 pub use history_modal::*;
 pub use remotes_modal::*;
 
-use crate::state::{GitActiveModal, GitState, WorkspaceDataState};
+use crate::state::{GitActiveModal, GitState, ToastState, WorkspaceDataState};
 use gpui::{div, App, AppContext as _, Entity, IntoElement, RenderOnce, Window};
 
 #[derive(IntoElement)]
 pub struct GitModal {
     git_state: Entity<GitState>,
     workspace_state: Entity<WorkspaceDataState>,
+    toast_state: Entity<ToastState>,
 }
 
 impl GitModal {
-    pub fn new(git_state: Entity<GitState>, workspace_state: Entity<WorkspaceDataState>) -> Self {
+    pub fn new(
+        git_state: Entity<GitState>,
+        workspace_state: Entity<WorkspaceDataState>,
+        toast_state: Entity<ToastState>,
+    ) -> Self {
         Self {
             git_state,
             workspace_state,
+            toast_state,
         }
     }
 }
@@ -35,10 +41,12 @@ impl RenderOnce for GitModal {
         let active_modal = self.git_state.read(cx).active_modal;
 
         match active_modal {
-            Some(GitActiveModal::Commit) => {
-                GitCommitModal::new(self.git_state.clone(), self.workspace_state.clone())
-                    .into_any_element()
-            }
+            Some(GitActiveModal::Commit) => GitCommitModal::new(
+                self.git_state.clone(),
+                self.workspace_state.clone(),
+                self.toast_state.clone(),
+            )
+            .into_any_element(),
             Some(GitActiveModal::History) => {
                 GitHistoryModal::new(self.git_state.clone()).into_any_element()
             }
