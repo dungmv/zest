@@ -1,6 +1,9 @@
 use crate::state::EnvironmentState;
 use anyhow::Result;
-use gpui::{App, Entity, KeyDownEvent, ScrollHandle, Task, Window};
+use gpui::{
+    div, px, App, Div, Entity, InteractiveElement as _, KeyDownEvent, ParentElement as _,
+    ScrollHandle, Styled as _, Task, Window,
+};
 use gpui_component::input::{CompletionProvider, InlineToken, InputContent};
 use gpui_component::RopeExt;
 use lsp_types::{
@@ -249,6 +252,37 @@ pub fn get_variable_kind_and_color(
             crate::theme::hex_alpha_to_hsla(0xf59e0b, 0.14),
         )
     }
+}
+
+/// Builds a compact hover tooltip that shows only the resolved value of a variable.
+pub fn variable_value_tooltip(val: &str, scope: &str, is_res: bool) -> Div {
+    let t = crate::theme::theme();
+    let (_kind, color, _bg_tint) = get_variable_kind_and_color(scope, is_res);
+
+    div()
+        .flex()
+        .items_center()
+        .max_w(px(480.))
+        .px(px(6.))
+        .py(px(3.))
+        .rounded(px(6.))
+        .bg(t.bg_card)
+        .border_1()
+        .border_color(color)
+        .shadow_2xl()
+        .occlude()
+        .text_xs()
+        .font_family(".SystemMonoFont")
+        .text_color(if is_res { t.text_primary } else { color })
+        .child(div().truncate().child(if is_res {
+            if val.is_empty() {
+                "\"\"".to_string()
+            } else {
+                val.to_string()
+            }
+        } else {
+            "Variable not found".to_string()
+        }))
 }
 
 /// Builds `InputContent` with inline tokens for all variable spans `{{var}}` found in `text`.

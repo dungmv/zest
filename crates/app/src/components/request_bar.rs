@@ -1,6 +1,7 @@
 use crate::components::env_autocomplete::{
     build_tokenized_content, detect_unclosed_env_var, get_env_completions, get_variable_details,
-    get_variable_kind_and_color, handle_autocomplete_keydown, AutocompleteNavState,
+    get_variable_kind_and_color, handle_autocomplete_keydown, variable_value_tooltip,
+    AutocompleteNavState,
 };
 use crate::components::status_badge::MethodBadge;
 use crate::state::{EnvironmentState, ModalState, RequestSessionState};
@@ -314,7 +315,6 @@ impl RenderOnce for RequestBar {
                     .get(&var_name)
                     .cloned()
                     .unwrap_or_else(|| ("".to_string(), "".to_string(), false));
-                let (_kind, color, bg_tint) = get_variable_kind_and_color(&scope, is_res);
 
                 this.child(
                     deferred(
@@ -322,61 +322,7 @@ impl RenderOnce for RequestBar {
                             .absolute()
                             .top(px(42.))
                             .left(px(80.))
-                            .w(px(320.))
-                            .p(px(8.))
-                            .rounded(px(6.))
-                            .bg(t.bg_card)
-                            .border_1()
-                            .border_color(color)
-                            .shadow_2xl()
-                            .occlude()
-                            .flex()
-                            .flex_col()
-                            .gap(px(4.))
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .justify_between()
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .font_weight(gpui::FontWeight::BOLD)
-                                            .text_color(color)
-                                            .child(format!("{{{{{}}}}}", var_name)),
-                                    )
-                                    .child(
-                                        div()
-                                            .px(px(6.))
-                                            .py(px(1.))
-                                            .rounded(px(3.))
-                                            .bg(bg_tint)
-                                            .border_1()
-                                            .border_color(color)
-                                            .text_xs()
-                                            .font_weight(gpui::FontWeight::MEDIUM)
-                                            .text_color(color)
-                                            .child(scope),
-                                    ),
-                            )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .font_family(".SystemMonoFont")
-                                    .text_color(if is_res { t.text_primary } else { color })
-                                    .child(if is_res {
-                                        format!("= \"{}\"", val)
-                                    } else {
-                                        "Variable not found in active or global environments"
-                                            .to_string()
-                                    }),
-                            )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(t.text_muted)
-                                    .child("Click variable to manage environments"),
-                            ),
+                            .child(variable_value_tooltip(&val, &scope, is_res)),
                     )
                     .with_priority(90),
                 )
