@@ -33,6 +33,14 @@ Commit `f330048` ("simplify env autocomplete popup and add keyboard navigation")
 - Layout regression risk (list not filling / overflowing the popup): mitigated by keeping `.flex_1()` + `.overflow_hidden()` on the popup container; verify manually with few and many candidates.
 - If a future gpui-component upgrade changes `Scrollable` semantics, prefer this direct pattern (handle + scroll + scrollbar on one element) over the wrapper for popups that need programmatic `scroll_to_item`.
 
+## Follow-up (Round 2): off-by-one item after the first fix
+
+**Symptom:** navigating down leaves the selected row one item outside the viewport; navigating up always shows one extra item above the selection.
+
+**Root cause:** `ScrollableElement::vertical_scrollbar()` (gpui-component 0.7.3, `scroll/scrollable.rs:19-31`) adds a `ScrollbarLayer` child via `self.child(...)`. The first fix placed `.vertical_scrollbar(&scr_h)` **before** `.children(rows)` on the tracked list div, so the div's children became `[ScrollbarLayer, row0, …, rowN-1]`. `ScrollHandle::scroll_to_item(ix)` indexes into the handle's `child_bounds`, which mirrors child order (`gpui-pre` `div.rs:1994-2000`) — every index was shifted by one: `scroll_to_item(i)` scrolled to row `i-1` (down → selection stays outside; up → one surplus row above the selection).
+
+**Fix:** mirror `popup_menu.rs` (`menu/popup_menu.rs:1516-1527`): keep `.track_scroll(&scr_h).overflow_y_scroll()` on the list div (whose children are now rows only, so `child_bounds[i] == row i`) and move `.vertical_scrollbar(&scr_h)` onto the popup container as a sibling appended after the list child. The container is not tracked by the handle, so its child order cannot shift indices, and the `absolute().inset_0()` overlay no longer translates with the scroll offset.
+
 ## Verification Steps
 
 - `cargo test` (core + app) passes; `cargo clippy --all-targets -- -D warnings` reports 0 warnings.

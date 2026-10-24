@@ -369,7 +369,6 @@ impl RenderOnce for RequestBar {
                                     .p(px(4.))
                                     .track_scroll(&scr_h)
                                     .overflow_y_scroll()
-                                    .vertical_scrollbar(&scr_h)
                                     .bg(t.bg_card)
                                     .flex()
                                     .flex_col()
@@ -482,7 +481,8 @@ impl RenderOnce for RequestBar {
                                                 )
                                         },
                                     )),
-                            ),
+                            )
+                            .vertical_scrollbar(&scr_h),
                     )
                     .with_priority(100),
                 )
