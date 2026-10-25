@@ -112,6 +112,49 @@ impl SidebarState {
         self.cancel_renaming_request(cx);
     }
 
+    /// Creates the shared inline-rename input: prefilled, fully selected, focused,
+    /// and committed on Enter/Blur through `on_commit`. Cancelling always goes
+    /// through [`Self::cancel_any_renaming`], which drops the subscription together
+    /// with the input so a cancelled rename never commits.
+    fn spawn_renaming<T: 'static>(
+        &mut self,
+        id: T,
+        initial_value: String,
+        on_commit: impl Fn(&str, &mut Context<Self>) + 'static,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> RenamingState<T> {
+        let input = cx.new(|cx| {
+            let mut s = InputState::new(window, cx);
+            s.set_value(initial_value, window, cx);
+            s.select_all(window, cx);
+            s.focus(window, cx);
+            s
+        });
+
+        let sub = cx.subscribe(
+            &input,
+            move |this, input, event: &gpui_component::input::InputEvent, cx| match event {
+                gpui_component::input::InputEvent::PressEnter { .. }
+                | gpui_component::input::InputEvent::Blur => {
+                    let value = input.read(cx).value().to_string();
+                    this.cancel_any_renaming(cx);
+                    let trimmed = value.trim();
+                    if !trimmed.is_empty() {
+                        on_commit(trimmed, cx);
+                    }
+                }
+                _ => {}
+            },
+        );
+
+        RenamingState {
+            id,
+            input,
+            subscription: sub,
+        }
+    }
+
     pub fn start_renaming_request(
         &mut self,
         req_id: String,
@@ -121,39 +164,16 @@ impl SidebarState {
         cx: &mut Context<Self>,
     ) {
         self.cancel_any_renaming(cx);
-
-        let input = cx.new(|cx| {
-            let mut s = InputState::new(window, cx);
-            s.set_value(initial_name, window, cx);
-            s.select_all(window, cx);
-            s.focus(window, cx);
-            s
-        });
-
         let r_id = req_id.clone();
-        let sub = cx.subscribe(
-            &input,
-            move |this, input, event: &gpui_component::input::InputEvent, cx| match event {
-                gpui_component::input::InputEvent::PressEnter { .. }
-                | gpui_component::input::InputEvent::Blur => {
-                    let val = input.read(cx).value().to_string();
-                    this.cancel_renaming_request(cx);
-                    let trimmed = val.trim();
-                    if !trimmed.is_empty() {
-                        ws.update(cx, |ws, cx| {
-                            ws.rename_request(&r_id, trimmed, cx);
-                        });
-                    }
-                }
-                _ => {}
+        self.renaming_request = Some(self.spawn_renaming(
+            req_id,
+            initial_name,
+            move |name, cx| {
+                ws.update(cx, |ws, cx| ws.rename_request(&r_id, name, cx));
             },
-        );
-
-        self.renaming_request = Some(RenamingState {
-            id: req_id,
-            input,
-            subscription: sub,
-        });
+            window,
+            cx,
+        ));
         cx.notify();
     }
 
@@ -166,39 +186,16 @@ impl SidebarState {
         cx: &mut Context<Self>,
     ) {
         self.cancel_any_renaming(cx);
-
-        let input = cx.new(|cx| {
-            let mut s = InputState::new(window, cx);
-            s.set_value(initial_name, window, cx);
-            s.select_all(window, cx);
-            s.focus(window, cx);
-            s
-        });
-
         let f_id = folder_id.clone();
-        let sub = cx.subscribe(
-            &input,
-            move |this, input, event: &gpui_component::input::InputEvent, cx| match event {
-                gpui_component::input::InputEvent::PressEnter { .. }
-                | gpui_component::input::InputEvent::Blur => {
-                    let val = input.read(cx).value().to_string();
-                    this.cancel_renaming_folder(cx);
-                    let trimmed = val.trim();
-                    if !trimmed.is_empty() {
-                        ws.update(cx, |ws, cx| {
-                            ws.rename_folder(&f_id, trimmed.to_string(), cx);
-                        });
-                    }
-                }
-                _ => {}
+        self.renaming_folder = Some(self.spawn_renaming(
+            folder_id,
+            initial_name,
+            move |name, cx| {
+                ws.update(cx, |ws, cx| ws.rename_folder(&f_id, name.to_string(), cx));
             },
-        );
-
-        self.renaming_folder = Some(RenamingState {
-            id: folder_id,
-            input,
-            subscription: sub,
-        });
+            window,
+            cx,
+        ));
         cx.notify();
     }
 
@@ -211,40 +208,21 @@ impl SidebarState {
         cx: &mut Context<Self>,
     ) {
         self.cancel_any_renaming(cx);
-
-        let input = cx.new(|cx| {
-            let mut s = InputState::new(window, cx);
-            s.set_value(example_name.clone(), window, cx);
-            s.select_all(window, cx);
-            s.focus(window, cx);
-            s
-        });
-
         let r_id = req_id.clone();
         let old_ex_name = example_name.clone();
-        let sub = cx.subscribe(
-            &input,
-            move |this, input, event: &gpui_component::input::InputEvent, cx| match event {
-                gpui_component::input::InputEvent::PressEnter { .. }
-                | gpui_component::input::InputEvent::Blur => {
-                    let val = input.read(cx).value().to_string();
-                    this.cancel_renaming_example(cx);
-                    let trimmed = val.trim();
-                    if !trimmed.is_empty() && trimmed != old_ex_name {
-                        ws.update(cx, |ws, cx| {
-                            ws.rename_example(&r_id, &old_ex_name, trimmed, cx);
-                        });
-                    }
+        self.renaming_example = Some(self.spawn_renaming(
+            (req_id, example_name.clone()),
+            example_name,
+            move |name, cx| {
+                if name != old_ex_name {
+                    ws.update(cx, |ws, cx| {
+                        ws.rename_example(&r_id, &old_ex_name, name, cx)
+                    });
                 }
-                _ => {}
             },
-        );
-
-        self.renaming_example = Some(RenamingState {
-            id: (req_id, example_name),
-            input,
-            subscription: sub,
-        });
+            window,
+            cx,
+        ));
         cx.notify();
     }
 
@@ -257,39 +235,18 @@ impl SidebarState {
         cx: &mut Context<Self>,
     ) {
         self.cancel_any_renaming(cx);
-
-        let input = cx.new(|cx| {
-            let mut s = InputState::new(window, cx);
-            s.set_value(initial_name, window, cx);
-            s.select_all(window, cx);
-            s.focus(window, cx);
-            s
-        });
-
         let e_id = env_id.clone();
-        let sub = cx.subscribe(
-            &input,
-            move |this, input, event: &gpui_component::input::InputEvent, cx| match event {
-                gpui_component::input::InputEvent::PressEnter { .. }
-                | gpui_component::input::InputEvent::Blur => {
-                    let val = input.read(cx).value().to_string();
-                    this.cancel_renaming_environment(cx);
-                    let trimmed = val.trim();
-                    if !trimmed.is_empty() {
-                        env_state.update(cx, |env, cx| {
-                            env.rename_environment(&e_id, trimmed.to_string(), cx);
-                        });
-                    }
-                }
-                _ => {}
+        self.renaming_env = Some(self.spawn_renaming(
+            env_id,
+            initial_name,
+            move |name, cx| {
+                env_state.update(cx, |env, cx| {
+                    env.rename_environment(&e_id, name.to_string(), cx)
+                });
             },
-        );
-
-        self.renaming_env = Some(RenamingState {
-            id: env_id,
-            input,
-            subscription: sub,
-        });
+            window,
+            cx,
+        ));
         cx.notify();
     }
 

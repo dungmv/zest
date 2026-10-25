@@ -3,6 +3,7 @@ use super::git_status::{calculate_folder_git_status, SidebarGitStatus};
 use super::item_actions::folder_has_matches;
 use super::request_node::render_request_node;
 use super::SidebarRenderContext;
+use crate::app::actions::DismissModal;
 use crate::state::ScopeSettingsTarget;
 use crate::theme::theme;
 use gpui::prelude::FluentBuilder as _;
@@ -11,7 +12,7 @@ use gpui::{
     ParentElement, StatefulInteractiveElement as _, Styled,
 };
 use gpui_component::menu::{ContextMenuExt as _, DropdownMenu as _};
-use gpui_component::Icon;
+use gpui_component::{Icon, Sizable as _};
 use gpui_kit::assets::IconName;
 use zest_core::models::Folder;
 
@@ -309,12 +310,12 @@ pub fn render_folder_node(folder: &Folder, ctx: &SidebarRenderContext) -> Option
                                     .on_mouse_down(MouseButton::Left, |_, _, cx| {
                                         cx.stop_propagation();
                                     })
-                                    .on_key_down(move |event, _, cx| {
-                                        if event.keystroke.key.as_str() == "escape" {
-                                            sb_esc.update(cx, |state, cx| {
-                                                state.cancel_renaming_folder(cx);
-                                            });
-                                        }
+                                    // Escape arrives as the globally-bound DismissModal
+                                    // action; the deepest handler cancels the rename.
+                                    .on_action(move |_: &DismissModal, _, cx| {
+                                        sb_esc.update(cx, |state, cx| {
+                                            state.cancel_renaming_folder(cx);
+                                        });
                                     })
                                     .child(
                                         gpui_component::input::Input::new(inp)
@@ -322,7 +323,9 @@ pub fn render_folder_node(folder: &Folder, ctx: &SidebarRenderContext) -> Option
                                             .appearance(false)
                                             .bordered(false)
                                             .focus_bordered(false)
-                                            .cleanable(false),
+                                            .cleanable(false)
+                                            .xsmall()
+                                            .font_weight(gpui::FontWeight::SEMIBOLD),
                                     )
                                     .into_any_element()
                             } else {

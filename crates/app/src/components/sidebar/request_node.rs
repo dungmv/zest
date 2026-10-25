@@ -3,6 +3,7 @@ use super::example_node::render_example_node;
 use super::git_status::{calculate_request_git_status, SidebarGitStatus};
 use super::item_actions::delete_request_item;
 use super::SidebarRenderContext;
+use crate::app::actions::DismissModal;
 use crate::components::{MethodBadge, StatusCodeBadge};
 use crate::services::GitService;
 use crate::theme::theme;
@@ -12,7 +13,7 @@ use gpui::{
     ParentElement, StatefulInteractiveElement as _, Styled,
 };
 use gpui_component::menu::{ContextMenuExt as _, DropdownMenu as _, PopupMenuItem};
-use gpui_component::Icon;
+use gpui_component::{Icon, Sizable as _};
 use gpui_kit::assets::IconName;
 use zest_core::models::HttpMethod;
 use zest_core::storage::models::RequestFile;
@@ -389,12 +390,13 @@ pub fn render_request_node(
                         .on_mouse_down(MouseButton::Left, |_, _, cx| {
                             cx.stop_propagation();
                         })
-                        .on_key_down(move |event, _, cx| {
-                            if event.keystroke.key.as_str() == "escape" {
-                                sb_esc.update(cx, |state, cx| {
-                                    state.cancel_renaming(cx);
-                                });
-                            }
+                        // Escape is globally bound to DismissModal and arrives as an
+                        // action, never as a raw keydown. Handling it here makes the
+                        // deepest listener cancel the rename instead of dismissing a modal.
+                        .on_action(move |_: &DismissModal, _, cx| {
+                            sb_esc.update(cx, |state, cx| {
+                                state.cancel_renaming(cx);
+                            });
                         })
                         .child(
                             gpui_component::input::Input::new(inp)
@@ -402,7 +404,10 @@ pub fn render_request_node(
                                 .appearance(false)
                                 .bordered(false)
                                 .focus_bordered(false)
-                                .cleanable(false),
+                                .cleanable(false)
+                                .xsmall()
+                                .font_family(".SystemMonoFont")
+                                .font_weight(gpui::FontWeight::NORMAL),
                         )
                         .into_any_element()
                 } else {

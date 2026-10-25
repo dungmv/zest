@@ -1,5 +1,6 @@
 use super::request_node::SidebarExampleItem;
 use super::SidebarRenderContext;
+use crate::app::actions::DismissModal;
 use crate::components::StatusCodeBadge;
 use crate::theme::theme;
 use gpui::prelude::FluentBuilder as _;
@@ -8,6 +9,7 @@ use gpui::{
     ParentElement, StatefulInteractiveElement as _, Styled,
 };
 use gpui_component::menu::{ContextMenuExt as _, PopupMenuItem};
+use gpui_component::Sizable as _;
 
 pub fn render_example_node(
     parent_id: &str,
@@ -242,12 +244,12 @@ pub fn render_example_node(
                             .on_mouse_down(MouseButton::Left, |_, _, cx| {
                                 cx.stop_propagation();
                             })
-                            .on_key_down(move |event, _, cx| {
-                                if event.keystroke.key.as_str() == "escape" {
-                                    sb_esc.update(cx, |state, cx| {
-                                        state.cancel_renaming_example(cx);
-                                    });
-                                }
+                            // Escape arrives as the globally-bound DismissModal
+                            // action; the deepest handler cancels the rename.
+                            .on_action(move |_: &DismissModal, _, cx| {
+                                sb_esc.update(cx, |state, cx| {
+                                    state.cancel_renaming_example(cx);
+                                });
                             })
                             .child(
                                 gpui_component::input::Input::new(inp)
@@ -255,7 +257,9 @@ pub fn render_example_node(
                                     .appearance(false)
                                     .bordered(false)
                                     .focus_bordered(false)
-                                    .cleanable(false),
+                                    .cleanable(false)
+                                    .xsmall()
+                                    .font_family(".SystemMonoFont"),
                             )
                             .into_any_element()
                     } else {

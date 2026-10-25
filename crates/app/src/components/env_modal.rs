@@ -1,3 +1,4 @@
+use crate::app::actions::DismissModal;
 use crate::state::{EnvironmentState, ModalState, SidebarState};
 use crate::theme::theme;
 use gpui::prelude::FluentBuilder as _;
@@ -8,7 +9,7 @@ use gpui::{
 use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::menu::{ContextMenuExt as _, PopupMenuItem};
 use gpui_component::scroll::ScrollableElement as _;
-use gpui_component::Icon;
+use gpui_component::{Icon, Sizable as _};
 use gpui_kit::assets::IconName;
 use zest_core::models::{Environment, EnvironmentVariable};
 
@@ -429,12 +430,13 @@ impl RenderOnce for EnvironmentModal {
                                                                     .on_mouse_down(MouseButton::Left, |_, _, cx| {
                                                                         cx.stop_propagation();
                                                                     })
-                                                                    .on_key_down(move |event, _, cx| {
-                                                                        if event.keystroke.key.as_str() == "escape" {
-                                                                            sb_esc.update(cx, |state, cx| {
-                                                                                state.cancel_renaming_environment(cx);
-                                                                            });
-                                                                        }
+                                                                    // Escape arrives as the globally-bound
+                                                                    // DismissModal action; the deepest handler
+                                                                    // cancels the rename instead of the modal.
+                                                                    .on_action(move |_: &DismissModal, _, cx| {
+                                                                        sb_esc.update(cx, |state, cx| {
+                                                                            state.cancel_renaming_environment(cx);
+                                                                        });
                                                                     })
                                                                     .child(
                                                                         Input::new(inp)
@@ -442,7 +444,9 @@ impl RenderOnce for EnvironmentModal {
                                                                             .appearance(false)
                                                                             .bordered(false)
                                                                             .focus_bordered(false)
-                                                                            .cleanable(false),
+                                                                            .cleanable(false)
+                                                                            .xsmall()
+                                                                            .font_weight(if is_sel { gpui::FontWeight::SEMIBOLD } else { gpui::FontWeight::NORMAL }),
                                                                     )
                                                                     .into_any_element()
                                                             } else {
