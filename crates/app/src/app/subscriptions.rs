@@ -392,6 +392,17 @@ pub fn setup_app_subscriptions(
             let is_scratch = active_id == "scratch" || active_id.is_empty();
             if last_req_id.as_deref() != Some(&active_id) {
                 last_req_id = Some(active_id.clone());
+                // Persist the selection so the last opened request survives restarts.
+                // Scratch is transient: store None and let startup fall back to the
+                // first saved request.
+                let persisted_id = if is_scratch {
+                    None
+                } else {
+                    Some(active_id.clone())
+                };
+                per_clone.update(cx, |per, cx| {
+                    per.set_active_request(persisted_id, cx);
+                });
                 let ws_store = ws_clone.read(cx).store.clone();
                 resp_clone.update(cx, |r_state, cx| {
                     r_state.load_for_request(&active_id, ws_store.as_ref(), cx);
@@ -501,9 +512,23 @@ pub fn setup_app_subscriptions(
     subscriptions.push(cx.observe(targets.git_state, |_, _, cx| {
         cx.notify();
     }));
-    subscriptions.push(cx.observe(targets.env_state, |_, _, cx| {
-        cx.notify();
-    }));
+    // Persist the selected environment so it survives restarts (same mechanism as
+    // the active request above).
+    let env_entity = targets.env_state.clone();
+    let mut last_env_id = env_entity.read(cx).active_environment_id.clone();
+    let env_persist = persistence_state.clone();
+    subscriptions.push(
+        cx.observe(&env_entity, move |_, env: Entity<EnvironmentState>, cx| {
+            let next_env_id = env.read(cx).active_environment_id.clone();
+            if next_env_id != last_env_id {
+                last_env_id = next_env_id.clone();
+                env_persist.update(cx, |per, cx| {
+                    per.set_active_environment(next_env_id, cx);
+                });
+            }
+            cx.notify();
+        }),
+    );
     subscriptions.push(cx.observe(targets.persistence_state, |_, _, cx| {
         cx.notify();
     }));
