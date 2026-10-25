@@ -1,6 +1,9 @@
 use crate::components::env_input::render_env_input;
+use crate::components::inherited_headers::mask_secret;
+use crate::components::kv_table::render_disabled_input;
 use crate::state::{EnvironmentState, ModalState, RequestSessionState, WorkspaceDataState};
-use crate::theme::theme;
+use crate::theme::{theme, AppTheme};
+use gpui::prelude::FluentBuilder as _;
 use gpui::{div, px, App, Div, Entity, ParentElement, Styled, Window};
 use gpui_component::button::{Button, ButtonVariants as _};
 use gpui_component::input::InputState;
@@ -189,20 +192,29 @@ pub fn render_auth_tab(
         .child({
             match auth {
                 Auth::Inherit => {
-                    let desc = workspace_state
-                        .read(cx)
-                        .get_inherited_auth_description(folder_id);
+                    let ws_read = workspace_state.read(cx);
+                    let desc = ws_read.get_inherited_auth_description(folder_id);
+                    let inherited = ws_read.inherited_auth_source(folder_id);
                     div()
-                        .p(px(10.))
-                        .rounded(px(6.))
-                        .bg(t.bg_app)
-                        .border_1()
-                        .border_color(t.border)
                         .flex()
-                        .items_center()
-                        .gap(px(8.))
-                        .child(Icon::new(IconName::Info).size(px(16.)))
-                        .child(div().text_xs().text_color(t.text_secondary).child(desc))
+                        .flex_col()
+                        .gap(px(10.))
+                        .child(
+                            div()
+                                .p(px(10.))
+                                .rounded(px(6.))
+                                .bg(t.bg_app)
+                                .border_1()
+                                .border_color(t.border)
+                                .flex()
+                                .items_center()
+                                .gap(px(8.))
+                                .child(Icon::new(IconName::Info).size(px(16.)))
+                                .child(div().text_xs().text_color(t.text_secondary).child(desc)),
+                        )
+                        .when_some(inherited, |this, info| {
+                            this.child(render_inherited_auth_fields(&info.auth, t))
+                        })
                 }
                 Auth::None => div()
                     .pt(px(4.))
@@ -500,4 +512,58 @@ pub fn render_auth_tab(
                 }
             }
         })
+}
+
+/// Read-only mirror of a local auth form row: same label/input layout, disabled input.
+fn disabled_field(label: &str, value: &str, t: &AppTheme) -> Div {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(10.))
+        .child(
+            div()
+                .w(px(70.))
+                .text_xs()
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(t.text_secondary)
+                .child(label.to_string()),
+        )
+        .child(
+            div()
+                .w_full()
+                .max_w(px(400.))
+                .child(render_disabled_input(value, t)),
+        )
+}
+
+/// Disabled mirror of the local auth forms, shown under the inherit description so the
+/// user sees the effective inherited configuration (secrets masked).
+fn render_inherited_auth_fields(auth: &Auth, t: &AppTheme) -> Div {
+    match auth {
+        Auth::Bearer { token } => disabled_field("Token:", &mask_secret(token), t),
+        Auth::Basic { username, password } => div()
+            .flex()
+            .flex_col()
+            .gap(px(10.))
+            .child(disabled_field("Username:", username, t))
+            .child(disabled_field("Password:", &mask_secret(password), t)),
+        Auth::ApiKey {
+            key,
+            value,
+            in_header,
+        } => div()
+            .flex()
+            .flex_col()
+            .gap(px(10.))
+            .child(disabled_field("Key:", key, t))
+            .child(disabled_field("Value:", &mask_secret(value), t))
+            .child(disabled_field(
+                "Add to:",
+                if *in_header { "Header" } else { "Query Params" },
+                t,
+            )),
+        // None adds no fields: the description banner already states no auth applies.
+        // Inherit is unreachable: `inherited_auth_source` never reports `Inherit`.
+        Auth::None | Auth::Inherit => div(),
+    }
 }

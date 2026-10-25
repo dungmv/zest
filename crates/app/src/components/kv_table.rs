@@ -1,15 +1,49 @@
 use crate::components::env_autocomplete::{build_tokenized_content, detect_unclosed_env_var};
 use crate::components::env_input::render_env_input;
 use crate::state::{EnvironmentState, ModalState};
-use crate::theme::theme;
+use crate::theme::{theme, AppTheme};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
-    RenderOnce, StatefulInteractiveElement as _, Styled, Subscription, Window,
+    div, px, App, AppContext as _, Div, Entity, InteractiveElement as _, IntoElement,
+    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled, Subscription,
+    Window,
 };
+use gpui_component::button::{Button, ButtonVariants as _};
 use gpui_component::input::{InputEvent, InputState};
+use gpui_component::popover::Popover;
+use gpui_component::Icon;
+use gpui_kit::assets::IconName;
 use std::rc::Rc;
 use zest_core::models::KeyValuePair;
+
+/// A non-editable row appended below the editable pairs, used to surface inherited
+/// headers inside the same table. `source_detail` is the full line shown in the
+/// info popover (e.g. `Inherited from folder "API"`).
+pub struct KvReadonlyRow {
+    pub key: String,
+    pub value: String,
+    pub enabled: bool,
+    pub source_detail: String,
+}
+
+/// Static, non-editable field visually matching the env inputs rendered beside it.
+pub fn render_disabled_input(value: &str, t: &AppTheme) -> Div {
+    div()
+        .w_full()
+        .h(px(28.))
+        .px(px(6.))
+        .rounded(px(4.))
+        .bg(t.bg_app)
+        .border_1()
+        .border_color(t.border_subtle)
+        .flex()
+        .items_center()
+        .text_xs()
+        .font_family(".SystemMonoFont")
+        .text_color(t.text_secondary)
+        .truncate()
+        .child(value.to_string())
+}
 
 struct KvRowInputHolder {
     key_input: Entity<InputState>,
@@ -27,6 +61,7 @@ pub struct KvTable {
     on_remove: Rc<dyn Fn(usize, &mut Window, &mut App)>,
     env_state: Option<Entity<EnvironmentState>>,
     modal_state: Option<Entity<ModalState>>,
+    readonly_rows: Vec<KvReadonlyRow>,
 }
 
 impl KvTable {
@@ -45,7 +80,14 @@ impl KvTable {
             on_remove: Rc::new(on_remove),
             env_state: None,
             modal_state: None,
+            readonly_rows: Vec::new(),
         }
+    }
+
+    /// Appends non-editable rows (inherited headers) below the editable pairs.
+    pub fn readonly_rows(mut self, rows: Vec<KvReadonlyRow>) -> Self {
+        self.readonly_rows = rows;
+        self
     }
 
     pub fn env_state(mut self, env: Entity<EnvironmentState>) -> Self {
@@ -100,7 +142,68 @@ impl RenderOnce for KvTable {
                     .child(div().flex_1().child("Value"))
                     .child(div().w(px(24.)).child("")),
             )
-            // Table Rows
+            // Read-only rows (e.g. inherited headers): disabled inputs, info popover
+            // in place of the delete button. Muted checkbox so it never reads as an
+            // editable request row.
+            .children(self.readonly_rows.iter().enumerate().map(|(idx, row)| {
+                let row_id = format!("{}-ro-{}", id_prefix, idx);
+                div()
+                    .w_full()
+                    .flex()
+                    .items_center()
+                    .px(px(6.))
+                    .py(px(2.))
+                    .gap(px(8.))
+                    .child(
+                        div()
+                            .w(px(20.))
+                            .h(px(20.))
+                            .rounded(px(4.))
+                            .border_1()
+                            .border_color(if row.enabled { t.text_muted } else { t.border })
+                            .bg(if row.enabled {
+                                t.text_muted
+                            } else {
+                                t.bg_input
+                            })
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_xs()
+                            .text_color(t.bg_input)
+                            .child(if row.enabled { "✓" } else { "" }),
+                    )
+                    .child(div().w(px(220.)).child(render_disabled_input(&row.key, t)))
+                    .child(div().flex_1().child(render_disabled_input(&row.value, t)))
+                    .child(
+                        div()
+                            .w(px(24.))
+                            .h(px(24.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(
+                                Popover::new(SharedString::from(format!("{row_id}-info")))
+                                    .trigger(
+                                        Button::new(SharedString::from(format!(
+                                            "{row_id}-info-btn"
+                                        )))
+                                        .ghost()
+                                        .compact()
+                                        .child(
+                                            Icon::new(IconName::Info)
+                                                .size(px(13.))
+                                                .text_color(t.text_muted),
+                                        ),
+                                    )
+                                    .content({
+                                        let detail = row.source_detail.clone();
+                                        move |_, _, _| div().text_xs().child(detail.clone())
+                                    }),
+                            ),
+                    )
+            }))
+            // Editable rows
             .children(self.pairs.into_iter().enumerate().map(|(idx, pair)| {
                 let on_update = self.on_update.clone();
                 let on_remove = self.on_remove.clone();

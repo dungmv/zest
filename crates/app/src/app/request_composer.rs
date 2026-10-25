@@ -9,8 +9,6 @@ use gpui::{
     div, px, AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_component::Icon;
-use gpui_kit::assets::IconName;
 use zest_core::models::Auth;
 
 impl AppView {
@@ -111,7 +109,11 @@ impl AppView {
                                         .text_color(t.primary_foreground)
                                         .on_click(move |_, _, cx| {
                                             per_rel.update(cx, |per, cx| {
-                                                per.resolve_conflict_reload(&cid, ws_rel.clone(), cx);
+                                                per.resolve_conflict_reload(
+                                                    &cid,
+                                                    ws_rel.clone(),
+                                                    cx,
+                                                );
                                             });
                                         })
                                         .child("Reload"),
@@ -129,7 +131,11 @@ impl AppView {
                                         .text_color(t.text_primary)
                                         .on_click(move |_, _, cx| {
                                             per_keep.update(cx, |per, cx| {
-                                                per.resolve_conflict_keep(&cid_k, ws_keep.clone(), cx);
+                                                per.resolve_conflict_keep(
+                                                    &cid_k,
+                                                    ws_keep.clone(),
+                                                    cx,
+                                                );
                                             });
                                         })
                                         .child("Keep mine"),
@@ -351,26 +357,10 @@ impl AppView {
                     }
                     RequestTabKind::Headers => {
                         let active_r = ws_read.find_request(&req_id_str);
-                        let headers = active_r
-                            .map(|r| r.headers.clone())
+                        let headers = active_r.map(|r| r.headers.clone()).unwrap_or_default();
+                        let readonly_rows = active_r
+                            .map(|r| inherited_readonly_rows(ws_read, r))
                             .unwrap_or_default();
-                        let inherited_count = {
-                            if let Some(r) = active_r {
-                                let ws_h = ws_read
-                                    .active_workspace
-                                    .as_ref()
-                                    .map(|w| w.headers.len())
-                                    .unwrap_or(0);
-                                let folder_h: usize = ws_read
-                                    .get_folder_hierarchy(r.folder_id.as_deref())
-                                    .iter()
-                                    .map(|f| f.headers.len())
-                                    .sum();
-                                ws_h + folder_h
-                            } else {
-                                0
-                            }
-                        };
                         let ed_up = ed_entity.clone();
                         let ws_up = ws_entity.clone();
                         let per_up = self.state.persistence.clone();
@@ -381,81 +371,55 @@ impl AppView {
                         let req_id_k = req_id_str.clone();
                         let req_id_a = req_id_str.clone();
                         let req_id_d = req_id_str.clone();
-                        div()
-                            .size_full()
-                            .flex()
-                            .flex_col()
-                            .when(inherited_count > 0, |this| {
-                                this.child(
-                                    div()
-                                        .px(px(12.))
-                                        .py(px(6.))
-                                        .bg(t.bg_app)
-                                        .border_b_1()
-                                        .border_color(t.border)
-                                        .flex()
-                                        .items_center()
-                                        .gap(px(6.))
-                                        .child(Icon::new(IconName::Info).size(px(14.)))
-                                        .child(
-                                            div().text_xs().text_color(t.text_secondary).child(
-                                                format!(
-                                                "{} inherited header(s) from parent folder/workspace will be merged on send",
-                                                inherited_count
-                                            ),
-                                            ),
-                                        ),
+                        div().size_full().flex().flex_col().child(
+                            div().flex_1().child(
+                                KvTable::new(
+                                    format!("headers-kv-{}", req_id_str),
+                                    headers,
+                                    move |idx, k, v, enabled, _, cx| {
+                                        ws_up.update(cx, |ws, _| {
+                                            ws.update_active_request(&req_id_k, |r| {
+                                                r.update_header(idx, k, v, enabled);
+                                            });
+                                        });
+                                        ed_up.update(cx, |state, cx| {
+                                            state.mark_dirty(cx);
+                                        });
+                                        save_active_request_without_redraw(
+                                            &ed_up, &per_up, &ws_up, cx,
+                                        );
+                                    },
+                                    move |_, cx| {
+                                        ws_add.update(cx, |ws, _| {
+                                            ws.update_active_request(&req_id_a, |r| {
+                                                r.add_header();
+                                            });
+                                        });
+                                        ed_add.update(cx, |state, cx| {
+                                            state.mark_dirty(cx);
+                                        });
+                                    },
+                                    move |idx, _, cx| {
+                                        ws_del.update(cx, |ws, _| {
+                                            ws.update_active_request(&req_id_d, |r| {
+                                                r.remove_header(idx);
+                                            });
+                                        });
+                                        ed_del.update(cx, |state, cx| {
+                                            state.mark_dirty(cx);
+                                        });
+                                    },
                                 )
-                            })
-                            .child(
-                                div().flex_1().child(
-                                    KvTable::new(
-                                        format!("headers-kv-{}", req_id_str),
-                                        headers,
-                                        move |idx, k, v, enabled, _, cx| {
-                                            ws_up.update(cx, |ws, _| {
-                                                ws.update_active_request(&req_id_k, |r| {
-                                                    r.update_header(idx, k, v, enabled);
-                                                });
-                                            });
-                                            ed_up.update(cx, |state, cx| {
-                                                state.mark_dirty(cx);
-                                            });
-                                            save_active_request_without_redraw(&ed_up, &per_up, &ws_up, cx);
-                                        },
-                                        move |_, cx| {
-                                            ws_add.update(cx, |ws, _| {
-                                                ws.update_active_request(&req_id_a, |r| {
-                                                    r.add_header();
-                                                });
-                                            });
-                                            ed_add.update(cx, |state, cx| {
-                                                state.mark_dirty(cx);
-                                            });
-                                        },
-                                        move |idx, _, cx| {
-                                            ws_del.update(cx, |ws, _| {
-                                                ws.update_active_request(&req_id_d, |r| {
-                                                    r.remove_header(idx);
-                                                });
-                                            });
-                                            ed_del.update(cx, |state, cx| {
-                                                state.mark_dirty(cx);
-                                            });
-                                        },
-                                    )
-                                    .env_state(self.state.env.clone())
-                                    .modal_state(self.state.modal.clone()),
-                                ),
-                            )
+                                .readonly_rows(readonly_rows)
+                                .env_state(self.state.env.clone())
+                                .modal_state(self.state.modal.clone()),
+                            ),
+                        )
                     }
                     RequestTabKind::Auth => {
                         let active_r = ws_read.find_request(&req_id_str);
-                        let auth = active_r
-                            .map(|r| r.auth.clone())
-                            .unwrap_or(Auth::Inherit);
-                        let folder_id = active_r
-                            .and_then(|r| r.folder_id.clone());
+                        let auth = active_r.map(|r| r.auth.clone()).unwrap_or(Auth::Inherit);
+                        let folder_id = active_r.and_then(|r| r.folder_id.clone());
 
                         render_auth_tab(
                             &auth,

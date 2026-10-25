@@ -3,7 +3,7 @@ use gpui::Context;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use zest_core::http::ReqwestExecutor;
+use zest_core::http::{resolve_inherited_headers, InheritedHeader, ReqwestExecutor};
 use zest_core::models::{Auth, Folder, HttpRequestItem, KeyValuePair, StoredCookie, Workspace};
 use zest_core::storage::models::{FolderNode, WorkspaceMeta};
 use zest_core::storage::{FsWorkspaceStore, WorkspaceStore};
@@ -30,6 +30,27 @@ fn default_workspace_dir() -> PathBuf {
         .map(|d| d.join("zest"))
         .or_else(|| dirs::home_dir().map(|h| h.join("Documents").join("zest")))
         .unwrap_or_else(|| PathBuf::from("./zest"))
+}
+
+/// The auth a request would effectively use when its own auth is `Auth::Inherit`,
+/// together with the scope (folder or workspace) that supplies it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InheritedAuthInfo {
+    pub source_name: String,
+    /// `None` when the auth comes from the workspace scope.
+    pub source_folder_id: Option<String>,
+    pub auth: Auth,
+}
+
+/// Human-readable label for an `Auth` variant, shared by banner/card renderers.
+pub fn auth_kind_label(auth: &Auth) -> &'static str {
+    match auth {
+        Auth::None => "No Auth",
+        Auth::Bearer { .. } => "Bearer Token",
+        Auth::Basic { .. } => "Basic Auth",
+        Auth::ApiKey { .. } => "API Key",
+        Auth::Inherit => "Inherit",
+    }
 }
 
 impl WorkspaceDataState {
@@ -390,18 +411,47 @@ impl WorkspaceDataState {
         )
     }
 
-    pub fn get_inherited_auth_description(&self, folder_id: Option<&str>) -> String {
+    /// Projects the headers a request inherits from workspace/folders using the exact
+    /// send-time merge semantics (nearest ancestor wins per key, case-insensitive).
+    /// Sources are display labels (`folder "X"` / `workspace "Y"`) so the UI can show
+    /// where each merged value comes from.
+    pub fn inherited_headers_for_request(&self, req: &HttpRequestItem) -> Vec<InheritedHeader> {
+        let ws_label = format!(
+            "workspace \"{}\"",
+            self.active_workspace
+                .as_ref()
+                .map(|w| w.name.as_str())
+                .unwrap_or("Workspace")
+        );
+        let ws_headers = self
+            .active_workspace
+            .as_ref()
+            .map(|w| w.headers.as_slice())
+            .unwrap_or(&[]);
+        let folder_chain_refs = self.get_folder_hierarchy(req.folder_id.as_deref());
+        let chain_owned: Vec<(String, &[KeyValuePair])> = folder_chain_refs
+            .iter()
+            .map(|f| (format!("folder \"{}\"", f.name), f.headers.as_slice()))
+            .collect();
+        let chain: Vec<(&str, &[KeyValuePair])> = chain_owned
+            .iter()
+            .map(|(label, headers)| (label.as_str(), *headers))
+            .collect();
+        resolve_inherited_headers(&ws_label, ws_headers, &chain, &req.headers)
+    }
+
+    /// Resolves the auth a request inherits when its own auth is `Auth::Inherit`:
+    /// nearest non-inherit folder auth, else workspace auth. Returns `None` when no
+    /// ancestor configures any auth.
+    pub fn inherited_auth_source(&self, folder_id: Option<&str>) -> Option<InheritedAuthInfo> {
         let folder_chain_refs = self.get_folder_hierarchy(folder_id);
         for f in folder_chain_refs.iter().rev() {
             if !f.auth.is_inherit() {
-                let kind = match &f.auth {
-                    Auth::None => "No Auth",
-                    Auth::Bearer { .. } => "Bearer Token",
-                    Auth::Basic { .. } => "Basic Auth",
-                    Auth::ApiKey { .. } => "API Key",
-                    Auth::Inherit => "Inherit",
-                };
-                return format!("Inherited from folder \"{}\" ({})", f.name, kind);
+                return Some(InheritedAuthInfo {
+                    source_name: f.name.clone(),
+                    source_folder_id: Some(f.id.clone()),
+                    auth: f.auth.clone(),
+                });
             }
         }
         let ws_auth = self
@@ -409,19 +459,35 @@ impl WorkspaceDataState {
             .as_ref()
             .map(|w| &w.auth)
             .unwrap_or(&Auth::None);
+        if ws_auth.is_inherit() {
+            return None;
+        }
         let ws_name = self
             .active_workspace
             .as_ref()
             .map(|w| w.name.as_str())
-            .unwrap_or("Workspace");
-        match ws_auth {
-            Auth::None => format!("Inherited from workspace \"{}\" (No Auth)", ws_name),
-            Auth::Bearer { .. } => {
-                format!("Inherited from workspace \"{}\" (Bearer Token)", ws_name)
-            }
-            Auth::Basic { .. } => format!("Inherited from workspace \"{}\" (Basic Auth)", ws_name),
-            Auth::ApiKey { .. } => format!("Inherited from workspace \"{}\" (API Key)", ws_name),
-            Auth::Inherit => "No auth configured in parent hierarchy".to_string(),
+            .unwrap_or("Workspace")
+            .to_string();
+        Some(InheritedAuthInfo {
+            source_name: ws_name,
+            source_folder_id: None,
+            auth: ws_auth.clone(),
+        })
+    }
+
+    pub fn get_inherited_auth_description(&self, folder_id: Option<&str>) -> String {
+        match self.inherited_auth_source(folder_id) {
+            Some(info) if info.source_folder_id.is_some() => format!(
+                "Inherited from folder \"{}\" ({})",
+                info.source_name,
+                auth_kind_label(&info.auth)
+            ),
+            Some(info) => format!(
+                "Inherited from workspace \"{}\" ({})",
+                info.source_name,
+                auth_kind_label(&info.auth)
+            ),
+            None => "No auth configured in parent hierarchy".to_string(),
         }
     }
 }

@@ -586,6 +586,77 @@ mod tests {
     }
 
     #[test]
+    fn test_inherited_headers_projection_and_auth_source() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("test_ws_inh_{}", uuid::Uuid::new_v4().simple()));
+        let store = Arc::new(FsWorkspaceStore::new(&temp_dir));
+        let _ = store.init_workspace("Inherit Proj WS");
+
+        let mut ws = Workspace::new("Inherit Proj WS");
+        ws.headers = vec![
+            KeyValuePair::new("X-Workspace", "ws1"),
+            KeyValuePair::new("X-Shared", "from-ws"),
+        ];
+        ws.auth = Auth::Bearer {
+            token: "ws-token".to_string(),
+        };
+
+        let mut folder = Folder::new("ws", "API");
+        folder.id = "api".to_string();
+        folder.headers = vec![KeyValuePair::new("X-Shared", "from-folder")];
+        folder.auth = Auth::Inherit;
+
+        let mut ws_state = WorkspaceDataState::new_for_path(temp_dir.clone(), store);
+        ws_state.active_workspace = Some(ws);
+        ws_state.folders = vec![folder];
+
+        let mut req = HttpRequestItem::new("ws", "R", HttpMethod::Get, "https://api.com");
+        req.folder_id = Some("api".to_string());
+        req.headers = vec![KeyValuePair::new("x-shared", "from-request")];
+        req.auth = Auth::Inherit;
+
+        let rows = ws_state.inherited_headers_for_request(&req);
+        assert_eq!(rows.len(), 2);
+        let shared = rows
+            .iter()
+            .find(|r| r.pair.key.eq_ignore_ascii_case("x-shared"))
+            .unwrap();
+        assert_eq!(shared.pair.value, "from-folder");
+        assert_eq!(shared.source, "folder \"API\"");
+        assert!(shared.overridden_by_request);
+        let ws_row = rows.iter().find(|r| r.pair.key == "X-Workspace").unwrap();
+        assert_eq!(ws_row.source, "workspace \"Inherit Proj WS\"");
+        assert!(!ws_row.overridden_by_request);
+
+        // Auth source falls back to workspace through the Inherit folder.
+        let auth_src = ws_state
+            .inherited_auth_source(req.folder_id.as_deref())
+            .unwrap();
+        assert_eq!(
+            auth_src.auth,
+            Auth::Bearer {
+                token: "ws-token".to_string()
+            }
+        );
+        assert!(auth_src.source_folder_id.is_none());
+        assert_eq!(auth_src.source_name, "Inherit Proj WS");
+        assert_eq!(
+            ws_state.get_inherited_auth_description(req.folder_id.as_deref()),
+            "Inherited from workspace \"Inherit Proj WS\" (Bearer Token)"
+        );
+
+        // No ancestor auth at all.
+        ws_state.active_workspace.as_mut().unwrap().auth = Auth::Inherit;
+        assert!(ws_state.inherited_auth_source(Some("api")).is_none());
+        assert_eq!(
+            ws_state.get_inherited_auth_description(Some("api")),
+            "No auth configured in parent hierarchy"
+        );
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
     fn test_incremental_crud_operations() {
         let temp_dir =
             std::env::temp_dir().join(format!("zest-test-crud-{}", uuid::Uuid::new_v4().simple()));

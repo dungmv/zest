@@ -7,6 +7,7 @@ pub mod env_input;
 pub mod env_modal;
 pub mod git;
 pub mod import_modal;
+pub mod inherited_headers;
 pub mod kv_table;
 pub mod request_bar;
 pub mod response_inspector;
@@ -32,6 +33,7 @@ pub mod response_viewer {
 }
 pub use git::*;
 pub use import_modal::*;
+pub use inherited_headers::*;
 pub use response_inspector::*;
 pub use scope_settings_modal::*;
 pub use script_editor::*;
