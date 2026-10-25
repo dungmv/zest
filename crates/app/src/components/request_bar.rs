@@ -13,7 +13,9 @@ use gpui::{
     InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
     StatefulInteractiveElement as _, Styled, Window,
 };
+use gpui_component::button::{Button, ButtonVariants as _};
 use gpui_component::input::{Input, InputState};
+use gpui_component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_component::scroll::ScrollableElement as _;
 use zest_core::interpolation::scan_variables;
 use zest_core::models::HttpMethod;
@@ -218,23 +220,58 @@ impl RenderOnce for RequestBar {
                     })
                     // Method dropdown trigger
                     .child({
+                        let ws_s = self.workspace_state.clone();
                         let ed_s = ed_clone.clone();
-                        div()
-                            .id("method-dropdown-btn")
+                        let req_id_str = ed_clone.read(cx).active_request_id().to_string();
+
+                        Button::new("method-dropdown-btn")
+                            .ghost()
+                            .compact()
                             .pl(px(4.))
                             .pr(px(1.))
                             .py(px(3.))
                             .rounded(px(4.))
-                            .cursor_pointer()
-                            .hover(|s| s.bg(t.bg_hover))
                             .flex()
                             .items_center()
-                            .on_click(move |_, _, cx| {
-                                ed_s.update(cx, |state, cx| {
-                                    state.toggle_method_dropdown(cx);
-                                });
-                            })
                             .child(MethodBadge::new(method).font_weight(gpui::FontWeight::SEMIBOLD))
+                            .dropdown_menu(move |menu, _window, _cx| {
+                                [
+                                    HttpMethod::Get,
+                                    HttpMethod::Post,
+                                    HttpMethod::Put,
+                                    HttpMethod::Delete,
+                                    HttpMethod::Patch,
+                                    HttpMethod::Head,
+                                    HttpMethod::Options,
+                                ]
+                                .into_iter()
+                                .fold(menu, |m, mth| {
+                                    let ws_set = ws_s.clone();
+                                    let ed_set = ed_s.clone();
+                                    let req_id = req_id_str.clone();
+                                    m.item(
+                                        PopupMenuItem::element(move |_window, _cx| {
+                                            div()
+                                                .text_xs()
+                                                .font_weight(gpui::FontWeight::BOLD)
+                                                .text_color(theme().method_color(mth))
+                                                .child(mth.as_str().to_string())
+                                        })
+                                        .on_click(
+                                            move |_, _, cx| {
+                                                ws_set.update(cx, |ws, _| {
+                                                    ws.update_active_request(&req_id, |r| {
+                                                        r.set_method(mth);
+                                                    });
+                                                });
+                                                ed_set.update(cx, |ed, cx| {
+                                                    ed.mark_dirty(cx);
+                                                });
+                                            },
+                                        ),
+                                    )
+                                })
+                            })
                     })
                     // Subtle vertical separator
                     .child(div().w(px(1.)).h(px(16.)).bg(t.border))

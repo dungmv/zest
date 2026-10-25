@@ -21,7 +21,6 @@ pub struct RequestSessionState {
     pub send_progress: Option<String>,
     pub cancel_tx: Option<oneshot::Sender<()>>,
     pub is_dirty: bool,
-    pub method_dropdown_open: bool,
     pub body_dropdown_open: bool,
     pub auth_dropdown_open: bool,
     pub script_error: Option<String>,
@@ -40,7 +39,6 @@ impl RequestSessionState {
             send_progress: None,
             cancel_tx: None,
             is_dirty: false,
-            method_dropdown_open: false,
             body_dropdown_open: false,
             auth_dropdown_open: false,
             script_error: None,
@@ -64,11 +62,6 @@ impl RequestSessionState {
 
     pub fn set_active_tab_kind(&mut self, kind: RequestTabKind, cx: &mut Context<Self>) {
         self.active_tab_kind = kind;
-        cx.notify();
-    }
-
-    pub fn toggle_method_dropdown(&mut self, cx: &mut Context<Self>) {
-        self.method_dropdown_open = !self.method_dropdown_open;
         cx.notify();
     }
 

@@ -221,12 +221,7 @@ impl ModalState {
         let appearance = cx.window_appearance();
         let mode = crate::theme::resolve_theme_mode(pref, appearance);
         crate::theme::set_theme(pref, mode);
-
-        let gpui_mode = match mode {
-            crate::theme::ThemeMode::Dark => gpui_component::ThemeMode::Dark,
-            crate::theme::ThemeMode::Light => gpui_component::ThemeMode::Light,
-        };
-        gpui_component::Theme::change(gpui_mode, None, cx);
+        crate::theme::sync_component_theme(mode, cx);
 
         let mut settings = AppSettings::load();
         settings.theme = Some(pref.as_str().to_string());

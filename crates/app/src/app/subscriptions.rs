@@ -520,11 +520,7 @@ pub fn setup_app_subscriptions(
                 );
                 if crate::theme::current_theme_mode() != mode {
                     crate::theme::set_theme(crate::theme::ThemePreference::System, mode);
-                    let gpui_mode = match mode {
-                        crate::theme::ThemeMode::Dark => gpui_component::ThemeMode::Dark,
-                        crate::theme::ThemeMode::Light => gpui_component::ThemeMode::Light,
-                    };
-                    gpui_component::Theme::change(gpui_mode, None, cx);
+                    crate::theme::sync_component_theme(mode, cx);
                     cx.refresh_windows();
                     cx.notify();
                 }

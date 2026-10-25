@@ -11,7 +11,7 @@ use gpui::{
 };
 use gpui_component::Icon;
 use gpui_kit::assets::IconName;
-use zest_core::models::{Auth, HttpMethod};
+use zest_core::models::Auth;
 
 impl AppView {
     pub(crate) fn render_request_composer(
@@ -21,7 +21,6 @@ impl AppView {
     ) -> AnyElement {
         let t = theme();
         let active_tab_kind = self.state.session.read(cx).active_tab_kind;
-        let method_dropdown_open = self.state.session.read(cx).method_dropdown_open;
         let req_id_str = self.state.session.read(cx).active_request_id().to_string();
         let ws_entity = self.state.workspace.clone();
         let ed_entity = self.state.session.clone();
@@ -524,70 +523,6 @@ impl AppView {
                     }
                 }
             }))
-            // Method dropdown if open (rendered LAST inside editor_pane so it paints on top of tabs and editor content)
-            .when(method_dropdown_open, |this| {
-                let ed_c = ed_entity.clone();
-                let ws_c = ws_entity.clone();
-                let per_c = per_entity.clone();
-                let req_id_method = req_id_str.clone();
-                this.child(
-                    div()
-                        .absolute()
-                        .top(px(42.))
-                        .left(px(12.))
-                        .w(px(110.))
-                        .bg(t.bg_card)
-                        .border_1()
-                        .border_color(t.border)
-                        .rounded(px(6.))
-                        .shadow_xl()
-                        .p(px(4.))
-                        .flex()
-                        .flex_col()
-                        .gap(px(2.))
-                        .children(
-                            [
-                                HttpMethod::Get,
-                                HttpMethod::Post,
-                                HttpMethod::Put,
-                                HttpMethod::Delete,
-                                HttpMethod::Patch,
-                                HttpMethod::Head,
-                                HttpMethod::Options,
-                            ]
-                            .into_iter()
-                            .map(|m| {
-                                let ed_set = ed_c.clone();
-                                let ws_set = ws_c.clone();
-                                let per_set = per_c.clone();
-                                let req_id = req_id_method.clone();
-                                div()
-                                    .id(format!("select-method-{}", m.as_str()))
-                                    .px(px(8.))
-                                    .py(px(5.))
-                                    .rounded(px(4.))
-                                    .cursor_pointer()
-                                    .hover(|s| s.bg(t.bg_hover))
-                                    .text_xs()
-                                    .font_weight(gpui::FontWeight::BOLD)
-                                    .text_color(t.method_color(m))
-                                    .on_click(move |_, _, cx| {
-                                        ws_set.update(cx, |ws, _| {
-                                            ws.update_active_request(&req_id, |r| {
-                                                r.set_method(m);
-                                            });
-                                        });
-                                        ed_set.update(cx, |state, cx| {
-                                            state.method_dropdown_open = false;
-                                            state.mark_dirty(cx);
-                                        });
-                                        save_active_request_without_redraw(&ed_set, &per_set, &ws_set, cx);
-                                    })
-                                    .child(m.as_str())
-                            }),
-                        ),
-                )
-            })
             .into_any_element()
     }
 }

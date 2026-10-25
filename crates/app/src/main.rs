@@ -35,12 +35,7 @@ fn main() {
         let pref = theme::ThemePreference::from_str_opt(settings.theme.as_deref());
         let mode = theme::resolve_theme_mode(pref, cx.window_appearance());
         theme::set_theme(pref, mode);
-
-        let gpui_mode = match mode {
-            theme::ThemeMode::Dark => gpui_component::ThemeMode::Dark,
-            theme::ThemeMode::Light => gpui_component::ThemeMode::Light,
-        };
-        gpui_component::Theme::change(gpui_mode, None, cx);
+        theme::sync_component_theme(mode, cx);
 
         // Register keyboard shortcuts
         cx.bind_keys([

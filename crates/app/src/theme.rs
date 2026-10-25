@@ -1,4 +1,4 @@
-use gpui::{Hsla, Rgba, WindowAppearance};
+use gpui::{App, Hsla, Rgba, WindowAppearance};
 use serde::{Deserialize, Serialize};
 use zest_core::models::HttpMethod;
 
@@ -301,6 +301,23 @@ pub fn set_theme(preference: ThemePreference, resolved_mode: ThemeMode) {
         ThemeMode::Light => 1,
     };
     CURRENT_MODE.store(mode_val, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Switch the gpui-component theme to `mode` and align its popover surface with
+/// the app card background, so dropdown menus match the app palette instead of
+/// the library's near-black default. Call this after [`set_theme`] and in place
+/// of every `gpui_component::Theme::change` call.
+pub fn sync_component_theme(mode: ThemeMode, cx: &mut App) {
+    let gpui_mode = match mode {
+        ThemeMode::Dark => gpui_component::ThemeMode::Dark,
+        ThemeMode::Light => gpui_component::ThemeMode::Light,
+    };
+    gpui_component::Theme::change(gpui_mode, None, cx);
+    let t = theme();
+    gpui_component::Theme::update(cx, |component_theme| {
+        component_theme.colors.popover = t.bg_card;
+        component_theme.colors.popover_foreground = t.text_primary;
+    });
 }
 
 impl AppTheme {
