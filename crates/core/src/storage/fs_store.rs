@@ -685,6 +685,12 @@ impl WorkspaceStore for FsWorkspaceStore {
     fn rename_environment(&self, old_name: &str, new_name: &str) -> Result<()> {
         let old_path = self.environments_dir().join(format!("{}.yaml", old_name));
         let new_path = self.environments_dir().join(format!("{}.yaml", new_name));
+        // Never silently overwrite an existing environment: `fs::rename` would
+        // replace the sibling file on both Windows and Unix.
+        let new_sec = self.secrets_dir().join(format!("{}.yaml", new_name));
+        if new_path != old_path && (new_path.exists() || new_sec.exists()) {
+            anyhow::bail!("Environment '{}' already exists", new_name);
+        }
         self.suppress_path(&old_path);
         self.suppress_path(&new_path);
         if old_path.exists() {

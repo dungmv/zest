@@ -87,6 +87,34 @@ impl PersistenceState {
         self.unsaved_requests.contains(req_id)
     }
 
+    /// Remaps request ids after a rename/move changed their on-disk paths:
+    /// updates the dirty map and the persisted active-request selection.
+    pub fn remap_request_ids(&mut self, pairs: &[(String, String)], cx: &mut Context<Self>) {
+        if pairs.is_empty() {
+            return;
+        }
+        let lookup: HashMap<&str, &str> = pairs
+            .iter()
+            .map(|(old, new)| (old.as_str(), new.as_str()))
+            .collect();
+        self.unsaved_requests = self
+            .unsaved_requests
+            .iter()
+            .map(|id| {
+                lookup
+                    .get(id.as_str())
+                    .map(|n| (*n).to_string())
+                    .unwrap_or_else(|| id.clone())
+            })
+            .collect();
+        if let Some(active) = &self.local_state.active_request {
+            if let Some(new_id) = lookup.get(active.as_str()) {
+                self.local_state.active_request = Some((*new_id).to_string());
+                self.schedule_state_save(cx);
+            }
+        }
+    }
+
     pub fn schedule_save_active_request(
         &mut self,
         req_id: String,

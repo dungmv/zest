@@ -480,6 +480,41 @@ pub fn setup_app_subscriptions(
                 });
             }
 
+            // Follow id changes produced by folder move/rename and request
+            // moves: response cache keys, the session pointer and the
+            // persistence dirty map must track the new on-disk paths.
+            let moved_items = ws.update(cx, |ws, _| std::mem::take(&mut ws.last_moved_items));
+            if !moved_items.is_empty() {
+                resp_sync.update(cx, |resp, _| {
+                    for (old_id, new_id) in &moved_items {
+                        resp.rename_request(old_id, new_id);
+                    }
+                });
+                let new_active = {
+                    let ed_ref = ed_sync.read(cx);
+                    moved_items.iter().find_map(|(old, new)| {
+                        (ed_ref.active_request_id.as_deref() == Some(old.as_str()))
+                            .then(|| new.clone())
+                    })
+                };
+                if let Some(new_id) = new_active {
+                    ed_sync.update(cx, |ed, cx| {
+                        ed.active_request_id = Some(new_id);
+                        cx.notify();
+                    });
+                }
+                per_sync.update(cx, |per, cx| {
+                    per.remap_request_ids(&moved_items, cx);
+                });
+            }
+
+            // Surface rejected renames/moves as an error toast.
+            if let Some(err) = ws.update(cx, |ws, _| ws.last_crud_error.take()) {
+                this.state.toast.update(cx, |t, cx| {
+                    t.push_error("Cannot rename or move", err, cx);
+                });
+            }
+
             if ws.read(cx).last_renamed_example.is_some() {
                 let last_renamed_ex = ws.update(cx, |ws, _cx| ws.last_renamed_example.take());
                 if let Some((_req_id, old_ex, new_ex)) = last_renamed_ex {

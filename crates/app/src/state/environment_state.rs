@@ -204,6 +204,16 @@ impl EnvironmentState {
         if trimmed.is_empty() || env_id == "globals" {
             return;
         }
+        // Duplicate names would collide with the sibling env file on disk;
+        // the store also refuses the rename as a last line of defense.
+        if trimmed != env_id
+            && self
+                .environments
+                .iter()
+                .any(|e| e.id != env_id && (e.name == trimmed || e.id == trimmed))
+        {
+            return;
+        }
         let _ = self.store.rename_environment(env_id, trimmed);
         self.reload_environments();
         if self.active_environment_id.as_deref() == Some(env_id) {

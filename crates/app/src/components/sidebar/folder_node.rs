@@ -113,7 +113,7 @@ pub fn render_folder_node(folder: &Folder, ctx: &SidebarRenderContext) -> Option
                 })
                 .on_drop(move |drag: &DragFolderItem, _, cx| {
                     ws_drop_folder.update(cx, |state, cx| {
-                        state.move_folder(&drag.id, &f_id_target_folder, cx);
+                        state.move_folder(&drag.id, Some(f_id_target_folder.clone()), cx);
                     });
                 })
                 .on_click({

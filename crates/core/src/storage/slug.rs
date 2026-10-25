@@ -33,19 +33,39 @@ pub fn slugify(name: &str) -> String {
     }
 }
 
+/// Whether a slug stem is already occupied in `dir`. The scanner loads both
+/// `.yaml` and `.yml` files as requests, so a `.yml` twin counts as taken.
+/// `exclude_stem` is treated as free: it is the file the caller is about to
+/// rename/move away, so it must not block its own candidate.
+fn stem_taken(dir: &Path, slug: &str, ext: &str, exclude_stem: &str) -> bool {
+    if slug == exclude_stem {
+        return false;
+    }
+    if dir.join(format!("{}.{}", slug, ext)).exists() {
+        return true;
+    }
+    ext == "yaml" && dir.join(format!("{}.yml", slug)).exists()
+}
+
 /// Find a unique slug in a directory:
 /// If `<slug>.<ext>` exists, append `-2`, `-3`, etc.
 pub fn unique_slug(dir: &Path, base_slug: &str, ext: &str) -> String {
-    let candidate = format!("{}.{}", base_slug, ext);
-    if !dir.join(&candidate).exists() {
+    unique_slug_excluding(dir, base_slug, ext, "")
+}
+
+/// Like [`unique_slug`], but the stem currently owned by the renamed/moved
+/// item itself is considered free, so renaming `login-2.yaml` to "Login"
+/// while a sibling `login.yaml` exists keeps `login-2` instead of jumping
+/// to `login-3`.
+pub fn unique_slug_excluding(dir: &Path, base_slug: &str, ext: &str, exclude_stem: &str) -> String {
+    if !stem_taken(dir, base_slug, ext, exclude_stem) {
         return base_slug.to_string();
     }
 
     let mut counter = 2;
     loop {
         let slug = format!("{}-{}", base_slug, counter);
-        let candidate = format!("{}.{}", slug, ext);
-        if !dir.join(&candidate).exists() {
+        if !stem_taken(dir, &slug, ext, exclude_stem) {
             return slug;
         }
         counter += 1;

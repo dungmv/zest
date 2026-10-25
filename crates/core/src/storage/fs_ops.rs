@@ -1,12 +1,35 @@
 use crate::storage::models::{FolderFile, RequestFile};
 use crate::storage::serialize::{atomic_write_str, to_yaml_string, with_retry};
-use crate::storage::slug::{loc_path_for_yaml, slugify, unique_slug};
+use crate::storage::slug::{loc_path_for_yaml, slugify, unique_slug, unique_slug_excluding};
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
 /// Normalize path separators to forward slash for clean git-friendly relative paths
 pub fn path_to_forward_slash(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
+}
+
+/// Rewrites `dir/_folder.yaml`, applying `edit` to the `order:` list.
+/// Best-effort: missing or corrupt metadata files are ignored, and the file is
+/// only rewritten when the edited order actually changed.
+fn update_folder_order(dir: &Path, edit: impl FnOnce(&mut Vec<String>)) {
+    let meta_file = dir.join("_folder.yaml");
+    if !meta_file.exists() {
+        return;
+    }
+    let Ok(raw) = std::fs::read_to_string(&meta_file) else {
+        return;
+    };
+    let Ok(mut meta) = serde_yaml::from_str::<FolderFile>(&raw) else {
+        return;
+    };
+    let before = meta.order.clone();
+    edit(&mut meta.order);
+    if meta.order != before {
+        if let Ok(content) = to_yaml_string(&meta) {
+            let _ = atomic_write_str(&meta_file, &content);
+        }
+    }
 }
 
 /// Create a new request in `collections_dir` (inside `folder_rel` if specified):
@@ -76,12 +99,11 @@ pub fn rename_request(collections_dir: &Path, rel_path: &Path, new_name: &str) -
         .and_then(|s| s.to_str())
         .unwrap_or("");
 
+    // The item's own current stem is vacated by this rename, so it must not
+    // block itself (renaming login-2.yaml to "Login" with a sibling
+    // login.yaml keeps login-2 instead of jumping to login-3).
     let base_slug = slugify(new_name);
-    let new_slug = if base_slug == old_stem {
-        base_slug
-    } else {
-        unique_slug(&parent_dir, &base_slug, "yaml")
-    };
+    let new_slug = unique_slug_excluding(&parent_dir, &base_slug, "yaml", old_stem);
     let new_yaml_path = parent_dir.join(format!("{}.yaml", new_slug));
     let new_loc_path = parent_dir.join(format!("{}.loc", new_slug));
     let old_loc_path = loc_path_for_yaml(&old_yaml_path);
@@ -119,25 +141,13 @@ pub fn rename_request(collections_dir: &Path, rel_path: &Path, new_name: &str) -
         }
 
         // Update _folder.yaml in parent_dir if present
-        let folder_meta_path = parent_dir.join("_folder.yaml");
-        if folder_meta_path.exists() {
-            if let Ok(raw) = std::fs::read_to_string(&folder_meta_path) {
-                if let Ok(mut meta) = serde_yaml::from_str::<FolderFile>(&raw) {
-                    let mut changed = false;
-                    for stem in &mut meta.order {
-                        if stem == old_stem {
-                            *stem = new_slug.clone();
-                            changed = true;
-                        }
-                    }
-                    if changed {
-                        if let Ok(content) = to_yaml_string(&meta) {
-                            let _ = atomic_write_str(&folder_meta_path, &content);
-                        }
-                    }
+        update_folder_order(&parent_dir, |order| {
+            for stem in order.iter_mut() {
+                if stem == old_stem {
+                    *stem = new_slug.clone();
                 }
             }
-        }
+        });
     } else {
         // Same slug, just write updated content
         atomic_write_str(&new_yaml_path, &updated_content)?;
@@ -173,7 +183,13 @@ pub fn move_request(
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("request");
-    let new_slug = unique_slug(&target_dir, old_stem, "yaml");
+    // A same-directory move keeps its stem (never suffixes itself); a
+    // cross-directory move must respect stems already present in the target.
+    let new_slug = if old_yaml_path.parent() == Some(target_dir.as_path()) {
+        old_stem.to_string()
+    } else {
+        unique_slug(&target_dir, old_stem, "yaml")
+    };
     let new_yaml_path = target_dir.join(format!("{}.yaml", new_slug));
     let new_loc_path = target_dir.join(format!("{}.loc", new_slug));
     let old_loc_path = loc_path_for_yaml(&old_yaml_path);
@@ -196,6 +212,20 @@ pub fn move_request(
         {
             let _ = with_retry(|| std::fs::remove_file(&old_loc_path));
         }
+    }
+
+    // Maintain _folder.yaml order lists: drop the stem from the source folder
+    // and append it at the end of the destination folder (when metadata exists).
+    let source_parent = old_yaml_path.parent().map(Path::to_path_buf);
+    if source_parent.as_deref() != Some(target_dir.as_path()) {
+        if let Some(src_parent) = source_parent {
+            update_folder_order(&src_parent, |order| order.retain(|s| *s != old_stem));
+        }
+        update_folder_order(&target_dir, |order| {
+            if !order.contains(&new_slug) {
+                order.push(new_slug.clone());
+            }
+        });
     }
 
     let new_rel = new_yaml_path
@@ -328,7 +358,9 @@ pub fn move_group(
 
     let mut dest_name = dir_name.to_string();
     let mut counter = 2;
-    while target_parent.join(&dest_name).exists() {
+    // Self-exclusion: a same-parent move keeps the directory name unchanged.
+    while target_parent.join(&dest_name).exists() && target_parent.join(&dest_name) != old_group_dir
+    {
         dest_name = format!("{}-{}", dir_name, counter);
         counter += 1;
     }

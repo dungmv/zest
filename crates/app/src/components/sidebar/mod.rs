@@ -506,9 +506,10 @@ impl RenderOnce for SidebarTree {
                             })
                             .map(|req| render_request_node(req, false, &ctx)),
                     )
-                    // Drop zone at bottom to drag request to root level
+                    // Drop zone at bottom to drag a request or folder back to root level
                     .child({
                         let ws_root = ws_clone.clone();
+                        let ws_root_folder = ws_clone.clone();
                         div()
                             .id("sidebar-root-dropzone")
                             .min_h(px(24.))
@@ -521,6 +522,15 @@ impl RenderOnce for SidebarTree {
                             .on_drop(move |drag: &DragRequestItem, _, cx| {
                                 ws_root.update(cx, |state, cx| {
                                     state.move_request_to_folder(&drag.id, None, cx);
+                                });
+                            })
+                            .drag_over::<DragFolderItem>(|style, _, _, _| {
+                                let t = theme();
+                                style.bg(t.bg_hover).border_1().border_color(t.border_focus)
+                            })
+                            .on_drop(move |drag: &DragFolderItem, _, cx| {
+                                ws_root_folder.update(cx, |state, cx| {
+                                    state.move_folder(&drag.id, None, cx);
                                 });
                             })
                     }),
