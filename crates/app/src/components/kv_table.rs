@@ -5,8 +5,8 @@ use crate::theme::{theme, AppTheme};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     div, px, App, AppContext as _, Div, Entity, InteractiveElement as _, IntoElement,
-    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled, Subscription,
-    Window,
+    ParentElement, Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled,
+    Subscription, Window,
 };
 use gpui_component::button::{Button, ButtonVariants as _};
 use gpui_component::input::{InputEvent, InputState};
@@ -26,6 +26,9 @@ pub struct KvReadonlyRow {
     pub source_detail: String,
 }
 
+/// Standard width for the Key column in key-value tables (160px).
+pub const KEY_COLUMN_WIDTH: Pixels = px(160.);
+
 /// Static, non-editable field visually matching the env inputs rendered beside it.
 pub fn render_disabled_input(value: &str, t: &AppTheme) -> Div {
     div()
@@ -38,7 +41,7 @@ pub fn render_disabled_input(value: &str, t: &AppTheme) -> Div {
         .border_color(t.border_subtle)
         .flex()
         .items_center()
-        .text_xs()
+        .text_sm()
         .font_family(".SystemMonoFont")
         .text_color(t.text_secondary)
         .truncate()
@@ -138,7 +141,7 @@ impl RenderOnce for KvTable {
                     .border_b_1()
                     .border_color(t.border)
                     .child(div().w(px(20.)).child(""))
-                    .child(div().w(px(220.)).child("Key"))
+                    .child(div().w(KEY_COLUMN_WIDTH).child("Key"))
                     .child(div().flex_1().child("Value"))
                     .child(div().w(px(24.)).child("")),
             )
@@ -173,7 +176,11 @@ impl RenderOnce for KvTable {
                             .text_color(t.bg_input)
                             .child(if row.enabled { "✓" } else { "" }),
                     )
-                    .child(div().w(px(220.)).child(render_disabled_input(&row.key, t)))
+                    .child(
+                        div()
+                            .w(KEY_COLUMN_WIDTH)
+                            .child(render_disabled_input(&row.key, t)),
+                    )
                     .child(div().flex_1().child(render_disabled_input(&row.value, t)))
                     .child(
                         div()
@@ -353,7 +360,7 @@ impl RenderOnce for KvTable {
                             .child(if enabled { "✓" } else { "" })
                     })
                     // Key Column
-                    .child(div().w(px(220.)).child(render_env_input(
+                    .child(div().w(KEY_COLUMN_WIDTH).child(render_env_input(
                         format!("{}-key", row_prefix),
                         &key_input,
                         self.env_state.as_ref(),
@@ -417,5 +424,15 @@ impl RenderOnce for KvTable {
                         .child("+ Add Row"),
                 ),
             )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_kv_table_key_column_width() {
+        assert_eq!(KEY_COLUMN_WIDTH, px(160.));
     }
 }

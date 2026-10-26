@@ -297,7 +297,7 @@ impl RenderOnce for RequestBar {
                                     .cleanable(false)
                                     .px(px(2.))
                                     .font_family(".SystemMonoFont")
-                                    .text_xs()
+                                    .text_sm()
                                     .token(move |token_ctx, _window, cx| {
                                         let var_name = token_ctx.token().id().to_string();
                                         let ws = ws_env.read(cx);
@@ -317,7 +317,7 @@ impl RenderOnce for RequestBar {
                                             .py(px(1.))
                                             .rounded(px(4.))
                                             .bg(bg_tint)
-                                            .text_xs()
+                                            .text_sm()
                                             .font_family(".SystemMonoFont")
                                             .text_color(color)
                                             .cursor_pointer()

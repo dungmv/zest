@@ -198,7 +198,9 @@ impl RenderOnce for CommandPalette {
                                             .appearance(false)
                                             .bordered(false)
                                             .focus_bordered(false)
-                                            .cleanable(true),
+                                            .cleanable(true)
+                                            .px(px(0.))
+                                            .text_sm(),
                                     ),
                             )
                             .child({
@@ -254,7 +256,7 @@ impl RenderOnce for CommandPalette {
                                             .child(Icon::new(IconName::Send).size(px(14.)))
                                             .child(
                                                 div()
-                                                    .text_xs()
+                                                    .text_sm()
                                                     .font_weight(gpui::FontWeight::SEMIBOLD)
                                                     .text_color(t.text_primary)
                                                     .child("Send Active Request"),
@@ -290,7 +292,7 @@ impl RenderOnce for CommandPalette {
                                                 .child(Icon::new(IconName::Settings).size(px(14.)))
                                                 .child(
                                                     div()
-                                                        .text_xs()
+                                                        .text_sm()
                                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                                         .text_color(t.text_primary)
                                                         .child("Open Settings"),
@@ -327,7 +329,7 @@ impl RenderOnce for CommandPalette {
                                                 .child(Icon::new(IconName::Cookie).size(px(14.)))
                                                 .child(
                                                     div()
-                                                        .text_xs()
+                                                        .text_sm()
                                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                                         .text_color(t.text_primary)
                                                         .child("Settings: Manage Cookies"),
@@ -368,7 +370,7 @@ impl RenderOnce for CommandPalette {
                                                 .child(Icon::new(IconName::GitBranch).size(px(14.)))
                                                 .child(
                                                     div()
-                                                        .text_xs()
+                                                        .text_sm()
                                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                                         .text_color(t.text_primary)
                                                         .child("Git: Open Source Control (Commit & Diff)"),
@@ -409,7 +411,7 @@ impl RenderOnce for CommandPalette {
                                                 .child(Icon::new(IconName::GitBranch).size(px(14.)))
                                                 .child(
                                                     div()
-                                                        .text_xs()
+                                                        .text_sm()
                                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                                         .text_color(t.text_primary)
                                                         .child("Git: Switch Branch / Checkout"),
@@ -446,7 +448,7 @@ impl RenderOnce for CommandPalette {
                                                 .child(Icon::new(IconName::Download).size(px(14.)))
                                                 .child(
                                                     div()
-                                                        .text_xs()
+                                                        .text_sm()
                                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                                         .text_color(t.text_primary)
                                                         .child("Import: OpenAPI (YAML/JSON) or Postman"),
@@ -487,7 +489,7 @@ impl RenderOnce for CommandPalette {
                                                 .child("📜")
                                                 .child(
                                                     div()
-                                                        .text_xs()
+                                                        .text_sm()
                                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                                         .text_color(t.text_primary)
                                                         .child("Git: View Commit History"),
@@ -537,7 +539,7 @@ impl RenderOnce for CommandPalette {
                                         .child(MethodBadge::new(req_method))
                                         .child(
                                             div()
-                                                .text_xs()
+                                                .text_sm()
                                                 .font_family(".SystemMonoFont")
                                                 .text_color(t.text_primary)
                                                 .child(req_name),
@@ -586,7 +588,7 @@ impl RenderOnce for CommandPalette {
                                             .child("●")
                                             .child(
                                                 div()
-                                                    .text_xs()
+                                                    .text_sm()
                                                     .text_color(t.text_primary)
                                                     .child(format!("Switch to: {}", env.name)),
                                              )

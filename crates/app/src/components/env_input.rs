@@ -158,7 +158,8 @@ where
                         .bordered(false)
                         .focus_bordered(false)
                         .cleanable(true)
-                        .text_xs()
+                        .px(px(0.))
+                        .text_sm()
                         .font_family(".SystemMonoFont")
                         .token(move |token_ctx, _window, cx| {
                             let var_name = token_ctx.token().id().to_string();
@@ -183,7 +184,7 @@ where
                                 .py(px(1.))
                                 .rounded(px(3.))
                                 .bg(bg_tint)
-                                .text_xs()
+                                .text_sm()
                                 .font_family(".SystemMonoFont")
                                 .text_color(color)
                                 .cursor_pointer()

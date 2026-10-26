@@ -824,7 +824,10 @@ impl RenderOnce for EnvironmentModal {
                                                                             .id(gpui::SharedString::from(format!("{}-key", row_id)))
                                                                             .appearance(false)
                                                                             .bordered(false)
-                                                                            .focus_bordered(false),
+                                                                            .focus_bordered(false)
+                                                                            .px(px(0.))
+                                                                            .text_sm()
+                                                                            .font_family(".SystemMonoFont"),
                                                                     ),
                                                             )
                                                             // Initial Value Input
@@ -844,7 +847,10 @@ impl RenderOnce for EnvironmentModal {
                                                                             .id(gpui::SharedString::from(format!("{}-init-val", row_id)))
                                                                             .appearance(false)
                                                                             .bordered(false)
-                                                                            .focus_bordered(false),
+                                                                            .focus_bordered(false)
+                                                                            .px(px(0.))
+                                                                            .text_sm()
+                                                                            .font_family(".SystemMonoFont"),
                                                                     ),
                                                             )
                                                             // Current Value Input
@@ -864,7 +870,10 @@ impl RenderOnce for EnvironmentModal {
                                                                             .id(gpui::SharedString::from(format!("{}-curr-val", row_id)))
                                                                             .appearance(false)
                                                                             .bordered(false)
-                                                                            .focus_bordered(false),
+                                                                            .focus_bordered(false)
+                                                                            .px(px(0.))
+                                                                            .text_sm()
+                                                                            .font_family(".SystemMonoFont"),
                                                                     ),
                                                             )
                                                             // Secret toggle button
