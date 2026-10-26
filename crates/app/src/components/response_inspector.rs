@@ -764,12 +764,21 @@ impl RenderOnce for ResponseInspector {
                                                             .on_click(move |_, _, cx| {
                                                                 let save_bytes = rs_s.read(cx).current_response.as_ref().map(|r| r.body.clone());
                                                                 if let Some(bytes) = save_bytes {
-                                                                    if let Some(path) = rfd::FileDialog::new()
-                                                                        .set_file_name("response.json")
-                                                                        .save_file()
-                                                                    {
-                                                                        let _ = std::fs::write(path, &bytes);
-                                                                    }
+                                                                    cx.spawn(async move |cx| {
+                                                                        if let Some(file) = rfd::AsyncFileDialog::new()
+                                                                            .set_file_name("response.json")
+                                                                            .save_file()
+                                                                            .await
+                                                                        {
+                                                                            let path = file.path().to_path_buf();
+                                                                            cx.background_executor()
+                                                                                .spawn(async move {
+                                                                                    let _ = std::fs::write(path, &bytes);
+                                                                                })
+                                                                                .await;
+                                                                        }
+                                                                    })
+                                                                    .detach();
                                                                 }
                                                             })
                                                             .child(Icon::new(IconName::Download).size(px(14.)))

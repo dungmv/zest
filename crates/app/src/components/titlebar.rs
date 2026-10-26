@@ -290,27 +290,41 @@ impl RenderOnce for AppTitleBar {
                                 PopupMenuItem::new("Open Workspace...")
                                     .icon(IconName::Folder)
                                     .on_click(move |_, _, cx| {
-                                        if let Some(folder) = rfd::FileDialog::new().pick_folder() {
-                                            ws_open.update(cx, |state, cx| {
-                                                state.open_workspace(folder, cx);
-                                            });
-                                        }
+                                        let ws_open = ws_open.clone();
+                                        cx.spawn(async move |cx| {
+                                            if let Some(folder) =
+                                                rfd::AsyncFileDialog::new().pick_folder().await
+                                            {
+                                                let folder = folder.path().to_path_buf();
+                                                ws_open.update(cx, |state, cx| {
+                                                    state.open_workspace(folder, cx);
+                                                });
+                                            }
+                                        })
+                                        .detach();
                                     }),
                             )
                             .item(
                                 PopupMenuItem::new("New Workspace...")
                                     .icon(IconName::FolderPlus)
                                     .on_click(move |_, _, cx| {
-                                        if let Some(folder) = rfd::FileDialog::new().pick_folder() {
-                                            let name = folder
-                                                .file_name()
-                                                .and_then(|n| n.to_str())
-                                                .unwrap_or("Workspace")
-                                                .to_string();
-                                            ws_new.update(cx, |state, cx| {
-                                                state.new_workspace(folder, &name, cx);
-                                            });
-                                        }
+                                        let ws_new = ws_new.clone();
+                                        cx.spawn(async move |cx| {
+                                            if let Some(folder) =
+                                                rfd::AsyncFileDialog::new().pick_folder().await
+                                            {
+                                                let folder = folder.path().to_path_buf();
+                                                let name = folder
+                                                    .file_name()
+                                                    .and_then(|n| n.to_str())
+                                                    .unwrap_or("Workspace")
+                                                    .to_string();
+                                                ws_new.update(cx, |state, cx| {
+                                                    state.new_workspace(folder, &name, cx);
+                                                });
+                                            }
+                                        })
+                                        .detach();
                                     }),
                             );
 

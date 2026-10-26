@@ -60,18 +60,15 @@ impl ImportModalState {
         self.reparse(cx);
     }
 
-    pub fn set_file(&mut self, path: PathBuf, _window: &mut Window, cx: &mut Context<Self>) {
-        match std::fs::read_to_string(&path) {
-            Ok(content) => {
-                self.selected_file = Some(path);
-                self.loaded_content = Some(content);
-                self.reparse(cx);
-            }
-            Err(e) => {
-                self.parse_result = Some(Err(format!("Could not read file: {}", e)));
-                cx.notify();
-            }
-        }
+    pub fn set_loaded_file(&mut self, path: PathBuf, content: String, cx: &mut Context<Self>) {
+        self.selected_file = Some(path);
+        self.loaded_content = Some(content);
+        self.reparse(cx);
+    }
+
+    pub fn set_file_read_error(&mut self, error: String, cx: &mut Context<Self>) {
+        self.parse_result = Some(Err(format!("Could not read file: {}", error)));
+        cx.notify();
     }
 
     pub fn reparse(&mut self, cx: &mut Context<Self>) {
@@ -670,15 +667,31 @@ fn render_file_picker_view(
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(t.text_primary)
                     .child("Browse File...")
-                    .on_click(move |_, window, cx| {
-                        if let Some(path) = rfd::FileDialog::new()
-                            .add_filter("API Specification & Collections", &["json", "yaml", "yml"])
-                            .pick_file()
-                        {
-                            st_pick.update(cx, |s, cx| {
-                                s.set_file(path, window, cx);
-                            });
-                        }
+                    .on_click(move |_, _, cx| {
+                        let st_pick = st_pick.clone();
+                        cx.spawn(async move |cx| {
+                            if let Some(file) = rfd::AsyncFileDialog::new()
+                                .add_filter(
+                                    "API Specification & Collections",
+                                    &["json", "yaml", "yml"],
+                                )
+                                .pick_file()
+                                .await
+                            {
+                                let path = file.path().to_path_buf();
+                                let read_res = cx
+                                    .background_executor()
+                                    .spawn(async move {
+                                        std::fs::read_to_string(&path).map(|c| (path, c))
+                                    })
+                                    .await;
+                                st_pick.update(cx, |s, cx| match read_res {
+                                    Ok((path, content)) => s.set_loaded_file(path, content, cx),
+                                    Err(e) => s.set_file_read_error(e.to_string(), cx),
+                                });
+                            }
+                        })
+                        .detach();
                     }),
             ),
     )

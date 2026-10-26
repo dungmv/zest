@@ -149,25 +149,36 @@ pub fn render_binary_editor(
                                             let ws_bg = ws_pick.clone();
                                             let per_bg = per_pick.clone();
                                             let id_bg = id_pick.clone();
-                                            if let Some(path) = rfd::FileDialog::new().pick_file() {
-                                                let p = path.to_string_lossy().to_string();
-                                                if let Some(ws) = &ws_bg {
-                                                    ws.update(cx, |ws, _| {
-                                                        ws.update_active_request(&id_bg, |r| {
-                                                            r.set_binary_file(p);
+                                            cx.spawn(async move |cx| {
+                                                if let Some(file) =
+                                                    rfd::AsyncFileDialog::new().pick_file().await
+                                                {
+                                                    let p =
+                                                        file.path().to_string_lossy().to_string();
+                                                    cx.update(|cx| {
+                                                        if let Some(ws) = &ws_bg {
+                                                            ws.update(cx, |ws, _| {
+                                                                ws.update_active_request(
+                                                                    &id_bg,
+                                                                    |r| {
+                                                                        r.set_binary_file(p);
+                                                                    },
+                                                                );
+                                                            });
+                                                        }
+                                                        ed_bg.update(cx, |state, cx| {
+                                                            state.mark_dirty(cx);
                                                         });
+                                                        persist_active_request_without_redraw(
+                                                            &ed_bg,
+                                                            per_bg.as_ref(),
+                                                            ws_bg.as_ref(),
+                                                            cx,
+                                                        );
                                                     });
                                                 }
-                                                ed_bg.update(cx, |state, cx| {
-                                                    state.mark_dirty(cx);
-                                                });
-                                                persist_active_request_without_redraw(
-                                                    &ed_bg,
-                                                    per_bg.as_ref(),
-                                                    ws_bg.as_ref(),
-                                                    cx,
-                                                );
-                                            }
+                                            })
+                                            .detach();
                                         })
                                         .child("Browse File...")
                                 })

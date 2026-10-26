@@ -497,32 +497,39 @@ pub fn render_multipart_editor(
                                 let id_bg = id_p.clone();
                                 let k_bg = k.clone();
                                 let v_bg = v.clone();
-                                if let Some(path) = rfd::FileDialog::new().pick_file() {
-                                    let p = path.to_string_lossy().to_string();
-                                    if let Some(ws) = &ws_bg {
-                                        ws.update(cx, |ws, _| {
-                                            ws.update_active_request(&id_bg, |r| {
-                                                r.update_multipart_item(
-                                                    idx,
-                                                    k_bg,
-                                                    v_bg,
-                                                    true,
-                                                    Some(p),
-                                                    enabled,
-                                                );
+                                cx.spawn(async move |cx| {
+                                    if let Some(file) =
+                                        rfd::AsyncFileDialog::new().pick_file().await
+                                    {
+                                        let p = file.path().to_string_lossy().to_string();
+                                        cx.update(|cx| {
+                                            if let Some(ws) = &ws_bg {
+                                                ws.update(cx, |ws, _| {
+                                                    ws.update_active_request(&id_bg, |r| {
+                                                        r.update_multipart_item(
+                                                            idx,
+                                                            k_bg,
+                                                            v_bg,
+                                                            true,
+                                                            Some(p),
+                                                            enabled,
+                                                        );
+                                                    });
+                                                });
+                                            }
+                                            ed_bg.update(cx, |state, cx| {
+                                                state.mark_dirty(cx);
                                             });
+                                            persist_active_request_without_redraw(
+                                                &ed_bg,
+                                                per_bg.as_ref(),
+                                                ws_bg.as_ref(),
+                                                cx,
+                                            );
                                         });
                                     }
-                                    ed_bg.update(cx, |state, cx| {
-                                        state.mark_dirty(cx);
-                                    });
-                                    persist_active_request_without_redraw(
-                                        &ed_bg,
-                                        per_bg.as_ref(),
-                                        ws_bg.as_ref(),
-                                        cx,
-                                    );
-                                }
+                                })
+                                .detach();
                             })
                             .child("Browse...")
                     } else {
