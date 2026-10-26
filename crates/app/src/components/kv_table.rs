@@ -48,10 +48,155 @@ pub fn render_disabled_input(value: &str, t: &AppTheme) -> Div {
         .child(value.to_string())
 }
 
-struct KvRowInputHolder {
-    key_input: Entity<InputState>,
-    val_input: Entity<InputState>,
+pub type KvUpdateCallback = Rc<dyn Fn(usize, String, String, bool, &mut Window, &mut App)>;
+
+pub struct KvRowInputs {
+    pub key_input: Entity<InputState>,
+    pub val_input: Entity<InputState>,
+    pub enabled: bool,
     _subscriptions: Vec<Subscription>,
+}
+
+pub struct KvTableState {
+    pub rows: Vec<KvRowInputs>,
+}
+
+impl KvTableState {
+    fn create_row_inputs(
+        pair: &KeyValuePair,
+        env_state: Option<&Entity<EnvironmentState>>,
+        on_update: KvUpdateCallback,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> KvRowInputs {
+        let init_k = if let Some(env_m) = env_state {
+            build_tokenized_content(&pair.key, env_m.read(cx))
+        } else {
+            pair.key.clone().into()
+        };
+        let init_v = if let Some(env_m) = env_state {
+            build_tokenized_content(&pair.value, env_m.read(cx))
+        } else {
+            pair.value.clone().into()
+        };
+
+        let key_input = cx.new(|cx| {
+            let mut s = InputState::new(window, cx).placeholder("Key...");
+            s.set_value(init_k, window, cx);
+            s
+        });
+        let val_input = cx.new(|cx| {
+            let mut s = InputState::new(window, cx).placeholder("Value...");
+            s.set_value(init_v, window, cx);
+            s
+        });
+
+        let key_ent = key_input.clone();
+        let val_ent = val_input.clone();
+        let on_up_k = on_update.clone();
+        let env_sub_k = env_state.cloned();
+
+        let sub1 = cx.subscribe_in(&key_input, window, move |this, inp, event, window, cx| {
+            if let InputEvent::Change = event {
+                let k = inp.read(cx).value().to_string();
+                let current_idx = this.rows.iter().position(|r| r.key_input == key_ent);
+                let current_v = val_ent.read(cx).value().to_string();
+                let enabled = current_idx.map(|i| this.rows[i].enabled).unwrap_or(true);
+                if let Some(idx) = current_idx {
+                    on_up_k(idx, k.clone(), current_v, enabled, window, cx);
+                    if k.contains("}}") && detect_unclosed_env_var(&k).is_none() {
+                        if let Some(env_m) = &env_sub_k {
+                            let tokenized = build_tokenized_content(&k, env_m.read(cx));
+                            inp.update(cx, |i, cx| {
+                                i.set_value(tokenized, window, cx);
+                            });
+                        }
+                    }
+                }
+            }
+        });
+
+        let key_ent2 = key_input.clone();
+        let val_ent2 = val_input.clone();
+        let on_up_v = on_update;
+        let env_sub_v = env_state.cloned();
+
+        let sub2 = cx.subscribe_in(&val_input, window, move |this, inp, event, window, cx| {
+            if let InputEvent::Change = event {
+                let v = inp.read(cx).value().to_string();
+                let current_idx = this.rows.iter().position(|r| r.val_input == val_ent2);
+                let current_k = key_ent2.read(cx).value().to_string();
+                let enabled = current_idx.map(|i| this.rows[i].enabled).unwrap_or(true);
+                if let Some(idx) = current_idx {
+                    on_up_v(idx, current_k, v.clone(), enabled, window, cx);
+                    if v.contains("}}") && detect_unclosed_env_var(&v).is_none() {
+                        if let Some(env_m) = &env_sub_v {
+                            let tokenized = build_tokenized_content(&v, env_m.read(cx));
+                            inp.update(cx, |i, cx| {
+                                i.set_value(tokenized, window, cx);
+                            });
+                        }
+                    }
+                }
+            }
+        });
+
+        KvRowInputs {
+            key_input,
+            val_input,
+            enabled: pair.enabled,
+            _subscriptions: vec![sub1, sub2],
+        }
+    }
+
+    fn reconcile(
+        &mut self,
+        pairs: &[KeyValuePair],
+        env_state: Option<&Entity<EnvironmentState>>,
+        on_update: &KvUpdateCallback,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.rows.len() > pairs.len() {
+            self.rows.truncate(pairs.len());
+        }
+
+        for (idx, pair) in pairs.iter().enumerate() {
+            if idx < self.rows.len() {
+                self.rows[idx].enabled = pair.enabled;
+                let cur_k = self.rows[idx].key_input.read(cx).value().to_string();
+                if cur_k != pair.key {
+                    let content = if let Some(env_m) = env_state {
+                        build_tokenized_content(&pair.key, env_m.read(cx))
+                    } else {
+                        pair.key.clone().into()
+                    };
+                    self.rows[idx].key_input.update(cx, |inp, cx| {
+                        inp.set_value(content, window, cx);
+                    });
+                }
+                let cur_v = self.rows[idx].val_input.read(cx).value().to_string();
+                if cur_v != pair.value {
+                    let content = if let Some(env_m) = env_state {
+                        build_tokenized_content(&pair.value, env_m.read(cx))
+                    } else {
+                        pair.value.clone().into()
+                    };
+                    self.rows[idx].val_input.update(cx, |inp, cx| {
+                        inp.set_value(content, window, cx);
+                    });
+                }
+            } else {
+                self.rows.push(Self::create_row_inputs(
+                    pair,
+                    env_state,
+                    on_update.clone(),
+                    window,
+                    cx,
+                ));
+            }
+        }
+    }
 }
 
 #[allow(clippy::type_complexity)]
@@ -211,194 +356,192 @@ impl RenderOnce for KvTable {
                     )
             }))
             // Editable rows
-            .children(self.pairs.into_iter().enumerate().map(|(idx, pair)| {
-                let on_update = self.on_update.clone();
-                let on_remove = self.on_remove.clone();
-                let key_val = pair.key.clone();
-                let val_val = pair.value.clone();
-                let enabled = pair.enabled;
-                let row_prefix = format!("{}-row-{}", id_prefix, idx);
-
-                let on_up_k = on_update.clone();
-                let on_up_v = on_update.clone();
-                let env_for_init = self.env_state.clone();
-                let k_init_val = key_val.clone();
-                let v_init_val = val_val.clone();
-                let row_holder = window.use_keyed_state(
-                    gpui::SharedString::from(format!("{}-holder", row_prefix)),
+            .child({
+                let table_state = window.use_keyed_state(
+                    gpui::SharedString::from(format!("{}-table-inputs", id_prefix)),
                     cx,
-                    |window, cx| {
-                        let init_k = if let Some(env_m) = &env_for_init {
-                            build_tokenized_content(&k_init_val, env_m.read(cx))
-                        } else {
-                            k_init_val.into()
-                        };
-                        let init_v = if let Some(env_m) = &env_for_init {
-                            build_tokenized_content(&v_init_val, env_m.read(cx))
-                        } else {
-                            v_init_val.into()
-                        };
-                        let key_input = cx.new(|cx| {
-                            let mut s = InputState::new(window, cx).placeholder("Key...");
-                            s.set_value(init_k, window, cx);
-                            s
-                        });
-                        let val_input = cx.new(|cx| {
-                            let mut s = InputState::new(window, cx).placeholder("Value...");
-                            s.set_value(init_v, window, cx);
-                            s
-                        });
-
-                        let v_in_1 = val_input.clone();
-                        let env_sub_k = env_for_init.clone();
-                        let sub1 = cx.subscribe_in(
-                            &key_input,
-                            window,
-                            move |_, inp, event, window, cx| {
-                                if let InputEvent::Change = event {
-                                    let k = inp.read(cx).value().to_string();
-                                    let v = v_in_1.read(cx).value().to_string();
-                                    on_up_k(idx, k.clone(), v, enabled, window, cx);
-                                    if k.contains("}}") && detect_unclosed_env_var(&k).is_none() {
-                                        if let Some(env_m) = &env_sub_k {
-                                            let tokenized =
-                                                build_tokenized_content(&k, env_m.read(cx));
-                                            inp.update(cx, |i, cx| {
-                                                i.set_value(tokenized, window, cx);
-                                            });
-                                        }
-                                    }
-                                }
-                            },
-                        );
-
-                        let k_in_2 = key_input.clone();
-                        let env_sub_v = env_for_init.clone();
-                        let sub2 = cx.subscribe_in(
-                            &val_input,
-                            window,
-                            move |_, inp, event, window, cx| {
-                                if let InputEvent::Change = event {
-                                    let k = k_in_2.read(cx).value().to_string();
-                                    let v = inp.read(cx).value().to_string();
-                                    on_up_v(idx, k, v.clone(), enabled, window, cx);
-                                    if v.contains("}}") && detect_unclosed_env_var(&v).is_none() {
-                                        if let Some(env_m) = &env_sub_v {
-                                            let tokenized =
-                                                build_tokenized_content(&v, env_m.read(cx));
-                                            inp.update(cx, |i, cx| {
-                                                i.set_value(tokenized, window, cx);
-                                            });
-                                        }
-                                    }
-                                }
-                            },
-                        );
-
-                        KvRowInputHolder {
-                            key_input,
-                            val_input,
-                            _subscriptions: vec![sub1, sub2],
-                        }
-                    },
+                    |_window, _cx| KvTableState { rows: Vec::new() },
                 );
 
-                let (key_input, val_input) = {
-                    let h = row_holder.read(cx);
-                    (h.key_input.clone(), h.val_input.clone())
-                };
+                table_state.update(cx, |st, cx| {
+                    st.reconcile(
+                        &self.pairs,
+                        self.env_state.as_ref(),
+                        &self.on_update,
+                        window,
+                        cx,
+                    );
+                });
 
-                let on_update_k_render = {
-                    let on_update = on_update.clone();
-                    let val_in = val_input.clone();
-                    move |new_k: String, window: &mut Window, cx: &mut App| {
-                        let cur_v = val_in.read(cx).value().to_string();
-                        on_update(idx, new_k, cur_v, enabled, window, cx);
-                    }
-                };
-
-                let on_update_v_render = {
-                    let on_update = on_update.clone();
-                    let key_in = key_input.clone();
-                    move |new_v: String, window: &mut Window, cx: &mut App| {
-                        let cur_k = key_in.read(cx).value().to_string();
-                        on_update(idx, cur_k, new_v, enabled, window, cx);
-                    }
+                let row_inputs: Vec<(Entity<InputState>, Entity<InputState>, bool)> = {
+                    let st = table_state.read(cx);
+                    st.rows
+                        .iter()
+                        .map(|r| (r.key_input.clone(), r.val_input.clone(), r.enabled))
+                        .collect()
                 };
 
                 div()
                     .w_full()
                     .flex()
-                    .items_center()
-                    .px(px(6.))
-                    .py(px(2.))
-                    .gap(px(8.))
-                    .rounded(px(4.))
-                    .hover(|s| s.bg(t.bg_hover))
-                    // Checkbox
-                    .child({
-                        let on_update_c = on_update.clone();
-                        let k = key_val.clone();
-                        let v = val_val.clone();
+                    .flex_col()
+                    .children(self.pairs.into_iter().enumerate().map(|(idx, pair)| {
+                        let on_update = self.on_update.clone();
+                        let on_remove = self.on_remove.clone();
+                        let (key_input, val_input, row_enabled) =
+                            row_inputs.get(idx).cloned().unwrap_or_else(|| {
+                                let dummy = cx.new(|cx| InputState::new(window, cx));
+                                (dummy.clone(), dummy, pair.enabled)
+                            });
+                        let enabled = row_enabled;
+                        let row_prefix = format!("{}-row-{}", id_prefix, idx);
+
+                        let ts_k_render = table_state.clone();
+                        let key_in_render = key_input.clone();
+                        let on_update_k_render = {
+                            let on_update = on_update.clone();
+                            let val_in = val_input.clone();
+                            move |new_k: String, window: &mut Window, cx: &mut App| {
+                                let cur_v = val_in.read(cx).value().to_string();
+                                let cur_idx = ts_k_render
+                                    .read(cx)
+                                    .rows
+                                    .iter()
+                                    .position(|r| r.key_input == key_in_render)
+                                    .unwrap_or(idx);
+                                on_update(cur_idx, new_k, cur_v, enabled, window, cx);
+                            }
+                        };
+
+                        let ts_v_render = table_state.clone();
+                        let val_in_render = val_input.clone();
+                        let on_update_v_render = {
+                            let on_update = on_update.clone();
+                            let key_in = key_input.clone();
+                            move |new_v: String, window: &mut Window, cx: &mut App| {
+                                let cur_k = key_in.read(cx).value().to_string();
+                                let cur_idx = ts_v_render
+                                    .read(cx)
+                                    .rows
+                                    .iter()
+                                    .position(|r| r.val_input == val_in_render)
+                                    .unwrap_or(idx);
+                                on_update(cur_idx, cur_k, new_v, enabled, window, cx);
+                            }
+                        };
+
                         div()
-                            .id(gpui::SharedString::from(format!("{}-check", row_prefix)))
-                            .w(px(20.))
-                            .h(px(20.))
-                            .rounded(px(4.))
-                            .border_1()
-                            .border_color(if enabled { t.primary } else { t.border })
-                            .bg(if enabled { t.primary } else { t.bg_input })
+                            .w_full()
                             .flex()
                             .items_center()
-                            .justify_center()
-                            .cursor_pointer()
-                            .text_xs()
-                            .text_color(t.primary_foreground)
-                            .on_click(move |_, window, cx| {
-                                on_update_c(idx, k.clone(), v.clone(), !enabled, window, cx);
-                            })
-                            .child(if enabled { "✓" } else { "" })
-                    })
-                    // Key Column
-                    .child(div().w(KEY_COLUMN_WIDTH).child(render_env_input(
-                        format!("{}-key", row_prefix),
-                        &key_input,
-                        self.env_state.as_ref(),
-                        self.modal_state.as_ref(),
-                        window,
-                        cx,
-                        on_update_k_render,
-                    )))
-                    // Value Column
-                    .child(div().flex_1().child(render_env_input(
-                        format!("{}-val", row_prefix),
-                        &val_input,
-                        self.env_state.as_ref(),
-                        self.modal_state.as_ref(),
-                        window,
-                        cx,
-                        on_update_v_render,
-                    )))
-                    // Delete Button
-                    .child({
-                        div()
-                            .id(gpui::SharedString::from(format!("{}-del", row_prefix)))
-                            .w(px(24.))
-                            .h(px(24.))
+                            .px(px(6.))
+                            .py(px(2.))
+                            .gap(px(8.))
                             .rounded(px(4.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .cursor_pointer()
-                            .hover(|s| s.bg(t.bg_hover).text_color(t.status_5xx))
-                            .text_color(t.text_muted)
-                            .text_xs()
-                            .on_click(move |_, window, cx| {
-                                on_remove(idx, window, cx);
+                            .hover(|s| s.bg(t.bg_hover))
+                            // Checkbox
+                            .child({
+                                let ts_chk = table_state.clone();
+                                let on_update_c = on_update.clone();
+                                let key_in_chk = key_input.clone();
+                                let val_in_chk = val_input.clone();
+                                div()
+                                    .id(gpui::SharedString::from(format!("{}-check", row_prefix)))
+                                    .w(px(20.))
+                                    .h(px(20.))
+                                    .rounded(px(4.))
+                                    .border_1()
+                                    .border_color(if enabled { t.primary } else { t.border })
+                                    .bg(if enabled { t.primary } else { t.bg_input })
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .cursor_pointer()
+                                    .text_xs()
+                                    .text_color(t.primary_foreground)
+                                    .on_click(move |_, window, cx| {
+                                        let pos = {
+                                            let st = ts_chk.read(cx);
+                                            st.rows.iter().position(|r| r.key_input == key_in_chk)
+                                        };
+                                        if let Some(pos) = pos {
+                                            let next_enabled = {
+                                                let st = ts_chk.read(cx);
+                                                !st.rows[pos].enabled
+                                            };
+                                            ts_chk.update(cx, |st, _| {
+                                                if pos < st.rows.len() {
+                                                    st.rows[pos].enabled = next_enabled;
+                                                }
+                                            });
+                                            let cur_k = key_in_chk.read(cx).value().to_string();
+                                            let cur_v = val_in_chk.read(cx).value().to_string();
+                                            on_update_c(
+                                                pos,
+                                                cur_k,
+                                                cur_v,
+                                                next_enabled,
+                                                window,
+                                                cx,
+                                            );
+                                        }
+                                    })
+                                    .child(if enabled { "✓" } else { "" })
                             })
-                            .child("×")
-                    })
-            }))
+                            // Key Column
+                            .child(div().w(KEY_COLUMN_WIDTH).child(render_env_input(
+                                format!("{}-key", row_prefix),
+                                &key_input,
+                                self.env_state.as_ref(),
+                                self.modal_state.as_ref(),
+                                window,
+                                cx,
+                                on_update_k_render,
+                            )))
+                            // Value Column
+                            .child(div().flex_1().child(render_env_input(
+                                format!("{}-val", row_prefix),
+                                &val_input,
+                                self.env_state.as_ref(),
+                                self.modal_state.as_ref(),
+                                window,
+                                cx,
+                                on_update_v_render,
+                            )))
+                            // Delete Button
+                            .child({
+                                let ts_del = table_state.clone();
+                                let key_in_del = key_input.clone();
+                                div()
+                                    .id(gpui::SharedString::from(format!("{}-del", row_prefix)))
+                                    .w(px(24.))
+                                    .h(px(24.))
+                                    .rounded(px(4.))
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .cursor_pointer()
+                                    .hover(|s| s.bg(t.bg_hover).text_color(t.status_5xx))
+                                    .text_color(t.text_muted)
+                                    .text_xs()
+                                    .on_click(move |_, window, cx| {
+                                        let pos = {
+                                            let st = ts_del.read(cx);
+                                            st.rows.iter().position(|r| r.key_input == key_in_del)
+                                        };
+                                        if let Some(pos) = pos {
+                                            ts_del.update(cx, |st, _| {
+                                                if pos < st.rows.len() {
+                                                    st.rows.remove(pos);
+                                                }
+                                            });
+                                            on_remove(pos, window, cx);
+                                        }
+                                    })
+                                    .child("×")
+                            })
+                    }))
+            })
             // Add row button
             .child(
                 div().pt(px(6.)).flex().items_center().gap(px(8.)).child(
@@ -434,5 +577,30 @@ mod tests {
     #[test]
     fn test_kv_table_key_column_width() {
         assert_eq!(KEY_COLUMN_WIDTH, px(160.));
+    }
+
+    #[test]
+    fn test_kv_table_row_removal_model_indices() {
+        let mut pairs = vec![
+            KeyValuePair::new("k1", "v1"),
+            KeyValuePair::new("k2", "v2"),
+            KeyValuePair::new("k3", "v3"),
+        ];
+
+        // Simulate deleting row 1 (the middle row)
+        let removed_idx = 1;
+        pairs.remove(removed_idx);
+
+        assert_eq!(pairs.len(), 2);
+        assert_eq!(pairs[0].key, "k1");
+        assert_eq!(pairs[0].value, "v1");
+        assert_eq!(pairs[1].key, "k3");
+        assert_eq!(pairs[1].value, "v3");
+
+        // Simulate deleting row 0 (the first row)
+        pairs.remove(0);
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0].key, "k3");
+        assert_eq!(pairs[0].value, "v3");
     }
 }

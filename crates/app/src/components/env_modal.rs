@@ -13,6 +13,201 @@ use gpui_component::{Icon, Sizable as _};
 use gpui_kit::assets::IconName;
 use zest_core::models::{Environment, EnvironmentVariable};
 
+struct EnvVarTableContext<'a> {
+    is_glob: bool,
+    cur_id: &'a str,
+    ws_state: &'a Entity<EnvironmentState>,
+}
+
+#[derive(Clone)]
+struct EnvVarRowSnapshot {
+    key_input: Entity<InputState>,
+    init_input: Entity<InputState>,
+    curr_input: Entity<InputState>,
+    secret: bool,
+}
+
+struct EnvVarRowInputs {
+    key_input: Entity<InputState>,
+    init_input: Entity<InputState>,
+    curr_input: Entity<InputState>,
+    secret: bool,
+    _subscriptions: Vec<gpui::Subscription>,
+}
+
+struct EnvVarTableState {
+    rows: Vec<EnvVarRowInputs>,
+}
+
+impl EnvVarTableState {
+    fn create_row_inputs(
+        var: &EnvironmentVariable,
+        ctx: &EnvVarTableContext<'_>,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> EnvVarRowInputs {
+        let init_k = var.key.clone();
+        let init_val_init = var.initial_value.clone();
+        let init_val_curr = var.current_value.clone();
+
+        let k_in = cx.new(|cx| {
+            let mut s = InputState::new(window, cx).placeholder("Variable key...");
+            s.set_value(init_k, window, cx);
+            s
+        });
+        let init_in = cx.new(|cx| {
+            let mut s = InputState::new(window, cx).placeholder("Initial value (git)...");
+            s.set_value(init_val_init, window, cx);
+            s
+        });
+        let curr_in = cx.new(|cx| {
+            let mut s = InputState::new(window, cx).placeholder("Current value (local)...");
+            s.set_value(init_val_curr, window, cx);
+            s
+        });
+
+        let k_ent1 = k_in.clone();
+        let cur_id1 = ctx.cur_id.to_string();
+        let is_glob1 = ctx.is_glob;
+        let ws_up_k = ctx.ws_state.clone();
+        let sub1 = cx.subscribe_in(&k_in, window, move |this, _, ev, _, cx| {
+            if let InputEvent::Change = ev {
+                let nk = k_ent1.read(cx).value().to_string();
+                let cid = cur_id1.clone();
+                let pos = this.rows.iter().position(|r| r.key_input == k_ent1);
+                if let Some(idx) = pos {
+                    ws_up_k.update(cx, |state, _cx| {
+                        if is_glob1 {
+                            let mut g = state.global_environment.clone();
+                            if let Some(vr) = g.variables.get_mut(idx) {
+                                vr.key = nk;
+                            }
+                            state.save_global_environment_silently(g);
+                        } else {
+                            let mut list = state.environments.clone();
+                            if let Some(e) = list.iter_mut().find(|x| x.id == cid) {
+                                if let Some(vr) = e.variables.get_mut(idx) {
+                                    vr.key = nk;
+                                }
+                            }
+                            state.save_environments_debounced(list, _cx);
+                        }
+                    });
+                }
+            }
+        });
+
+        let init_ent2 = init_in.clone();
+        let cur_id2 = ctx.cur_id.to_string();
+        let is_glob2 = ctx.is_glob;
+        let ws_up_init = ctx.ws_state.clone();
+        let sub2 = cx.subscribe_in(&init_in, window, move |this, _, ev, _, cx| {
+            if let InputEvent::Change = ev {
+                let n_init = init_ent2.read(cx).value().to_string();
+                let cid = cur_id2.clone();
+                let pos = this.rows.iter().position(|r| r.init_input == init_ent2);
+                if let Some(idx) = pos {
+                    ws_up_init.update(cx, |state, _cx| {
+                        if is_glob2 {
+                            let mut g = state.global_environment.clone();
+                            if let Some(vr) = g.variables.get_mut(idx) {
+                                vr.initial_value = n_init;
+                            }
+                            state.save_global_environment_silently(g);
+                        } else {
+                            let mut list = state.environments.clone();
+                            if let Some(e) = list.iter_mut().find(|x| x.id == cid) {
+                                if let Some(vr) = e.variables.get_mut(idx) {
+                                    vr.initial_value = n_init;
+                                }
+                            }
+                            state.save_environments_debounced(list, _cx);
+                        }
+                    });
+                }
+            }
+        });
+
+        let curr_ent3 = curr_in.clone();
+        let cur_id3 = ctx.cur_id.to_string();
+        let is_glob3 = ctx.is_glob;
+        let ws_up_curr = ctx.ws_state.clone();
+        let sub3 = cx.subscribe_in(&curr_in, window, move |this, _, ev, _, cx| {
+            if let InputEvent::Change = ev {
+                let n_curr = curr_ent3.read(cx).value().to_string();
+                let cid = cur_id3.clone();
+                let pos = this.rows.iter().position(|r| r.curr_input == curr_ent3);
+                if let Some(idx) = pos {
+                    ws_up_curr.update(cx, |state, _cx| {
+                        if is_glob3 {
+                            let mut g = state.global_environment.clone();
+                            if let Some(vr) = g.variables.get_mut(idx) {
+                                vr.current_value = n_curr;
+                            }
+                            state.save_global_environment_silently(g);
+                        } else {
+                            let mut list = state.environments.clone();
+                            if let Some(e) = list.iter_mut().find(|x| x.id == cid) {
+                                if let Some(vr) = e.variables.get_mut(idx) {
+                                    vr.current_value = n_curr;
+                                }
+                            }
+                            state.save_environments_debounced(list, _cx);
+                        }
+                    });
+                }
+            }
+        });
+
+        EnvVarRowInputs {
+            key_input: k_in,
+            init_input: init_in,
+            curr_input: curr_in,
+            secret: var.secret,
+            _subscriptions: vec![sub1, sub2, sub3],
+        }
+    }
+
+    fn reconcile(
+        &mut self,
+        vars: &[EnvironmentVariable],
+        ctx: &EnvVarTableContext<'_>,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.rows.len() > vars.len() {
+            self.rows.truncate(vars.len());
+        }
+
+        for (idx, var) in vars.iter().enumerate() {
+            if idx < self.rows.len() {
+                self.rows[idx].secret = var.secret;
+                let cur_k = self.rows[idx].key_input.read(cx).value().to_string();
+                if cur_k != var.key {
+                    self.rows[idx]
+                        .key_input
+                        .update(cx, |inp, cx| inp.set_value(var.key.clone(), window, cx));
+                }
+                let cur_init = self.rows[idx].init_input.read(cx).value().to_string();
+                if cur_init != var.initial_value {
+                    self.rows[idx].init_input.update(cx, |inp, cx| {
+                        inp.set_value(var.initial_value.clone(), window, cx)
+                    });
+                }
+                let cur_curr = self.rows[idx].curr_input.read(cx).value().to_string();
+                if cur_curr != var.current_value {
+                    self.rows[idx].curr_input.update(cx, |inp, cx| {
+                        inp.set_value(var.current_value.clone(), window, cx)
+                    });
+                }
+            } else {
+                self.rows
+                    .push(Self::create_row_inputs(var, ctx, window, cx));
+            }
+        }
+    }
+}
+
 #[derive(IntoElement)]
 pub struct EnvironmentModal {
     env_state: Entity<EnvironmentState>,
@@ -60,20 +255,10 @@ impl RenderOnce for EnvironmentModal {
         let filtered_envs: Vec<Environment> = envs.clone();
 
         // Target variables to display in the right pane
-        let target_variables: Vec<(usize, EnvironmentVariable)> = if is_global_selected {
-            global_env
-                .variables
-                .iter()
-                .enumerate()
-                .map(|(i, v)| (i, v.clone()))
-                .collect()
+        let target_variables: Vec<EnvironmentVariable> = if is_global_selected {
+            global_env.variables.clone()
         } else if let Some(custom) = &active_custom_env {
-            custom
-                .variables
-                .iter()
-                .enumerate()
-                .map(|(i, v)| (i, v.clone()))
-                .collect()
+            custom.variables.clone()
         } else {
             Vec::new()
         };
@@ -674,284 +859,251 @@ impl RenderOnce for EnvironmentModal {
                                                                 ),
                                                         )
                                                     })
-                                                    .children(target_variables.into_iter().map(|(orig_idx, var)| {
-                                                        let is_glob = is_global_selected;
-                                                        let cur_id = selected_id.clone();
-                                                        let row_id = format!("{}-row-{}", selected_id, orig_idx);
-                                                        let v_key = var.key.clone();
-                                                        let v_init = var.initial_value.clone();
-                                                        let v_curr = var.current_value.clone();
-                                                        let secret = var.secret;
-
-                                                        let ws_up_k = ws_clone.clone();
-                                                        let ws_up_init = ws_clone.clone();
-                                                        let ws_up_curr = ws_clone.clone();
-                                                        let ws_secret = ws_clone.clone();
-                                                        let ws_del = ws_clone.clone();
-
-                                                        let init_k = v_key.clone();
-                                                        let init_val_init = v_init.clone();
-                                                        let init_val_curr = v_curr.clone();
-                                                        let holder = window.use_keyed_state(
-                                                            gpui::SharedString::from(format!("{}-holder", row_id)),
+                                                    .child({
+                                                        let table_state = window.use_keyed_state(
+                                                            gpui::SharedString::from(format!("env-var-table-state-{}", selected_id)),
                                                             cx,
-                                                            |window, cx| {
-                                                                let k_in = cx.new(|cx| {
-                                                                    let mut s = InputState::new(window, cx).placeholder("Variable key...");
-                                                                    s.set_value(init_k, window, cx);
-                                                                    s
-                                                                });
-                                                                let init_in = cx.new(|cx| {
-                                                                    let mut s = InputState::new(window, cx).placeholder("Initial value (git)...");
-                                                                    s.set_value(init_val_init, window, cx);
-                                                                    s
-                                                                });
-                                                                let curr_in = cx.new(|cx| {
-                                                                    let mut s = InputState::new(window, cx).placeholder("Current value (local)...");
-                                                                    s.set_value(init_val_curr, window, cx);
-                                                                    s
-                                                                });
-
-                                                                let k1 = k_in.clone();
-                                                                let cur_id1 = cur_id.clone();
-                                                                let sub1 = cx.subscribe_in(&k_in, window, move |_, _, ev, _, cx| {
-                                                                    if let InputEvent::Change = ev {
-                                                                        let nk = k1.read(cx).value().to_string();
-                                                                        let cid = cur_id1.clone();
-                                                                        ws_up_k.update(cx, |state, _cx| {
-                                                                            if is_glob {
-                                                                                let mut g = state.global_environment.clone();
-                                                                                if let Some(vr) = g.variables.get_mut(orig_idx) {
-                                                                                    vr.key = nk;
-                                                                                }
-                                                                                state.save_global_environment_silently(g);
-                                                                            } else {
-                                                                                let mut list = state.environments.clone();
-                                                                                if let Some(e) = list.iter_mut().find(|x| x.id == cid) {
-                                                                                    if let Some(vr) = e.variables.get_mut(orig_idx) {
-                                                                                        vr.key = nk;
-                                                                                    }
-                                                                                }
-                                                                                state.save_environments_debounced(list, _cx);
-                                                                            }
-                                                                        });
-                                                                    }
-                                                                });
-
-                                                                let init2 = init_in.clone();
-                                                                let cur_id2 = cur_id.clone();
-                                                                let sub2 = cx.subscribe_in(&init_in, window, move |_, _, ev, _, cx| {
-                                                                    if let InputEvent::Change = ev {
-                                                                        let n_init = init2.read(cx).value().to_string();
-                                                                        let cid = cur_id2.clone();
-                                                                        ws_up_init.update(cx, |state, _cx| {
-                                                                            if is_glob {
-                                                                                let mut g = state.global_environment.clone();
-                                                                                if let Some(vr) = g.variables.get_mut(orig_idx) {
-                                                                                    vr.initial_value = n_init;
-                                                                                }
-                                                                                state.save_global_environment_silently(g);
-                                                                            } else {
-                                                                                let mut list = state.environments.clone();
-                                                                                if let Some(e) = list.iter_mut().find(|x| x.id == cid) {
-                                                                                    if let Some(vr) = e.variables.get_mut(orig_idx) {
-                                                                                        vr.initial_value = n_init;
-                                                                                    }
-                                                                                }
-                                                                                state.save_environments_debounced(list, _cx);
-                                                                            }
-                                                                        });
-                                                                    }
-                                                                });
-
-                                                                let curr3 = curr_in.clone();
-                                                                let cur_id3 = cur_id.clone();
-                                                                let sub3 = cx.subscribe_in(&curr_in, window, move |_, _, ev, _, cx| {
-                                                                    if let InputEvent::Change = ev {
-                                                                        let n_curr = curr3.read(cx).value().to_string();
-                                                                        let cid = cur_id3.clone();
-                                                                        ws_up_curr.update(cx, |state, _cx| {
-                                                                            if is_glob {
-                                                                                let mut g = state.global_environment.clone();
-                                                                                if let Some(vr) = g.variables.get_mut(orig_idx) {
-                                                                                    vr.current_value = n_curr;
-                                                                                }
-                                                                                state.save_global_environment_silently(g);
-                                                                            } else {
-                                                                                let mut list = state.environments.clone();
-                                                                                if let Some(e) = list.iter_mut().find(|x| x.id == cid) {
-                                                                                    if let Some(vr) = e.variables.get_mut(orig_idx) {
-                                                                                        vr.current_value = n_curr;
-                                                                                    }
-                                                                                }
-                                                                                state.save_environments_debounced(list, _cx);
-                                                                            }
-                                                                        });
-                                                                    }
-                                                                });
-
-                                                                (k_in, init_in, curr_in, vec![sub1, sub2, sub3])
-                                                            },
+                                                            |_window, _cx| EnvVarTableState { rows: Vec::new() },
                                                         );
 
-                                                        let (k_input, init_input, curr_input) = {
-                                                            let h = holder.read(cx);
-                                                            (h.0.clone(), h.1.clone(), h.2.clone())
+                                                        let env_ctx = EnvVarTableContext {
+                                                            is_glob: is_global_selected,
+                                                            cur_id: &selected_id,
+                                                            ws_state: &ws_clone,
                                                         };
 
-                                                        div()
-                                                            .flex()
-                                                            .items_center()
-                                                            .px(px(4.))
-                                                            .py(px(2.))
-                                                            .gap(px(8.))
-                                                            .rounded(px(4.))
-                                                            .hover(|s| s.bg(t.bg_hover))
-                                                            // Key Input
-                                                            .child(
-                                                                div()
-                                                                    .w(px(180.))
-                                                                    .h(px(28.))
-                                                                    .px(px(6.))
-                                                                    .rounded(px(4.))
-                                                                    .bg(t.bg_input)
-                                                                    .border_1()
-                                                                    .border_color(t.border)
-                                                                    .flex()
-                                                                    .items_center()
-                                                                    .child(
-                                                                        Input::new(&k_input)
-                                                                            .id(gpui::SharedString::from(format!("{}-key", row_id)))
-                                                                            .appearance(false)
-                                                                            .bordered(false)
-                                                                            .focus_bordered(false)
-                                                                            .px(px(0.))
-                                                                            .text_sm()
-                                                                            .font_family(".SystemMonoFont"),
-                                                                    ),
-                                                            )
-                                                            // Initial Value Input
-                                                            .child(
-                                                                div()
-                                                                    .flex_1()
-                                                                    .h(px(28.))
-                                                                    .px(px(6.))
-                                                                    .rounded(px(4.))
-                                                                    .bg(t.bg_input)
-                                                                    .border_1()
-                                                                    .border_color(t.border)
-                                                                    .flex()
-                                                                    .items_center()
-                                                                    .child(
-                                                                        Input::new(&init_input)
-                                                                            .id(gpui::SharedString::from(format!("{}-init-val", row_id)))
-                                                                            .appearance(false)
-                                                                            .bordered(false)
-                                                                            .focus_bordered(false)
-                                                                            .px(px(0.))
-                                                                            .text_sm()
-                                                                            .font_family(".SystemMonoFont"),
-                                                                    ),
-                                                            )
-                                                            // Current Value Input
-                                                            .child(
-                                                                div()
-                                                                    .flex_1()
-                                                                    .h(px(28.))
-                                                                    .px(px(6.))
-                                                                    .rounded(px(4.))
-                                                                    .bg(t.bg_input)
-                                                                    .border_1()
-                                                                    .border_color(t.border)
-                                                                    .flex()
-                                                                    .items_center()
-                                                                    .child(
-                                                                        Input::new(&curr_input)
-                                                                            .id(gpui::SharedString::from(format!("{}-curr-val", row_id)))
-                                                                            .appearance(false)
-                                                                            .bordered(false)
-                                                                            .focus_bordered(false)
-                                                                            .px(px(0.))
-                                                                            .text_sm()
-                                                                            .font_family(".SystemMonoFont"),
-                                                                    ),
-                                                            )
-                                                            // Secret toggle button
-                                                            .child({
-                                                                let cur_id_s = cur_id.clone();
-                                                                div()
-                                                                    .id(gpui::SharedString::from(format!("{}-secret", row_id)))
-                                                                    .w(px(64.))
-                                                                    .h(px(24.))
-                                                                    .rounded(px(4.))
-                                                                    .bg(if secret { gpui::Hsla { a: 0.15, ..t.status_4xx } } else { gpui::transparent_black() })
-                                                                    .hover(|s| s.bg(t.bg_card))
-                                                                    .cursor_pointer()
-                                                                    .flex()
-                                                                    .items_center()
-                                                                    .justify_center()
-                                                                    .text_xs()
-                                                                    .text_color(if secret { t.status_4xx } else { t.text_muted })
-                                                                    .on_click(move |_, _, cx| {
-                                                                        let cid = cur_id_s.clone();
-                                                                        ws_secret.update(cx, |state, cx| {
-                                                                            if is_glob {
-                                                                                let mut g = state.global_environment.clone();
-                                                                                if let Some(vr) = g.variables.get_mut(orig_idx) {
-                                                                                    vr.secret = !secret;
-                                                                                }
-                                                                                state.save_global_environment(g, cx);
-                                                                            } else {
-                                                                                let mut list = state.environments.clone();
-                                                                                if let Some(e) = list.iter_mut().find(|x| x.id == cid) {
-                                                                                    if let Some(vr) = e.variables.get_mut(orig_idx) {
-                                                                                        vr.secret = !secret;
+                                                        table_state.update(cx, |st, cx| {
+                                                            st.reconcile(
+                                                                &target_variables,
+                                                                &env_ctx,
+                                                                window,
+                                                                cx,
+                                                            );
+                                                        });
+
+                                                        let row_inputs: Vec<EnvVarRowSnapshot> = {
+                                                            let st = table_state.read(cx);
+                                                            st.rows
+                                                                .iter()
+                                                                .map(|r| EnvVarRowSnapshot {
+                                                                    key_input: r.key_input.clone(),
+                                                                    init_input: r.init_input.clone(),
+                                                                    curr_input: r.curr_input.clone(),
+                                                                    secret: r.secret,
+                                                                })
+                                                                .collect()
+                                                        };
+
+                                                        div().w_full().flex().flex_col().gap(px(4.)).children(target_variables.into_iter().enumerate().map(|(idx, var)| {
+                                                            let is_glob = is_global_selected;
+                                                            let cur_id = selected_id.clone();
+                                                            let row_id = format!("{}-row-{}", selected_id, idx);
+
+                                                            let ws_secret = ws_clone.clone();
+                                                            let ws_del = ws_clone.clone();
+
+                                                            let snapshot = row_inputs
+                                                                .get(idx)
+                                                                .cloned()
+                                                                .unwrap_or_else(|| {
+                                                                    let dummy = cx.new(|cx| InputState::new(window, cx));
+                                                                    EnvVarRowSnapshot {
+                                                                        key_input: dummy.clone(),
+                                                                        init_input: dummy.clone(),
+                                                                        curr_input: dummy,
+                                                                        secret: var.secret,
+                                                                    }
+                                                                });
+                                                            let k_input = snapshot.key_input;
+                                                            let init_input = snapshot.init_input;
+                                                            let curr_input = snapshot.curr_input;
+                                                            let secret = snapshot.secret;
+
+                                                            let ts_sec = table_state.clone();
+                                                            let ts_del = table_state.clone();
+                                                            let kin_sec = k_input.clone();
+                                                            let kin_del = k_input.clone();
+
+                                                            div()
+                                                                .flex()
+                                                                .items_center()
+                                                                .px(px(4.))
+                                                                .py(px(2.))
+                                                                .gap(px(8.))
+                                                                .rounded(px(4.))
+                                                                .hover(|s| s.bg(t.bg_hover))
+                                                                // Key Input
+                                                                .child(
+                                                                    div()
+                                                                        .w(px(180.))
+                                                                        .h(px(28.))
+                                                                        .px(px(6.))
+                                                                        .rounded(px(4.))
+                                                                        .bg(t.bg_input)
+                                                                        .border_1()
+                                                                        .border_color(t.border)
+                                                                        .flex()
+                                                                        .items_center()
+                                                                        .child(
+                                                                            Input::new(&k_input)
+                                                                                .id(gpui::SharedString::from(format!("{}-key", row_id)))
+                                                                                .appearance(false)
+                                                                                .bordered(false)
+                                                                                .focus_bordered(false)
+                                                                                .px(px(0.))
+                                                                                .text_sm()
+                                                                                .font_family(".SystemMonoFont"),
+                                                                        ),
+                                                                )
+                                                                // Initial Value Input
+                                                                .child(
+                                                                    div()
+                                                                        .flex_1()
+                                                                        .h(px(28.))
+                                                                        .px(px(6.))
+                                                                        .rounded(px(4.))
+                                                                        .bg(t.bg_input)
+                                                                        .border_1()
+                                                                        .border_color(t.border)
+                                                                        .flex()
+                                                                        .items_center()
+                                                                        .child(
+                                                                            Input::new(&init_input)
+                                                                                .id(gpui::SharedString::from(format!("{}-init-val", row_id)))
+                                                                                .appearance(false)
+                                                                                .bordered(false)
+                                                                                .focus_bordered(false)
+                                                                                .px(px(0.))
+                                                                                .text_sm()
+                                                                                .font_family(".SystemMonoFont"),
+                                                                        ),
+                                                                )
+                                                                // Current Value Input
+                                                                .child(
+                                                                    div()
+                                                                        .flex_1()
+                                                                        .h(px(28.))
+                                                                        .px(px(6.))
+                                                                        .rounded(px(4.))
+                                                                        .bg(t.bg_input)
+                                                                        .border_1()
+                                                                        .border_color(t.border)
+                                                                        .flex()
+                                                                        .items_center()
+                                                                        .child(
+                                                                            Input::new(&curr_input)
+                                                                                .id(gpui::SharedString::from(format!("{}-curr-val", row_id)))
+                                                                                .appearance(false)
+                                                                                .bordered(false)
+                                                                                .focus_bordered(false)
+                                                                                .px(px(0.))
+                                                                                .text_sm()
+                                                                                .font_family(".SystemMonoFont"),
+                                                                        ),
+                                                                )
+                                                                // Secret toggle button
+                                                                .child({
+                                                                    let cur_id_s = cur_id.clone();
+                                                                    div()
+                                                                        .id(gpui::SharedString::from(format!("{}-secret", row_id)))
+                                                                        .w(px(64.))
+                                                                        .h(px(24.))
+                                                                        .rounded(px(4.))
+                                                                        .bg(if secret { gpui::Hsla { a: 0.15, ..t.status_4xx } } else { gpui::transparent_black() })
+                                                                        .hover(|s| s.bg(t.bg_card))
+                                                                        .cursor_pointer()
+                                                                        .flex()
+                                                                        .items_center()
+                                                                        .justify_center()
+                                                                        .text_xs()
+                                                                        .text_color(if secret { t.status_4xx } else { t.text_muted })
+                                                                        .on_click(move |_, _, cx| {
+                                                                            let pos = {
+                                                                                let st = ts_sec.read(cx);
+                                                                                st.rows.iter().position(|r| r.key_input == kin_sec)
+                                                                            };
+                                                                            if let Some(pos) = pos {
+                                                                                let next_sec = {
+                                                                                    let st = ts_sec.read(cx);
+                                                                                    !st.rows[pos].secret
+                                                                                };
+                                                                                ts_sec.update(cx, |st, _| {
+                                                                                    if pos < st.rows.len() {
+                                                                                        st.rows[pos].secret = next_sec;
                                                                                     }
-                                                                                }
-                                                                                state.save_environments(list, cx);
-                                                                            }
-                                                                        });
-                                                                    })
-                                                                    .child(if secret { div().flex().items_center().gap(px(4.)).child(Icon::new(IconName::Lock).size(px(14.))).child(" Secret").into_any_element() } else { div().flex().items_center().gap(px(4.)).child(Icon::new(IconName::LockOpen).size(px(14.))).child(" Visible").into_any_element() })
-                                                            })
-                                                            // Delete row button
-                                                            .child({
-                                                                let cur_id_d = cur_id.clone();
-                                                                div()
-                                                                    .id(gpui::SharedString::from(format!("{}-del", row_id)))
-                                                                    .w(px(24.))
-                                                                    .h(px(24.))
-                                                                    .rounded(px(4.))
-                                                                    .flex()
-                                                                    .items_center()
-                                                                    .justify_center()
-                                                                    .cursor_pointer()
-                                                                    .hover(|s| s.bg(t.bg_card).text_color(t.status_5xx))
-                                                                    .text_color(t.text_muted)
-                                                                    .text_xs()
-                                                                    .on_click(move |_, _, cx| {
-                                                                        let cid = cur_id_d.clone();
-                                                                        ws_del.update(cx, |state, cx| {
-                                                                            if is_glob {
-                                                                                let mut g = state.global_environment.clone();
-                                                                                if orig_idx < g.variables.len() {
-                                                                                    g.variables.remove(orig_idx);
-                                                                                }
-                                                                                state.save_global_environment(g, cx);
-                                                                            } else {
-                                                                                let mut list = state.environments.clone();
-                                                                                if let Some(e) = list.iter_mut().find(|x| x.id == cid) {
-                                                                                    if orig_idx < e.variables.len() {
-                                                                                        e.variables.remove(orig_idx);
+                                                                                });
+                                                                                let cid = cur_id_s.clone();
+                                                                                ws_secret.update(cx, |state, cx| {
+                                                                                    if is_glob {
+                                                                                        let mut g = state.global_environment.clone();
+                                                                                        if let Some(vr) = g.variables.get_mut(pos) {
+                                                                                            vr.secret = next_sec;
+                                                                                        }
+                                                                                        state.save_global_environment(g, cx);
+                                                                                    } else {
+                                                                                        let mut list = state.environments.clone();
+                                                                                        if let Some(e) = list.iter_mut().find(|x| x.id == cid) {
+                                                                                            if let Some(vr) = e.variables.get_mut(pos) {
+                                                                                                vr.secret = next_sec;
+                                                                                            }
+                                                                                        }
+                                                                                        state.save_environments(list, cx);
                                                                                     }
-                                                                                }
-                                                                                state.save_environments(list, cx);
+                                                                                });
                                                                             }
-                                                                        });
-                                                                    })
-                                                                    .child("×")
-                                                            })
-                                                    }))
+                                                                        })
+                                                                        .child(if secret { div().flex().items_center().gap(px(4.)).child(Icon::new(IconName::Lock).size(px(14.))).child(" Secret").into_any_element() } else { div().flex().items_center().gap(px(4.)).child(Icon::new(IconName::LockOpen).size(px(14.))).child(" Visible").into_any_element() })
+                                                                })
+                                                                // Delete row button
+                                                                .child({
+                                                                    let cur_id_d = cur_id.clone();
+                                                                    div()
+                                                                        .id(gpui::SharedString::from(format!("{}-del", row_id)))
+                                                                        .w(px(24.))
+                                                                        .h(px(24.))
+                                                                        .rounded(px(4.))
+                                                                        .flex()
+                                                                        .items_center()
+                                                                        .justify_center()
+                                                                        .cursor_pointer()
+                                                                        .hover(|s| s.bg(t.bg_card).text_color(t.status_5xx))
+                                                                        .text_color(t.text_muted)
+                                                                        .text_xs()
+                                                                        .on_click(move |_, _, cx| {
+                                                                            let pos = {
+                                                                                let st = ts_del.read(cx);
+                                                                                st.rows.iter().position(|r| r.key_input == kin_del)
+                                                                            };
+                                                                            if let Some(pos) = pos {
+                                                                                ts_del.update(cx, |st, _| {
+                                                                                    if pos < st.rows.len() {
+                                                                                        st.rows.remove(pos);
+                                                                                    }
+                                                                                });
+                                                                                let cid = cur_id_d.clone();
+                                                                                ws_del.update(cx, |state, cx| {
+                                                                                    if is_glob {
+                                                                                        let mut g = state.global_environment.clone();
+                                                                                        if pos < g.variables.len() {
+                                                                                            g.variables.remove(pos);
+                                                                                        }
+                                                                                        state.save_global_environment(g, cx);
+                                                                                    } else {
+                                                                                        let mut list = state.environments.clone();
+                                                                                        if let Some(e) = list.iter_mut().find(|x| x.id == cid) {
+                                                                                            if pos < e.variables.len() {
+                                                                                                e.variables.remove(pos);
+                                                                                            }
+                                                                                        }
+                                                                                        state.save_environments(list, cx);
+                                                                                    }
+                                                                                });
+                                                                            }
+                                                                        })
+                                                                        .child("×")
+                                                                })
+                                                        }))
+                                                    })
                                             ),
                                     ),
                             ),
