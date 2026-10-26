@@ -1,7 +1,13 @@
-use super::{EnvironmentState, WorkspaceDataState};
-use gpui::{px, AppContext, Context, Entity, Pixels, Window};
+use super::{EnvironmentState, GitState, PersistenceState, WorkspaceDataState};
+use crate::components::sidebar::{
+    build_sidebar_req_items, flatten_sidebar_tree, FlatSidebarRow, SidebarCacheKey,
+    SidebarFlatCache,
+};
+use gpui::{px, AppContext, Context, Entity, Pixels, UniformListScrollHandle, Window};
 use gpui_component::input::InputState;
+use std::cell::RefCell;
 use std::collections::HashSet;
+use std::sync::Arc;
 
 pub struct RenamingState<T> {
     pub id: T,
@@ -21,6 +27,9 @@ pub struct SidebarState {
     pub renaming_example: Option<RenamingState<(String, String)>>,
     pub nav_history: Vec<String>,
     pub nav_index: usize,
+    pub ui_version: usize,
+    pub scroll_handle: UniformListScrollHandle,
+    pub flat_cache: RefCell<SidebarFlatCache>,
 }
 
 impl Default for SidebarState {
@@ -37,6 +46,9 @@ impl Default for SidebarState {
             renaming_example: None,
             nav_history: Vec::new(),
             nav_index: 0,
+            ui_version: 0,
+            scroll_handle: UniformListScrollHandle::new(),
+            flat_cache: RefCell::new(SidebarFlatCache::default()),
         }
     }
 }
@@ -47,8 +59,11 @@ impl SidebarState {
     }
 
     pub fn set_filter_query(&mut self, query: String, cx: &mut Context<Self>) {
-        self.filter_query = query;
-        cx.notify();
+        if self.filter_query != query {
+            self.filter_query = query;
+            self.ui_version = self.ui_version.wrapping_add(1);
+            cx.notify();
+        }
     }
 
     pub fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {
@@ -57,8 +72,10 @@ impl SidebarState {
     }
 
     pub fn set_sidebar_width(&mut self, width: Pixels, cx: &mut Context<Self>) {
-        self.sidebar_width = width;
-        cx.notify();
+        if self.sidebar_width != width {
+            self.sidebar_width = width;
+            cx.notify();
+        }
     }
 
     pub fn toggle_folder_collapsed(&mut self, folder_id: &str, cx: &mut Context<Self>) {
@@ -67,6 +84,7 @@ impl SidebarState {
         } else {
             self.collapsed_folders.insert(folder_id.to_string());
         }
+        self.ui_version = self.ui_version.wrapping_add(1);
         cx.notify();
     }
 
@@ -76,7 +94,55 @@ impl SidebarState {
         } else {
             self.collapsed_requests.insert(req_id.to_string());
         }
+        self.ui_version = self.ui_version.wrapping_add(1);
         cx.notify();
+    }
+
+    pub fn cached_flat_rows(
+        &self,
+        ws: &WorkspaceDataState,
+        per: &PersistenceState,
+        git: &GitState,
+    ) -> Arc<Vec<FlatSidebarRow>> {
+        let has_query = !self.filter_query.is_empty();
+        let url_ver = if has_query { ws.url_version } else { 0 };
+        let key = SidebarCacheKey {
+            tree_version: ws.tree_version,
+            url_version_if_filtering: url_ver,
+            git_status_version: git.status_version,
+            unsaved_version: per.unsaved_version,
+            ui_version: self.ui_version,
+        };
+
+        let mut cache = self.flat_cache.borrow_mut();
+        if cache.key == Some(key) {
+            return cache.rows.clone();
+        }
+
+        let req_ver = (ws.tree_version, url_ver);
+        if cache.req_items_version != Some(req_ver) {
+            let (raw_items, arc_items) = build_sidebar_req_items(&ws.requests);
+            cache.req_raw_items = Arc::new(raw_items);
+            cache.req_items = Arc::new(arc_items);
+            cache.req_items_version = Some(req_ver);
+        }
+
+        let query_lower = self.filter_query.to_lowercase();
+        let rows = flatten_sidebar_tree(
+            &ws.folders,
+            &cache.req_raw_items,
+            &cache.req_items,
+            &ws.pins,
+            &query_lower,
+            &self.collapsed_folders,
+            &self.collapsed_requests,
+            git.status.as_ref(),
+            &per.unsaved_requests,
+        );
+        let arc_rows = Arc::new(rows);
+        cache.key = Some(key);
+        cache.rows = arc_rows.clone();
+        arc_rows
     }
 
     pub fn record_navigation(&mut self, req_id: &str) {

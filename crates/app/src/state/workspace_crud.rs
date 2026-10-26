@@ -24,6 +24,7 @@ impl WorkspaceDataState {
         item.folder_id = folder_rel;
 
         self.requests.push(item.clone());
+        self.bump_tree_version();
         item
     }
 
@@ -68,6 +69,7 @@ impl WorkspaceDataState {
         let mut dup = req_file.to_item(&rel_path, &ws_name, folder_rel);
         dup.last_status_code = existing.last_status_code;
         self.requests.push(dup.clone());
+        self.bump_tree_version();
         Some(dup)
     }
 
@@ -89,6 +91,7 @@ impl WorkspaceDataState {
         self.parse_errors.remove(req_id);
         self.pins.retain(|p| p != req_id);
         let _ = self.store.save_pins(&self.pins);
+        self.bump_tree_version();
     }
 
     pub fn delete_request(&mut self, req_id: &str, cx: &mut Context<Self>) {
@@ -123,6 +126,7 @@ impl WorkspaceDataState {
                 self.parse_errors.insert(new_rel_path.clone(), err);
             }
 
+            self.bump_tree_version();
             Some(new_rel_path)
         } else {
             None
@@ -157,6 +161,7 @@ impl WorkspaceDataState {
                 f.id = rel_path.clone();
                 f.parent_id = parent_id;
                 self.folders.push(f);
+                self.bump_tree_version();
                 return Some(rel_path);
             }
         }
@@ -191,6 +196,7 @@ impl WorkspaceDataState {
         self.pins
             .retain(|p| p != folder_id && !p.starts_with(&prefix));
         let _ = self.store.save_pins(&self.pins);
+        self.bump_tree_version();
     }
 
     pub fn delete_folder(&mut self, folder_id: &str, cx: &mut Context<Self>) {
@@ -211,6 +217,7 @@ impl WorkspaceDataState {
             }
             // Remap the folder id and every descendant id to the new prefix.
             self.last_moved_items = self.repath_folder_descendants(folder_id, &new_rel_path);
+            self.bump_tree_version();
             Some(new_rel_path)
         } else {
             None
@@ -255,6 +262,7 @@ impl WorkspaceDataState {
                         .position(|f| f.id == *target_id)
                         .unwrap_or(self.folders.len());
                     self.folders.insert(new_t_idx, folder);
+                    self.bump_tree_version();
                     return true;
                 }
             }
@@ -280,6 +288,7 @@ impl WorkspaceDataState {
                 if let Some(f) = self.folders.iter_mut().find(|f| f.id == new_rel_path) {
                     f.parent_id = target;
                 }
+                self.bump_tree_version();
                 true
             }
             Err(e) => {
@@ -356,6 +365,7 @@ impl WorkspaceDataState {
                         let item = self.requests.remove(si);
                         self.requests.insert(ti, item);
                     }
+                    self.bump_tree_version();
                 }
             }
         }
@@ -420,6 +430,7 @@ impl WorkspaceDataState {
                     ex.name = unique_name;
                 }
             }
+            self.bump_tree_version();
             return true;
         }
         false
@@ -513,6 +524,7 @@ impl WorkspaceDataState {
             self.pins.push(req_id.to_string());
         }
         let _ = self.store.save_pins(&self.pins);
+        self.bump_tree_version();
         cx.notify();
     }
 
@@ -523,6 +535,7 @@ impl WorkspaceDataState {
     pub fn reorder_pins(&mut self, new_pins: Vec<String>, cx: &mut Context<Self>) {
         self.pins = new_pins;
         let _ = self.store.save_pins(&self.pins);
+        self.bump_tree_version();
         cx.notify();
     }
 
@@ -696,6 +709,7 @@ impl WorkspaceDataState {
             let _ = self.store.save_pins(&self.pins);
         }
         self.last_moved_items = vec![(src_req_id.to_string(), new_rel_path.clone())];
+        self.bump_tree_version();
         Some(new_rel_path)
     }
 
@@ -707,6 +721,7 @@ impl WorkspaceDataState {
             *r = req_file.to_item(req_id, &self.workspace_meta.name, folder_id);
             r.last_status_code = prev_status;
         }
+        self.bump_tree_version();
     }
 
     pub fn save_request_file(

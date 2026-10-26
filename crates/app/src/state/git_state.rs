@@ -39,6 +39,7 @@ pub struct GitState {
     pub error: Option<String>,
     pub loading: bool,
     pub is_syncing: bool,
+    pub status_version: usize,
 }
 
 impl Default for GitState {
@@ -63,6 +64,7 @@ impl Default for GitState {
             error: None,
             loading: false,
             is_syncing: false,
+            status_version: 0,
         }
     }
 }
@@ -120,6 +122,7 @@ impl GitState {
                 });
             }
         }
+        self.status_version = self.status_version.wrapping_add(1);
         self.refresh_all(cx);
     }
 
@@ -311,6 +314,7 @@ impl GitState {
                         git.branches = branches;
                     }
                     git.status = Some(st);
+                    git.status_version = git.status_version.wrapping_add(1);
                     cx.notify();
                 });
             }

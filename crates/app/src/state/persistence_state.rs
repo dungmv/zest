@@ -12,6 +12,7 @@ pub struct PersistenceState {
     pub local_state: LocalState,
     pub conflicts: HashMap<String, String>,
     pub unsaved_requests: HashSet<String>,
+    pub unsaved_version: usize,
     pub request_save_tasks: HashMap<String, Task<()>>,
     pub state_save_task: Option<Task<()>>,
     pub watcher: Option<WorkspaceWatcher>,
@@ -27,6 +28,7 @@ impl PersistenceState {
             local_state,
             conflicts: HashMap::new(),
             unsaved_requests: HashSet::new(),
+            unsaved_version: 0,
             request_save_tasks: HashMap::new(),
             state_save_task: None,
             watcher: None,
@@ -44,6 +46,7 @@ impl PersistenceState {
         self.workspace_path = path;
         self.conflicts.clear();
         self.unsaved_requests.clear();
+        self.unsaved_version = self.unsaved_version.wrapping_add(1);
         self.local_state = self.store.load_state().unwrap_or_default();
         cx.notify();
     }
@@ -74,13 +77,17 @@ impl PersistenceState {
     }
 
     pub fn mark_dirty(&mut self, req_id: String, cx: &mut Context<Self>) {
-        self.unsaved_requests.insert(req_id);
-        cx.notify();
+        if self.unsaved_requests.insert(req_id) {
+            self.unsaved_version = self.unsaved_version.wrapping_add(1);
+            cx.notify();
+        }
     }
 
     pub fn mark_clean(&mut self, req_id: &str, cx: &mut Context<Self>) {
-        self.unsaved_requests.remove(req_id);
-        cx.notify();
+        if self.unsaved_requests.remove(req_id) {
+            self.unsaved_version = self.unsaved_version.wrapping_add(1);
+            cx.notify();
+        }
     }
 
     pub fn is_dirty(&self, req_id: &str) -> bool {
@@ -107,6 +114,7 @@ impl PersistenceState {
                     .unwrap_or_else(|| id.clone())
             })
             .collect();
+        self.unsaved_version = self.unsaved_version.wrapping_add(1);
         if let Some(active) = &self.local_state.active_request {
             if let Some(new_id) = lookup.get(active.as_str()) {
                 self.local_state.active_request = Some((*new_id).to_string());
@@ -124,7 +132,10 @@ impl PersistenceState {
     ) {
         let store = self.store.clone();
         let task_req_id = req_id.clone();
-        self.unsaved_requests.insert(req_id.clone());
+        if self.unsaved_requests.insert(req_id.clone()) {
+            self.unsaved_version = self.unsaved_version.wrapping_add(1);
+            cx.notify();
+        }
 
         let ed_clone = editor.clone();
 
@@ -138,8 +149,10 @@ impl PersistenceState {
             let Some(req) = req else {
                 if let Some(this_ent) = this.upgrade() {
                     this_ent.update(cx, |p, cx| {
-                        p.unsaved_requests.remove(&task_req_id);
-                        cx.notify();
+                        if p.unsaved_requests.remove(&task_req_id) {
+                            p.unsaved_version = p.unsaved_version.wrapping_add(1);
+                            cx.notify();
+                        }
                     });
                 }
                 return;
@@ -167,8 +180,10 @@ impl PersistenceState {
             let final_req_id = task_req_id.clone();
             if let Some(this_ent) = this.upgrade() {
                 this_ent.update(cx, |p, cx| {
-                    p.unsaved_requests.remove(&final_req_id);
-                    cx.notify();
+                    if p.unsaved_requests.remove(&final_req_id) {
+                        p.unsaved_version = p.unsaved_version.wrapping_add(1);
+                        cx.notify();
+                    }
                 });
                 ed_clone.update(cx, |ed, _| {
                     if ed.active_request_id.as_deref() == Some(&final_req_id) {
@@ -321,6 +336,7 @@ impl PersistenceState {
                         ws.requests.retain(|r| r.id != rel_path);
                     }
 
+                    ws.bump_tree_version();
                     cx.notify();
                 });
             }
@@ -345,7 +361,9 @@ impl PersistenceState {
         cx: &mut Context<Self>,
     ) {
         self.conflicts.remove(rel_path);
-        self.unsaved_requests.remove(rel_path);
+        if self.unsaved_requests.remove(rel_path) {
+            self.unsaved_version = self.unsaved_version.wrapping_add(1);
+        }
         if let Ok(req_file) = self.store.read_request(rel_path) {
             let path = rel_path.to_string();
             workspace_data.update(cx, |ws, cx| {
@@ -362,6 +380,7 @@ impl PersistenceState {
                     *r = req_file.into_item(&r.id, &ws_name, r.folder_id.clone());
                     r.last_status_code = prev_status;
                 }
+                ws.bump_tree_version();
                 cx.notify();
             });
         }
@@ -375,7 +394,9 @@ impl PersistenceState {
         cx: &mut Context<Self>,
     ) {
         self.conflicts.remove(rel_path);
-        self.unsaved_requests.remove(rel_path);
+        if self.unsaved_requests.remove(rel_path) {
+            self.unsaved_version = self.unsaved_version.wrapping_add(1);
+        }
         let req_opt = workspace_data
             .read(cx)
             .requests

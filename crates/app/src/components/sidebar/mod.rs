@@ -1,5 +1,6 @@
 pub mod drag_drop;
 pub mod example_node;
+pub mod flat_tree;
 pub mod folder_node;
 pub mod footer;
 pub mod git_status;
@@ -8,11 +9,14 @@ pub mod request_node;
 
 pub use drag_drop::*;
 pub use example_node::*;
+pub use flat_tree::*;
 pub use folder_node::*;
 pub use footer::*;
 pub use git_status::*;
 pub use item_actions::*;
 pub use request_node::*;
+
+pub const SIDEBAR_ROW_HEIGHT: f32 = 28.0;
 
 use crate::state::{
     GitState, ModalState, PersistenceState, RequestSessionState, ResponseState, SidebarState,
@@ -21,38 +25,30 @@ use crate::state::{
 use crate::theme::theme;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, px, App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement,
-    ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled, Window,
+    div, px, uniform_list, AnyElement, App, AppContext as _, Entity, InteractiveElement as _,
+    IntoElement, ListSizingBehavior, ParentElement, RenderOnce, StatefulInteractiveElement as _,
+    Styled, Window,
 };
 use gpui_component::button::{Button, ButtonVariants as _};
 use gpui_component::input::InputState;
-use gpui_component::menu::{ContextMenuExt as _, DropdownMenu as _, PopupMenuItem};
+use gpui_component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_component::scroll::ScrollableElement as _;
 use gpui_component::Icon;
 use gpui_kit::assets::IconName;
-use std::collections::{HashMap, HashSet};
-use zest_core::git::GitStatusResult;
-use zest_core::models::Folder;
+use std::collections::HashMap;
 
 pub struct SidebarRenderContext<'a> {
-    pub folders: &'a [Folder],
-    pub requests: &'a [SidebarReqItem],
-    pub query: &'a str,
-    pub active_req_id: Option<&'a String>,
+    pub active_req_id: Option<&'a str>,
     pub active_example_name: Option<&'a str>,
-    pub renaming_req_id: Option<&'a String>,
+    pub renaming_req_id: Option<&'a str>,
     pub renaming_folder_id: Option<&'a str>,
     pub renaming_example: Option<&'a (String, String)>,
     pub rename_input: Option<&'a Entity<InputState>>,
     pub rename_folder_input: Option<&'a Entity<InputState>>,
     pub rename_example_input: Option<&'a Entity<InputState>>,
-    pub collapsed_folders: &'a HashSet<String>,
-    pub collapsed_requests: &'a HashSet<String>,
     pub pins: &'a [String],
     pub parse_errors: &'a HashMap<String, String>,
-    pub unsaved_requests: &'a HashSet<String>,
     pub running_request_id: Option<&'a str>,
-    pub git_status: Option<&'a GitStatusResult>,
     pub ws: &'a Entity<WorkspaceDataState>,
     pub persistence: &'a Entity<PersistenceState>,
     pub sidebar: &'a Entity<SidebarState>,
@@ -61,6 +57,125 @@ pub struct SidebarRenderContext<'a> {
     pub ed: &'a Entity<RequestSessionState>,
     pub resp: &'a Entity<ResponseState>,
     pub toast: &'a Entity<ToastState>,
+}
+
+fn render_flat_sidebar_row(row: &FlatSidebarRow, ctx: &SidebarRenderContext) -> AnyElement {
+    let t = theme();
+    match row {
+        FlatSidebarRow::PinnedHeader => div()
+            .w_full()
+            .h(px(SIDEBAR_ROW_HEIGHT))
+            .px(px(12.))
+            .py(px(1.))
+            .flex()
+            .items_center()
+            .text_xs()
+            .font_weight(gpui::FontWeight::SEMIBOLD)
+            .text_color(t.text_muted)
+            .child("📌 PINNED")
+            .into_any_element(),
+
+        FlatSidebarRow::PinnedRequest {
+            req,
+            pin_index,
+            git_status,
+        } => {
+            let p_id = req.id.clone();
+            let drag_pin = DragPinnedItem {
+                id: p_id.clone(),
+                index: *pin_index,
+            };
+            let ws_p_drop = ctx.ws.clone();
+            let target_idx = *pin_index;
+            let pill = render_request_inner_pill(req, true, *git_status, "pin-req-item", ctx);
+
+            div()
+                .id(format!("pinned-row-{}-{}", target_idx, p_id))
+                .w_full()
+                .h(px(SIDEBAR_ROW_HEIGHT))
+                .px(px(6.))
+                .py(px(1.))
+                .flex()
+                .items_center()
+                .on_drag(drag_pin, |item, _, _, cx| cx.new(|_| item.clone()))
+                .drag_over::<DragPinnedItem>(|style, _, _, _| {
+                    let t = theme();
+                    style
+                        .bg(t.bg_hover)
+                        .border_t_2()
+                        .border_color(t.border_focus)
+                })
+                .on_drop(move |drag: &DragPinnedItem, _, cx| {
+                    let from_idx = drag.index;
+                    let to_idx = target_idx;
+                    ws_p_drop.update(cx, |state, cx| {
+                        if from_idx < state.pins.len() && to_idx < state.pins.len() {
+                            let item = state.pins.remove(from_idx);
+                            state.pins.insert(to_idx, item);
+                            let _ = state.store.save_pins(&state.pins);
+                            state.bump_tree_version();
+                            cx.notify();
+                        }
+                    });
+                })
+                .child(pill)
+                .into_any_element()
+        }
+
+        FlatSidebarRow::Folder {
+            folder_id,
+            name,
+            depth,
+            is_collapsed,
+            git_status,
+        } => render_folder_row(folder_id, name, *depth, *is_collapsed, *git_status, ctx),
+
+        FlatSidebarRow::Request {
+            req,
+            depth,
+            is_collapsed,
+            git_status,
+        } => render_request_row(req, *depth, *is_collapsed, *git_status, ctx),
+
+        FlatSidebarRow::Example {
+            parent_id,
+            idx,
+            total_ex,
+            ex,
+            depth,
+        } => render_example_row(parent_id, *idx, ex, *depth, *total_ex, ctx),
+
+        FlatSidebarRow::RootDropzone => {
+            let ws_root = ctx.ws.clone();
+            let ws_root_folder = ctx.ws.clone();
+            div()
+                .id("sidebar-root-dropzone")
+                .w_full()
+                .h(px(SIDEBAR_ROW_HEIGHT))
+                .px(px(6.))
+                .py(px(1.))
+                .rounded(px(4.))
+                .drag_over::<DragRequestItem>(|style, _, _, _| {
+                    let t = theme();
+                    style.bg(t.bg_hover).border_1().border_color(t.border_focus)
+                })
+                .on_drop(move |drag: &DragRequestItem, _, cx| {
+                    ws_root.update(cx, |state, cx| {
+                        state.move_request_to_folder(&drag.id, None, cx);
+                    });
+                })
+                .drag_over::<DragFolderItem>(|style, _, _, _| {
+                    let t = theme();
+                    style.bg(t.bg_hover).border_1().border_color(t.border_focus)
+                })
+                .on_drop(move |drag: &DragFolderItem, _, cx| {
+                    ws_root_folder.update(cx, |state, cx| {
+                        state.move_folder(&drag.id, None, cx);
+                    });
+                })
+                .into_any_element()
+        }
+    }
 }
 
 #[derive(IntoElement)]
@@ -103,95 +218,33 @@ impl SidebarTree {
 impl RenderOnce for SidebarTree {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let t = theme();
-        let (
-            git_branch,
-            git_status,
-            git_is_syncing,
-            query,
-            filter_query_raw,
-            folders,
-            requests,
-            renaming_req_id,
-            rename_input,
-            renaming_folder_id,
-            rename_folder_input,
-            renaming_example,
-            rename_example_input,
-            collapsed_folders,
-            collapsed_requests,
-            pins,
-            parse_errors,
-            unsaved_requests,
-            running_request_id,
-        ) = {
+        let (filter_query_raw, has_nothing, flat_rows, scroll_handle, footer_el) = {
             let ws = self.workspace_state.read(cx);
             let per = self.persistence_state.read(cx);
             let sb = self.sidebar_state.read(cx);
             let git = self.git_state.read(cx);
-            let req_items: Vec<SidebarReqItem> = ws
-                .requests
-                .iter()
-                .map(|r| {
-                    let initial_name = {
-                        let eff = crate::state::effective_request_name(r);
-                        if !r.name.trim().is_empty()
-                            && r.name != "New Request"
-                            && r.name != "Untitled Request"
-                        {
-                            r.name.clone()
-                        } else {
-                            eff
-                        }
-                    };
-                    let examples = r
-                        .examples
-                        .iter()
-                        .map(|e| SidebarExampleItem {
-                            name: e.name.clone(),
-                            status: e.status,
-                        })
-                        .collect();
 
-                    SidebarReqItem {
-                        id: r.id.clone(),
-                        folder_id: r.folder_id.clone(),
-                        name: r.name.clone(),
-                        display_name: initial_name,
-                        method: r.method,
-                        url: r.url.clone(),
-                        last_status_code: r.last_status_code,
-                        examples,
-                    }
-                })
-                .collect();
+            let has_nothing = ws.folders.is_empty() && ws.requests.is_empty();
+            let flat_rows = sb.cached_flat_rows(ws, per, git);
+            let scroll_handle = sb.scroll_handle.clone();
+            let filter_query_raw = sb.filter_query.clone();
+            let git_branch = git.branch.as_deref().unwrap_or("main");
+            let footer_el = render_sidebar_footer(
+                git_branch,
+                git.status.as_ref(),
+                git.is_syncing,
+                &self.git_state,
+                &self.toast_state,
+            );
 
             (
-                git.branch.clone().unwrap_or_else(|| "main".to_string()),
-                git.status.clone(),
-                git.is_syncing,
-                sb.filter_query.to_lowercase(),
-                sb.filter_query.clone(),
-                ws.folders.clone(),
-                req_items,
-                sb.renaming_request_id().map(ToString::to_string),
-                sb.rename_input().cloned(),
-                sb.renaming_folder_id().map(ToString::to_string),
-                sb.rename_folder_input().cloned(),
-                sb.renaming_example().cloned(),
-                sb.rename_example_input().cloned(),
-                sb.collapsed_folders.clone(),
-                sb.collapsed_requests.clone(),
-                ws.pins.clone(),
-                ws.parse_errors.clone(),
-                per.unsaved_requests.clone(),
-                self.editor_state.read(cx).running_request_id.clone(),
+                filter_query_raw,
+                has_nothing,
+                flat_rows,
+                scroll_handle,
+                footer_el,
             )
         };
-        let is_syncing = git_is_syncing;
-
-        let active_req_id = self.editor_state.read(cx).active_request_id.clone();
-        let active_example_name = self.response_state.read(cx).active_example_name.clone();
-        let has_nothing = folders.is_empty() && requests.is_empty();
 
         let ws_clone = self.workspace_state.clone();
         let per_clone = self.persistence_state.clone();
@@ -230,34 +283,7 @@ impl RenderOnce for SidebarTree {
             });
         }
 
-        let ctx = SidebarRenderContext {
-            folders: &folders,
-            requests: &requests,
-            query: &query,
-            active_req_id: active_req_id.as_ref(),
-            active_example_name: active_example_name.as_deref(),
-            renaming_req_id: renaming_req_id.as_ref(),
-            renaming_folder_id: renaming_folder_id.as_deref(),
-            renaming_example: renaming_example.as_ref(),
-            rename_input: rename_input.as_ref(),
-            rename_folder_input: rename_folder_input.as_ref(),
-            rename_example_input: rename_example_input.as_ref(),
-            collapsed_folders: &collapsed_folders,
-            collapsed_requests: &collapsed_requests,
-            pins: &pins,
-            parse_errors: &parse_errors,
-            unsaved_requests: &unsaved_requests,
-            running_request_id: running_request_id.as_deref(),
-            git_status: git_status.as_ref(),
-            ws: &ws_clone,
-            persistence: &per_clone,
-            sidebar: &sb_clone,
-            modal: &modal_clone,
-            git: &git_clone,
-            ed: &ed_clone,
-            resp: &resp_clone,
-            toast: &toast_clone,
-        };
+        let row_count = flat_rows.len();
 
         div()
             .w_full()
@@ -361,16 +387,14 @@ impl RenderOnce for SidebarTree {
                             )
                     }),
             )
-            // Middle section: Folders & Requests tree
+            // Middle section: Virtualized Folders & Requests tree
             .child(
                 div()
                     .flex_1()
-                    .overflow_y_scrollbar()
-                    .px(px(6.))
+                    .w_full()
+                    .relative()
+                    .overflow_hidden()
                     .py(px(4.))
-                    .flex()
-                    .flex_col()
-                    .gap(px(2.))
                     .when(has_nothing, |this| {
                         let ws_new = ws_clone.clone();
                         let ed_new = ed_clone.clone();
@@ -415,133 +439,58 @@ impl RenderOnce for SidebarTree {
                                 ),
                         )
                     })
-                    .when(!pins.is_empty(), |this| {
-                        let ws_pin_reorder = ws_clone.clone();
-                        let pinned_requests: Vec<_> = pins
-                            .iter()
-                            .filter_map(|pin_id| requests.iter().find(|r| &r.id == pin_id).cloned())
-                            .collect();
-
+                    .when(!has_nothing, move |this| {
                         this.child(
-                            div()
-                                .flex()
-                                .flex_col()
-                                .gap(px(2.))
-                                .mb(px(4.))
-                                .child(
-                                    div()
-                                        .px(px(6.))
-                                        .py(px(2.))
-                                        .text_xs()
-                                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                                        .text_color(t.text_muted)
-                                        .child("📌 PINNED"),
-                                )
-                                .children(pinned_requests.into_iter().enumerate().map(
-                                    |(idx, req)| {
-                                        let p_id = req.id.clone();
-                                        let drag_pin = DragPinnedItem {
-                                            id: p_id.clone(),
-                                            index: idx,
-                                        };
-                                        let ws_p_drop = ws_pin_reorder.clone();
-                                        let target_idx = idx;
+                            uniform_list(
+                                "sidebar-tree-uniform-list",
+                                row_count,
+                                move |visible_range, _window, cx| {
+                                    let ws_ref = ws_clone.read(cx);
+                                    let sb_ref = sb_clone.read(cx);
+                                    let ed_ref = ed_clone.read(cx);
+                                    let resp_ref = resp_clone.read(cx);
 
-                                        div()
-                                            .id(format!("pinned-row-{}", p_id))
-                                            .on_drag(drag_pin, |item, _, _, cx| {
-                                                cx.new(|_| item.clone())
-                                            })
-                                            .drag_over::<DragPinnedItem>(|style, _, _, _| {
-                                                let t = theme();
-                                                style
-                                                    .bg(t.bg_hover)
-                                                    .border_t_2()
-                                                    .border_color(t.border_focus)
-                                            })
-                                            .on_drop(move |drag: &DragPinnedItem, _, cx| {
-                                                let from_idx = drag.index;
-                                                let to_idx = target_idx;
-                                                ws_p_drop.update(cx, |state, cx| {
-                                                    if from_idx < state.pins.len()
-                                                        && to_idx < state.pins.len()
-                                                    {
-                                                        let item = state.pins.remove(from_idx);
-                                                        state.pins.insert(to_idx, item);
-                                                        let _ = state.store.save_pins(&state.pins);
-                                                        cx.notify();
-                                                    }
-                                                });
-                                            })
-                                            .child(render_request_node(&req, false, &ctx))
-                                    },
-                                )),
+                                    let ctx = SidebarRenderContext {
+                                        active_req_id: ed_ref.active_request_id.as_deref(),
+                                        active_example_name: resp_ref
+                                            .active_example_name
+                                            .as_deref(),
+                                        renaming_req_id: sb_ref.renaming_request_id(),
+                                        renaming_folder_id: sb_ref.renaming_folder_id(),
+                                        renaming_example: sb_ref.renaming_example(),
+                                        rename_input: sb_ref.rename_input(),
+                                        rename_folder_input: sb_ref.rename_folder_input(),
+                                        rename_example_input: sb_ref.rename_example_input(),
+                                        pins: &ws_ref.pins,
+                                        parse_errors: &ws_ref.parse_errors,
+                                        running_request_id: ed_ref.running_request_id.as_deref(),
+                                        ws: &ws_clone,
+                                        persistence: &per_clone,
+                                        sidebar: &sb_clone,
+                                        modal: &modal_clone,
+                                        git: &git_clone,
+                                        ed: &ed_clone,
+                                        resp: &resp_clone,
+                                        toast: &toast_clone,
+                                    };
+
+                                    let mut elements = Vec::with_capacity(visible_range.len());
+                                    for idx in visible_range {
+                                        if let Some(row) = flat_rows.get(idx) {
+                                            elements.push(render_flat_sidebar_row(row, &ctx));
+                                        }
+                                    }
+                                    elements
+                                },
+                            )
+                            .size_full()
+                            .with_sizing_behavior(ListSizingBehavior::Auto)
+                            .track_scroll(&scroll_handle),
                         )
-                    })
-                    .children({
-                        let root_folders: Vec<_> = folders
-                            .iter()
-                            .filter(|f| {
-                                f.parent_id.is_none()
-                                    || !folders.iter().any(|p| Some(&p.id) == f.parent_id.as_ref())
-                            })
-                            .collect();
-                        root_folders
-                            .into_iter()
-                            .filter_map(|folder| render_folder_node(folder, &ctx))
-                    })
-                    // Top-level requests without folder
-                    .children(
-                        requests
-                            .iter()
-                            .filter(|r| {
-                                (r.folder_id.is_none()
-                                    || !folders.iter().any(|f| Some(&f.id) == r.folder_id.as_ref()))
-                                    && (query.is_empty()
-                                        || r.name.to_lowercase().contains(&query)
-                                        || r.url.to_lowercase().contains(&query)
-                                        || r.examples
-                                            .iter()
-                                            .any(|e| e.name.to_lowercase().contains(&query)))
-                            })
-                            .map(|req| render_request_node(req, false, &ctx)),
-                    )
-                    // Drop zone at bottom to drag a request or folder back to root level
-                    .child({
-                        let ws_root = ws_clone.clone();
-                        let ws_root_folder = ws_clone.clone();
-                        div()
-                            .id("sidebar-root-dropzone")
-                            .min_h(px(24.))
-                            .flex_1()
-                            .rounded(px(4.))
-                            .drag_over::<DragRequestItem>(|style, _, _, _| {
-                                let t = theme();
-                                style.bg(t.bg_hover).border_1().border_color(t.border_focus)
-                            })
-                            .on_drop(move |drag: &DragRequestItem, _, cx| {
-                                ws_root.update(cx, |state, cx| {
-                                    state.move_request_to_folder(&drag.id, None, cx);
-                                });
-                            })
-                            .drag_over::<DragFolderItem>(|style, _, _, _| {
-                                let t = theme();
-                                style.bg(t.bg_hover).border_1().border_color(t.border_focus)
-                            })
-                            .on_drop(move |drag: &DragFolderItem, _, cx| {
-                                ws_root_folder.update(cx, |state, cx| {
-                                    state.move_folder(&drag.id, None, cx);
-                                });
-                            })
+                        .vertical_scrollbar(&scroll_handle)
                     }),
             )
             // Footer at bottom of sidebar: Branch info on left, Pull button on right
-            .child(render_sidebar_footer(
-                &git_branch,
-                git_status.as_ref(),
-                is_syncing,
-                &git_clone,
-                &toast_clone,
-            ))
+            .child(footer_el)
     }
 }

@@ -1,13 +1,166 @@
 use super::request_node::SidebarReqItem;
+use std::borrow::Cow;
+use std::collections::{HashMap, HashSet};
 use zest_core::models::Folder;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SidebarGitStatus {
-    New,      // File mới (Untracked '??', Staged Added 'A') -> Green
-    Modified, // File có thay đổi ('M', 'R', 'C', '!', or unsaved) -> Yellow
-    Clean,    // Đã commit -> Normal (White)
+    New,      // Untracked ('??') or Staged Added ('A') -> Green
+    Modified, // Modified ('M', 'R', 'C', '!') or unsaved -> Yellow
+    #[default]
+    Clean, // Committed and clean -> Normal (White)
 }
 
+impl SidebarGitStatus {
+    #[inline]
+    pub fn merge(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::Modified, _) | (_, Self::Modified) => Self::Modified,
+            (Self::New, _) | (_, Self::New) => Self::New,
+            _ => Self::Clean,
+        }
+    }
+}
+
+/// Pre-normalized index of Git file statuses for O(1) per-request lookup without
+/// per-frame string allocations.
+#[derive(Debug, Clone, Default)]
+pub struct GitStatusIndex {
+    is_repo: bool,
+    by_req_id: HashMap<String, SidebarGitStatus>,
+}
+
+impl GitStatusIndex {
+    pub fn from_status(git_status: Option<&zest_core::git::GitStatusResult>) -> Self {
+        let Some(git) = git_status else {
+            return Self::default();
+        };
+        if !git.is_repo {
+            return Self::default();
+        }
+        let cap = git.untracked_files.len() + git.staged_files.len() + git.unstaged_files.len();
+        if cap == 0 {
+            return Self {
+                is_repo: true,
+                by_req_id: HashMap::new(),
+            };
+        }
+
+        let mut by_req_id = HashMap::with_capacity(cap * 2);
+        let mut insert_path = |raw_path: &str, status: SidebarGitStatus| {
+            let norm: Cow<'_, str> = if raw_path.contains('\\') {
+                Cow::Owned(raw_path.replace('\\', "/"))
+            } else {
+                Cow::Borrowed(raw_path)
+            };
+            if let Some(rest) = norm
+                .strip_prefix("collections/")
+                .or_else(|| norm.rsplit_once("/collections/").map(|(_, r)| r))
+            {
+                by_req_id.entry(rest.to_string()).or_insert(status);
+            }
+            by_req_id.entry(norm.into_owned()).or_insert(status);
+        };
+
+        // 1. Untracked (new file)
+        for item in &git.untracked_files {
+            insert_path(&item.path, SidebarGitStatus::New);
+        }
+
+        // 2. Staged
+        for item in &git.staged_files {
+            let st = match item.status {
+                zest_core::git::GitFileStatus::Added => SidebarGitStatus::New,
+                _ => SidebarGitStatus::Modified,
+            };
+            insert_path(&item.path, st);
+        }
+
+        // 3. Unstaged (working tree changes)
+        for item in &git.unstaged_files {
+            insert_path(&item.path, SidebarGitStatus::Modified);
+        }
+
+        Self {
+            is_repo: true,
+            by_req_id,
+        }
+    }
+
+    #[inline]
+    pub fn request_status(&self, req_id: &str, is_unsaved: bool) -> SidebarGitStatus {
+        if is_unsaved {
+            return SidebarGitStatus::Modified;
+        }
+        if !self.is_repo || self.by_req_id.is_empty() {
+            return SidebarGitStatus::Clean;
+        }
+        if req_id.contains('\\') {
+            let norm = req_id.replace('\\', "/");
+            self.by_req_id
+                .get(&norm)
+                .copied()
+                .unwrap_or(SidebarGitStatus::Clean)
+        } else {
+            self.by_req_id
+                .get(req_id)
+                .copied()
+                .unwrap_or(SidebarGitStatus::Clean)
+        }
+    }
+}
+
+/// Computes git statuses for all requests and folders in a single O(F + R) pass.
+/// Returns `(request_statuses_by_index, folder_statuses_by_index)`.
+pub fn compute_all_git_statuses(
+    folders: &[Folder],
+    requests: &[SidebarReqItem],
+    git_index: &GitStatusIndex,
+    unsaved_requests: &HashSet<String>,
+) -> (Vec<SidebarGitStatus>, Vec<SidebarGitStatus>) {
+    let mut folder_statuses = vec![SidebarGitStatus::Clean; folders.len()];
+    let mut req_statuses = Vec::with_capacity(requests.len());
+
+    let folder_map: HashMap<&str, usize> = folders
+        .iter()
+        .enumerate()
+        .map(|(i, f)| (f.id.as_str(), i))
+        .collect();
+
+    for req in requests {
+        let is_unsaved = unsaved_requests.contains(&req.id);
+        let st = git_index.request_status(&req.id, is_unsaved);
+        req_statuses.push(st);
+
+        if st != SidebarGitStatus::Clean {
+            if let Some(fid) = req.folder_id.as_deref() {
+                let mut cur = Some(fid);
+                let mut steps = 0;
+                while let Some(cid) = cur {
+                    if let Some(&f_idx) = folder_map.get(cid) {
+                        let prev = folder_statuses[f_idx];
+                        if prev == SidebarGitStatus::Modified {
+                            break;
+                        }
+                        let merged = prev.merge(st);
+                        folder_statuses[f_idx] = merged;
+                        cur = folders[f_idx].parent_id.as_deref();
+                        steps += 1;
+                        if steps > folders.len() {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    (req_statuses, folder_statuses)
+}
+
+#[cfg(test)]
 pub fn calculate_request_git_status(
     req_id: &str,
     git_status: Option<&zest_core::git::GitStatusResult>,
@@ -16,99 +169,31 @@ pub fn calculate_request_git_status(
     if is_unsaved {
         return SidebarGitStatus::Modified;
     }
-
-    let Some(git) = git_status else {
-        return SidebarGitStatus::Clean;
-    };
-
-    if !git.is_repo {
-        return SidebarGitStatus::Clean;
-    }
-
-    let norm_req = req_id.replace('\\', "/");
-    let coll_rel = format!("collections/{}", norm_req);
-
-    let matches = |p: &str| -> bool {
-        let p = p.replace('\\', "/");
-        p == norm_req
-            || p == coll_rel
-            || p.ends_with(&format!("/{}", norm_req))
-            || p.ends_with(&format!("/{}", coll_rel))
-    };
-
-    // 1. Untracked (new file)
-    if git.untracked_files.iter().any(|item| matches(&item.path)) {
-        return SidebarGitStatus::New;
-    }
-
-    // 2. Staged
-    if let Some(item) = git.staged_files.iter().find(|item| matches(&item.path)) {
-        return match item.status {
-            zest_core::git::GitFileStatus::Added => SidebarGitStatus::New,
-            _ => SidebarGitStatus::Modified,
-        };
-    }
-
-    // 3. Unstaged (working tree changes)
-    if git.unstaged_files.iter().any(|item| matches(&item.path)) {
-        return SidebarGitStatus::Modified;
-    }
-
-    SidebarGitStatus::Clean
+    let index = GitStatusIndex::from_status(git_status);
+    index.request_status(req_id, false)
 }
 
+#[cfg(test)]
 pub fn calculate_folder_git_status(
     folder_id: &str,
     folders: &[Folder],
     requests: &[SidebarReqItem],
     git_status: Option<&zest_core::git::GitStatusResult>,
-    unsaved_requests: &std::collections::HashSet<String>,
+    unsaved_requests: &HashSet<String>,
 ) -> SidebarGitStatus {
-    let mut descendant_folders = std::collections::HashSet::new();
-    descendant_folders.insert(folder_id.to_string());
-
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for f in folders {
-            if let Some(ref pid) = f.parent_id {
-                if descendant_folders.contains(pid) && descendant_folders.insert(f.id.clone()) {
-                    changed = true;
-                }
-            }
-        }
-    }
-
-    let mut has_new = false;
-    for req in requests {
-        if let Some(ref fid) = req.folder_id {
-            if descendant_folders.contains(fid) {
-                let st = calculate_request_git_status(
-                    &req.id,
-                    git_status,
-                    unsaved_requests.contains(&req.id),
-                );
-                if st == SidebarGitStatus::Modified {
-                    return SidebarGitStatus::Modified;
-                }
-                if st == SidebarGitStatus::New {
-                    has_new = true;
-                }
-            }
-        }
-    }
-
-    if has_new {
-        SidebarGitStatus::New
-    } else {
-        SidebarGitStatus::Clean
-    }
+    let index = GitStatusIndex::from_status(git_status);
+    let (_, folder_statuses) =
+        compute_all_git_statuses(folders, requests, &index, unsaved_requests);
+    folders
+        .iter()
+        .position(|f| f.id == folder_id)
+        .map(|idx| folder_statuses[idx])
+        .unwrap_or(SidebarGitStatus::Clean)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::sidebar::request_node::SidebarExampleItem;
     use std::collections::HashSet;
     use zest_core::git::{GitFileStatus, GitStatusItem, GitStatusResult};
     use zest_core::models::HttpMethod;

@@ -30,6 +30,12 @@ pub struct WorkspaceDataState {
     /// observer and surfaced as an error toast.
     pub last_crud_error: Option<String>,
     pub recent_workspaces: Vec<String>,
+    /// Monotonically increasing counter bumped whenever the sidebar tree structure,
+    /// request names/methods/status codes/examples, pins, or parse errors change.
+    pub tree_version: usize,
+    /// Monotonically increasing counter bumped when a request URL changes (only affects
+    /// the sidebar tree when a non-empty search filter query is active).
+    pub url_version: usize,
 }
 
 fn default_workspace_dir() -> PathBuf {
@@ -110,6 +116,8 @@ impl WorkspaceDataState {
             last_moved_items: Vec::new(),
             last_crud_error: None,
             recent_workspaces: settings.recent_workspaces,
+            tree_version: 0,
+            url_version: 0,
         };
 
         state.reload_all();
@@ -139,9 +147,15 @@ impl WorkspaceDataState {
             last_moved_items: Vec::new(),
             last_crud_error: None,
             recent_workspaces: Vec::new(),
+            tree_version: 0,
+            url_version: 0,
         };
         state.reload_all();
         state
+    }
+
+    pub fn bump_tree_version(&mut self) {
+        self.tree_version = self.tree_version.wrapping_add(1);
     }
 
     pub fn open_workspace(&mut self, path: PathBuf, cx: &mut Context<Self>) {
@@ -310,6 +324,7 @@ impl WorkspaceDataState {
             self.requests = all_requests;
             self.folders = all_folders;
             self.parse_errors = errors;
+            self.bump_tree_version();
         }
     }
 
@@ -333,16 +348,41 @@ impl WorkspaceDataState {
     where
         F: FnOnce(&mut HttpRequestItem) -> R,
     {
-        self.find_request_mut(req_id).map(f)
+        let is_scratch = req_id == "scratch";
+        let mut tree_changed = false;
+        let mut url_changed = false;
+        let res = if let Some(r) = self.find_request_mut(req_id) {
+            let old_method = r.method;
+            let old_name = r.name.clone();
+            let old_status = r.last_status_code;
+            let old_ex_len = r.examples.len();
+            let old_url = r.url.clone();
+            let out = f(r);
+            if !is_scratch {
+                tree_changed = r.method != old_method
+                    || r.name != old_name
+                    || r.last_status_code != old_status
+                    || r.examples.len() != old_ex_len;
+                url_changed = r.url != old_url;
+            }
+            Some(out)
+        } else {
+            None
+        };
+        if tree_changed {
+            self.bump_tree_version();
+        }
+        if url_changed {
+            self.url_version = self.url_version.wrapping_add(1);
+        }
+        res
     }
 
     pub fn update_active_request<F>(&mut self, req_id: &str, f: F)
     where
         F: FnOnce(&mut HttpRequestItem),
     {
-        if let Some(r) = self.find_request_mut(req_id) {
-            f(r);
-        }
+        let _ = self.mutate_request(req_id, f);
     }
 
     pub fn save_workspace_scope_settings(

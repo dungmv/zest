@@ -195,6 +195,7 @@ impl Runner {
                                 if let Some(r) = ws.find_request_mut(&req_id) {
                                     r.last_status_code = Some(status);
                                 }
+                                ws.bump_tree_version();
                                 let _ = ws.store.save_response_cache(&req_id, &loc_file);
                                 ws.sync_cookies_from_executor();
                                 cx.notify();

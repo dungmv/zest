@@ -88,8 +88,10 @@ impl RequestSessionState {
     }
 
     pub fn mark_dirty(&mut self, cx: &mut Context<Self>) {
-        self.is_dirty = true;
-        cx.notify();
+        if !self.is_dirty {
+            self.is_dirty = true;
+            cx.notify();
+        }
     }
 
     pub fn bump_request_version(&mut self, cx: &mut Context<Self>) {

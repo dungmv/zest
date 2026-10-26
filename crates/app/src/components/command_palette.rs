@@ -55,19 +55,6 @@ impl CommandPalette {
 impl RenderOnce for CommandPalette {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let t = theme();
-        let ws = self.workspace_state.read(cx);
-        let per = self.persistence_state.read(cx);
-        let env = self.env_state.read(cx);
-        let mut requests = ws.requests.clone();
-        let recent = per.local_state.recent.clone();
-        requests.sort_by_key(|r| {
-            if let Some(pos) = recent.iter().position(|p| p == &r.id) {
-                pos
-            } else {
-                recent.len() + 100
-            }
-        });
-        let envs = env.environments.clone();
 
         let env_clone = self.env_state.clone();
         let modal_clone = self.modal_state.clone();
@@ -95,6 +82,41 @@ impl RenderOnce for CommandPalette {
 
         let search_input = cmd_holder.read(cx).0.clone();
         let q = search_input.read(cx).value().to_lowercase();
+
+        let (matched_requests, envs) = {
+            let ws = self.workspace_state.read(cx);
+            let per = self.persistence_state.read(cx);
+            let env = self.env_state.read(cx);
+            let recent_len = per.local_state.recent.len();
+            let recent_index: std::collections::HashMap<&str, usize> = per
+                .local_state
+                .recent
+                .iter()
+                .enumerate()
+                .map(|(i, id)| (id.as_str(), i))
+                .collect();
+
+            let mut filtered: Vec<(usize, String, String, zest_core::models::HttpMethod)> = ws
+                .requests
+                .iter()
+                .filter(|r| {
+                    q.is_empty()
+                        || r.name.to_lowercase().contains(&q)
+                        || r.url.to_lowercase().contains(&q)
+                })
+                .map(|r| {
+                    let rank = recent_index
+                        .get(r.id.as_str())
+                        .copied()
+                        .unwrap_or(recent_len + 100);
+                    (rank, r.id.clone(), r.name.clone(), r.method)
+                })
+                .collect();
+            filtered.sort_by_key(|(rank, _, _, _)| *rank);
+            filtered.truncate(50);
+
+            (filtered, env.environments.clone())
+        };
 
         div()
             .id("cmd-palette-overlay")
@@ -484,52 +506,44 @@ impl RenderOnce for CommandPalette {
                                     .text_color(t.text_muted)
                                     .child("SWITCH REQUEST"),
                             )
-                            .children(
-                                requests
-                                    .into_iter()
-                                    .filter(|r| {
-                                        q.is_empty()
-                                            || r.name.to_lowercase().contains(&q)
-                                            || r.url.to_lowercase().contains(&q)
-                                    })
-                                    .map(|req| {
-                                        let modal_s = modal_clone.clone();
-                                        let sb_s = sb_clone.clone();
-                                        let ed_s = ed_clone.clone();
-                                        let r = req.clone();
+                            .children(matched_requests.into_iter().map(
+                                |(_, req_id, req_name, req_method)| {
+                                    let modal_s = modal_clone.clone();
+                                    let sb_s = sb_clone.clone();
+                                    let ed_s = ed_clone.clone();
+                                    let r_id = req_id.clone();
 
-                                        div()
-                                            .id(format!("cmd-req-{}", req.id))
-                                            .px(px(8.))
-                                            .py(px(6.))
-                                            .rounded(px(4.))
-                                            .hover(|s| s.bg(t.bg_hover))
-                                            .cursor_pointer()
-                                            .flex()
-                                            .items_center()
-                                            .gap(px(8.))
-                                            .on_click(move |_, _, cx| {
-                                                let r_id = r.id.clone();
-                                                sb_s.update(cx, |state, _cx| {
-                                                    state.record_navigation(&r_id);
-                                                });
-                                                modal_s.update(cx, |state, cx| {
-                                                    state.close_command_palette(cx);
-                                                });
-                                                ed_s.update(cx, |state, cx| {
-                                                    state.set_active_request_id(&r_id, cx);
-                                                });
-                                            })
-                                            .child(MethodBadge::new(req.method))
-                                            .child(
-                                                div()
-                                                    .text_xs()
-                                                    .font_family(".SystemMonoFont")
-                                                    .text_color(t.text_primary)
-                                                    .child(req.name.clone()),
-                                            )
-                                    }),
-                            )
+                                    div()
+                                        .id(format!("cmd-req-{}", req_id))
+                                        .px(px(8.))
+                                        .py(px(6.))
+                                        .rounded(px(4.))
+                                        .hover(|s| s.bg(t.bg_hover))
+                                        .cursor_pointer()
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(8.))
+                                        .on_click(move |_, _, cx| {
+                                            sb_s.update(cx, |state, _cx| {
+                                                state.record_navigation(&r_id);
+                                            });
+                                            modal_s.update(cx, |state, cx| {
+                                                state.close_command_palette(cx);
+                                            });
+                                            ed_s.update(cx, |state, cx| {
+                                                state.set_active_request_id(&r_id, cx);
+                                            });
+                                        })
+                                        .child(MethodBadge::new(req_method))
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .font_family(".SystemMonoFont")
+                                                .text_color(t.text_primary)
+                                                .child(req_name),
+                                        )
+                                },
+                            ))
                             // Switch Environment
                             .child(
                                 div()

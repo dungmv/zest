@@ -1,26 +1,25 @@
 use super::request_node::SidebarExampleItem;
-use super::SidebarRenderContext;
+use super::{SidebarRenderContext, SIDEBAR_ROW_HEIGHT};
 use crate::app::actions::DismissModal;
 use crate::components::StatusCodeBadge;
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
 use gpui::{
     div, px, AnyElement, AppContext as _, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement, StatefulInteractiveElement as _, Styled,
 };
-use gpui_component::menu::{ContextMenuExt as _, PopupMenuItem};
+use gpui_component::menu::ContextMenuExt as _;
 use gpui_component::Sizable as _;
 
-pub fn render_example_node(
+pub fn render_example_row(
     parent_id: &str,
     idx: usize,
     ex: &SidebarExampleItem,
-    in_folder: bool,
+    depth: usize,
     total_ex: usize,
-    is_req_active: bool,
     ctx: &SidebarRenderContext,
 ) -> AnyElement {
     let t = theme();
+    let is_req_active = ctx.active_req_id == Some(parent_id);
     let is_this_ex_active = is_req_active && ctx.active_example_name == Some(ex.name.as_str());
     let is_renaming_this_ex = ctx
         .renaming_example
@@ -33,14 +32,11 @@ pub fn render_example_node(
     let r_id_for_click = parent_id.to_string();
     let ex_name_for_click = ex.name.clone();
 
-    div()
+    let inner = div()
         .id(format!("req-{}-ex-{}", parent_id, idx))
-        .when(in_folder, |s| s.ml(px(14.)))
-        .ml(px(14.))
-        .mr(px(2.))
-        .my(px(1.))
+        .w_full()
+        .h_full()
         .px(px(6.))
-        .py(px(3.))
         .rounded(px(5.))
         .border_1()
         .border_color(if is_this_ex_active {
@@ -244,8 +240,6 @@ pub fn render_example_node(
                             .on_mouse_down(MouseButton::Left, |_, _, cx| {
                                 cx.stop_propagation();
                             })
-                            // Escape arrives as the globally-bound DismissModal
-                            // action; the deepest handler cancels the rename.
                             .on_action(move |_: &DismissModal, _, cx| {
                                 sb_esc.update(cx, |state, cx| {
                                     state.cancel_renaming_example(cx);
@@ -284,6 +278,16 @@ pub fn render_example_node(
                 .items_center()
                 .gap(px(4.))
                 .child(StatusCodeBadge::new(ex.status)),
-        )
+        );
+
+    div()
+        .w_full()
+        .h(px(SIDEBAR_ROW_HEIGHT))
+        .pl(px(6.0 + depth as f32 * 14.0))
+        .pr(px(8.))
+        .py(px(1.))
+        .flex()
+        .items_center()
+        .child(inner)
         .into_any_element()
 }

@@ -1,8 +1,7 @@
 use super::drag_drop::DragRequestItem;
-use super::example_node::render_example_node;
-use super::git_status::{calculate_request_git_status, SidebarGitStatus};
+use super::git_status::SidebarGitStatus;
 use super::item_actions::delete_request_item;
-use super::SidebarRenderContext;
+use super::{SidebarRenderContext, SIDEBAR_ROW_HEIGHT};
 use crate::app::actions::DismissModal;
 use crate::components::{MethodBadge, StatusCodeBadge};
 use crate::services::GitService;
@@ -12,7 +11,7 @@ use gpui::{
     div, px, AnyElement, AppContext as _, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement, StatefulInteractiveElement as _, Styled,
 };
-use gpui_component::menu::{ContextMenuExt as _, DropdownMenu as _, PopupMenuItem};
+use gpui_component::menu::{ContextMenuExt as _, PopupMenuItem};
 use gpui_component::{Icon, Sizable as _};
 use gpui_kit::assets::IconName;
 use zest_core::models::HttpMethod;
@@ -37,18 +36,19 @@ pub struct SidebarReqItem {
     pub examples: Vec<SidebarExampleItem>,
 }
 
-pub fn render_request_node(
+pub fn render_request_inner_pill(
     req: &SidebarReqItem,
-    in_folder: bool,
+    is_req_collapsed: bool,
+    req_git_status: SidebarGitStatus,
+    id_prefix: &str,
     ctx: &SidebarRenderContext,
 ) -> AnyElement {
     let t = theme();
-    let is_req_active = ctx.active_req_id == Some(&req.id);
+    let is_req_active = ctx.active_req_id == Some(req.id.as_str());
     let is_viewing_example = is_req_active && ctx.active_example_name.is_some();
     let is_selected = is_req_active && !is_viewing_example;
-    let is_renaming = ctx.renaming_req_id == Some(&req.id);
-    let has_examples = !req.examples.is_empty();
-    let is_req_collapsed = ctx.collapsed_requests.contains(&req.id) && ctx.query.is_empty();
+    let is_renaming = ctx.renaming_req_id == Some(req.id.as_str()) && id_prefix == "req-item";
+    let has_examples = !req.examples.is_empty() && id_prefix == "req-item";
 
     let r_id_click = req.id.clone();
     let r_id_right = req.id.clone();
@@ -70,11 +70,10 @@ pub fn render_request_node(
     };
     let ws_req_drop = ctx.ws.clone();
     let target_req_id = req.id.clone();
+    let is_pinned_row = id_prefix != "req-item";
 
     let git_green: gpui::Hsla = gpui::rgb(0x4ade80).into();
     let git_yellow: gpui::Hsla = gpui::rgb(0xfacc15).into();
-    let is_unsaved = ctx.unsaved_requests.contains(&req.id);
-    let req_git_status = calculate_request_git_status(&req.id, ctx.git_status, is_unsaved);
 
     let req_name_color = match req_git_status {
         SidebarGitStatus::New => git_green,
@@ -82,11 +81,11 @@ pub fn render_request_node(
         SidebarGitStatus::Clean => t.text_primary,
     };
 
-    let parent_row = div()
-        .id(format!("req-item-{}", req.id))
-        .when(in_folder, |s| s.ml(px(14.)))
+    div()
+        .id(format!("{}-{}", id_prefix, req.id))
+        .w_full()
+        .h_full()
         .px(px(6.))
-        .py(px(4.))
         .rounded(px(6.))
         .border_1()
         .border_color(if is_selected { t.border } else { t.transparent })
@@ -102,17 +101,17 @@ pub fn render_request_node(
         .flex()
         .items_center()
         .justify_between()
-        .when(!is_renaming, |this| {
+        .when(!is_renaming && !is_pinned_row, move |this| {
             this.on_drag(drag_req_payload, |item, _, _, cx| cx.new(|_| item.clone()))
-        })
-        .drag_over::<DragRequestItem>(|style, _, _, _| {
-            let t = theme();
-            style.bg(t.bg_hover).border_color(t.border_focus)
-        })
-        .on_drop(move |drag: &DragRequestItem, _, cx| {
-            ws_req_drop.update(cx, |state, cx| {
-                state.move_request(&drag.id, &target_req_id, cx);
-            });
+                .drag_over::<DragRequestItem>(|style, _, _, _| {
+                    let t = theme();
+                    style.bg(t.bg_hover).border_color(t.border_focus)
+                })
+                .on_drop(move |drag: &DragRequestItem, _, cx| {
+                    ws_req_drop.update(cx, |state, cx| {
+                        state.move_request(&drag.id, &target_req_id, cx);
+                    });
+                })
         })
         .on_mouse_down(MouseButton::Right, move |_, _, cx| {
             ed_right.update(cx, |state, cx| {
@@ -341,7 +340,7 @@ pub fn render_request_node(
                     let sb_toggle = ctx.sidebar.clone();
                     let r_id = req.id.clone();
                     div()
-                        .id(format!("req-toggle-{}", r_id))
+                        .id(format!("req-toggle-{}-{}", id_prefix, r_id))
                         .w(px(14.))
                         .h(px(14.))
                         .flex_shrink_0()
@@ -390,9 +389,6 @@ pub fn render_request_node(
                         .on_mouse_down(MouseButton::Left, |_, _, cx| {
                             cx.stop_propagation();
                         })
-                        // Escape is globally bound to DismissModal and arrives as an
-                        // action, never as a raw keydown. Handling it here makes the
-                        // deepest listener cancel the rename instead of dismissing a modal.
                         .on_action(move |_: &DismissModal, _, cx| {
                             sb_esc.update(cx, |state, cx| {
                                 state.cancel_renaming(cx);
@@ -441,32 +437,26 @@ pub fn render_request_node(
                 .when_some(req.last_status_code, |this, code| {
                     this.child(StatusCodeBadge::new(code))
                 }),
-        );
+        )
+        .into_any_element()
+}
 
-    if !has_examples {
-        parent_row.into_any_element()
-    } else {
-        let examples_list = req.examples.clone();
-        let parent_id = req.id.clone();
-
-        div()
-            .id(format!("req-group-{}", parent_id))
-            .flex()
-            .flex_col()
-            .child(parent_row)
-            .when(!is_req_collapsed, |this| {
-                this.children(examples_list.into_iter().enumerate().map(|(idx, ex)| {
-                    render_example_node(
-                        &parent_id,
-                        idx,
-                        &ex,
-                        in_folder,
-                        req.examples.len(),
-                        is_req_active,
-                        ctx,
-                    )
-                }))
-            })
-            .into_any_element()
-    }
+pub fn render_request_row(
+    req: &SidebarReqItem,
+    depth: usize,
+    is_req_collapsed: bool,
+    req_git_status: SidebarGitStatus,
+    ctx: &SidebarRenderContext,
+) -> AnyElement {
+    let pill = render_request_inner_pill(req, is_req_collapsed, req_git_status, "req-item", ctx);
+    div()
+        .w_full()
+        .h(px(SIDEBAR_ROW_HEIGHT))
+        .pl(px(6.0 + depth as f32 * 14.0))
+        .pr(px(6.))
+        .py(px(1.))
+        .flex()
+        .items_center()
+        .child(pill)
+        .into_any_element()
 }
