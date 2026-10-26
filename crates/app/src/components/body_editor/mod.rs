@@ -22,6 +22,8 @@ use gpui::{
 use gpui_component::button::{Button, ButtonVariants as _};
 use gpui_component::input::{Editor, EditorState as CodeEditorState, Textarea, TextareaState};
 use gpui_component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_component::Icon;
+use gpui_kit::assets::IconName;
 use zest_core::models::{KeyValuePair, MultipartItem, RequestBody};
 
 pub(crate) fn clamp_char_boundary_left(s: &str, mut idx: usize) -> usize {
@@ -186,10 +188,9 @@ impl RenderOnce for BodyEditor {
                                             .child(current_label),
                                     )
                                     .child(
-                                        div()
-                                            .text_xs()
-                                            .text_color(t.text_muted)
-                                            .child("▾"),
+                                        Icon::new(IconName::ChevronDown)
+                                            .size(px(12.))
+                                            .text_color(t.text_muted),
                                     ),
                             )
                             .dropdown_menu(move |menu, _window, _cx| {
@@ -541,7 +542,11 @@ impl RenderOnce for BodyEditor {
                             .items_center()
                             .justify_center()
                             .gap(px(8.))
-                            .child(div().text_2xl().text_color(t.text_muted).child("📄"))
+                            .child(
+                                Icon::new(IconName::FileText)
+                                    .size(px(28.))
+                                    .text_color(t.text_muted),
+                            )
                             .child(
                                 div()
                                     .text_xs()

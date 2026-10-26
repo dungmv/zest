@@ -61,7 +61,11 @@ fn render_empty_state() -> gpui::Div {
         .justify_center()
         .py(px(40.))
         .gap(px(10.))
-        .child(div().text_3xl().text_color(t.text_muted).child("📟"))
+        .child(
+            Icon::new(IconName::Terminal)
+                .size(px(32.))
+                .text_color(t.text_muted),
+        )
         .child(
             div()
                 .text_sm()

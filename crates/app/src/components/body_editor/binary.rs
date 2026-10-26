@@ -5,6 +5,8 @@ use gpui::{
     div, px, AnyElement, Entity, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled,
 };
+use gpui_component::Icon;
+use gpui_kit::assets::IconName;
 
 pub fn format_file_size(path_str: &str) -> String {
     if path_str.is_empty() {
@@ -61,7 +63,11 @@ pub fn render_binary_editor(
                         .flex()
                         .items_center()
                         .gap(px(10.))
-                        .child(div().text_xl().child("📦"))
+                        .child(
+                            Icon::new(IconName::Package)
+                                .size(px(20.))
+                                .text_color(t.text_secondary),
+                        )
                         .child(
                             div()
                                 .flex()

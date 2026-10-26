@@ -53,6 +53,8 @@ impl Render for DragRequestItem {
             .child(
                 div()
                     .text_xs()
+                    .font_family(".SystemMonoFont")
+                    .font_weight(gpui::FontWeight::NORMAL)
                     .text_color(t.text_primary)
                     .child(self.name.clone()),
             )
@@ -87,7 +89,8 @@ impl Render for DragFolderItem {
             .child(
                 div()
                     .text_xs()
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .font_family(".SystemMonoFont")
+                    .font_weight(gpui::FontWeight::NORMAL)
                     .text_color(t.text_primary)
                     .child(self.name.clone()),
             )

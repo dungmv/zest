@@ -287,12 +287,15 @@ pub fn render_folder_row(
                                     .focus_bordered(false)
                                     .cleanable(false)
                                     .xsmall()
-                                    .font_weight(gpui::FontWeight::SEMIBOLD),
+                                    .font_family(".SystemMonoFont")
+                                    .font_weight(gpui::FontWeight::NORMAL),
                             )
                             .into_any_element()
                     } else {
                         div()
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_xs()
+                            .font_family(".SystemMonoFont")
+                            .font_weight(gpui::FontWeight::NORMAL)
                             .text_color(folder_color)
                             .truncate()
                             .child(f_name_str)
