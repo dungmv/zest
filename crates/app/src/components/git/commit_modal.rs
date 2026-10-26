@@ -95,20 +95,22 @@ pub struct ChangesViewProps {
 
 pub fn render_changes_view(props: ChangesViewProps) -> gpui::AnyElement {
     let t = theme();
-    let git_clone = props.git_clone;
-    let ws_clone = props.ws_clone;
-    let selected_file = props.selected_file;
-    let diff_content = props.diff_content;
-    let commit_input = props.commit_input;
-    let view_mode = props.view_mode;
-    let mode_entity = props.mode_entity;
-    let selected_files = props.selected_files;
-    let commit_and_push = props.commit_and_push;
-    let service = props.service;
-    let is_loading = props.is_loading;
+    let ChangesViewProps {
+        git_clone,
+        ws_clone,
+        status_opt,
+        selected_file,
+        diff_content,
+        commit_input,
+        view_mode,
+        mode_entity,
+        selected_files,
+        commit_and_push,
+        service,
+        is_loading,
+    } = props;
 
-    let all_files = props
-        .status_opt
+    let all_files = status_opt
         .as_ref()
         .map(collect_unified_changes)
         .unwrap_or_default();
@@ -401,6 +403,18 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui::AnyElement {
                                 .items_center()
                                 .gap(px(8.))
                                 .when_some(selected_file.as_ref(), |this, (p, staged)| {
+                                    let is_untracked = status_opt
+                                        .as_ref()
+                                        .map(|s| s.untracked_files.iter().any(|f| &f.path == p))
+                                        .unwrap_or(false);
+                                    let (tag_text, tag_color) = if *staged {
+                                        ("staged", t.primary)
+                                    } else if is_untracked {
+                                        ("untracked", gpui::rgb(0x4ade80).into())
+                                    } else {
+                                        ("working tree", t.text_secondary)
+                                    };
+
                                     this.child(
                                         div()
                                             .px(px(6.))
@@ -410,12 +424,8 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui::AnyElement {
                                             .border_1()
                                             .border_color(t.border)
                                             .text_xs()
-                                            .text_color(if *staged {
-                                                t.primary
-                                            } else {
-                                                t.text_secondary
-                                            })
-                                            .child(if *staged { "staged" } else { "working tree" }),
+                                            .text_color(tag_color)
+                                            .child(tag_text),
                                     )
                                     .child(
                                         div()

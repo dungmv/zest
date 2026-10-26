@@ -109,6 +109,29 @@ pub fn run_git_cmd(repo_dir: &Path, args: &[&str]) -> Result<String> {
 
 /// Helper to execute a Git command safely with a custom timeout
 pub fn run_git_cmd_timeout(repo_dir: &Path, args: &[&str], timeout: Duration) -> Result<String> {
+    run_git_cmd_internal(repo_dir, args, timeout, false)
+}
+
+/// Helper to execute a Git diff command safely with a custom timeout, treating exit code 0 and 1 as valid
+pub fn run_git_diff_cmd_timeout(
+    repo_dir: &Path,
+    args: &[&str],
+    timeout: Duration,
+) -> Result<String> {
+    run_git_cmd_internal(repo_dir, args, timeout, true)
+}
+
+/// Helper to execute a Git diff command safely
+pub fn run_git_diff_cmd(repo_dir: &Path, args: &[&str]) -> Result<String> {
+    run_git_diff_cmd_timeout(repo_dir, args, Duration::from_secs(30))
+}
+
+fn run_git_cmd_internal(
+    repo_dir: &Path,
+    args: &[&str],
+    timeout: Duration,
+    is_diff: bool,
+) -> Result<String> {
     let mut cmd = Command::new("git");
     cmd.args(args);
     cmd.current_dir(repo_dir);
@@ -130,7 +153,15 @@ pub fn run_git_cmd_timeout(repo_dir: &Path, args: &[&str], timeout: Duration) ->
 
     match rx.recv_timeout(timeout) {
         Ok(Ok(output)) => {
-            if output.status.success() {
+            // For diff commands, exit code 0 (no diff) and exit code 1 (diff found) are both valid outcomes.
+            let is_success = if is_diff {
+                output.status.success()
+                    || (output.status.code() == Some(1) && !output.stdout.is_empty())
+            } else {
+                output.status.success()
+            };
+
+            if is_success {
                 Ok(String::from_utf8_lossy(&output.stdout).to_string())
             } else {
                 let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -371,7 +402,33 @@ pub fn git_diff(repo_dir: &Path, file_path: Option<&str>, staged: bool) -> Resul
         args.push("--");
         args.push(fp);
     }
-    run_git_cmd(&root, &args)
+    let diff = run_git_diff_cmd(&root, &args)?;
+    if !diff.trim().is_empty() {
+        return Ok(diff);
+    }
+
+    // If diff is empty and this is an unstaged check for a specific file,
+    // check if it is an untracked file (e.g. newly created request).
+    if !staged {
+        if let Some(fp) = file_path {
+            let full_path = root.join(fp);
+            if full_path.is_file() {
+                let status_res =
+                    run_git_cmd(&root, &["status", "--porcelain=v1", "-uall", "--", fp]);
+                if let Ok(st_out) = status_res {
+                    if st_out.trim_start().starts_with("??") {
+                        let no_index_diff = run_git_diff_cmd(
+                            &root,
+                            &["diff", "--no-index", "--", "/dev/null", fp],
+                        )?;
+                        return Ok(no_index_diff);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(diff)
 }
 
 /// Retrieve diff for a specific commit
@@ -868,6 +925,11 @@ mod tests {
         let new_untracked = temp_dir.join("new_req.yaml");
         std::fs::write(&new_untracked, "name: Untracked\n").unwrap();
         assert!(new_untracked.is_file());
+
+        // Check diff on untracked new file
+        let untracked_diff = git_diff(&temp_dir, Some("new_req.yaml"), false).unwrap();
+        assert!(untracked_diff.contains("+name: Untracked"));
+
         assert!(git_discard_file(&temp_dir, "new_req.yaml").is_ok());
         assert!(!new_untracked.exists());
 

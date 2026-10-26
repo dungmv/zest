@@ -317,6 +317,14 @@ pub fn render_diff_content(
             match view_mode {
                 DiffViewMode::Split => {
                     let rows = parse_side_by_side_diff(&diff);
+                    if rows.is_empty() {
+                        return div()
+                            .p(px(12.))
+                            .text_xs()
+                            .text_color(t.text_muted)
+                            .child("(Empty file)")
+                            .into_any_element();
+                    }
                     div()
                         .w_full()
                         .flex()
@@ -477,13 +485,9 @@ pub fn render_diff_content(
                 }
                 DiffViewMode::Unified => {
                     let multi_file = diff.matches("diff --git").count() > 1;
-                    div()
-                        .w_full()
-                        .flex()
-                        .flex_col()
-                        .font_family(".SystemMonoFont")
-                        .text_xs()
-                        .children(diff.lines().filter_map(|line| {
+                    let elements: Vec<gpui::Div> = diff
+                        .lines()
+                        .filter_map(|line| {
                             if line.starts_with("index ")
                                 || line.starts_with("---")
                                 || line.starts_with("+++")
@@ -541,7 +545,25 @@ pub fn render_diff_content(
                                     .text_color(text_color)
                                     .child(line.to_string()),
                             )
-                        }))
+                        })
+                        .collect();
+
+                    if elements.is_empty() {
+                        return div()
+                            .p(px(12.))
+                            .text_xs()
+                            .text_color(t.text_muted)
+                            .child("(Empty file)")
+                            .into_any_element();
+                    }
+
+                    div()
+                        .w_full()
+                        .flex()
+                        .flex_col()
+                        .font_family(".SystemMonoFont")
+                        .text_xs()
+                        .children(elements)
                         .into_any_element()
                 }
             }
