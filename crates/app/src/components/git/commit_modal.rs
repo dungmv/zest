@@ -248,7 +248,7 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui::AnyElement {
                                             .hover(|s| s.bg(t.bg_card).text_color(t.status_5xx))
                                             .on_click(move |_, _, cx| {
                                                 cx.stop_propagation();
-                                                svc_disc.discard_file(&p_disc, cx);
+                                                svc_disc.discard_file(&p_disc, true, cx);
                                                 ws_disc.update(cx, |ws, cx| {
                                                     ws.reload_all();
                                                     cx.notify();

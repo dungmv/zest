@@ -155,7 +155,10 @@ impl GitService {
         );
     }
 
-    pub fn discard_file(&self, path: &str, cx: &mut App) {
+    /// Discards changes in a file. `delete_untracked` opts into git-clean
+    /// semantics (deleting never-committed files); only the git panel may pass
+    /// `true` — sidebar callers pass `false` to keep workspace data intact.
+    pub fn discard_file(&self, path: &str, delete_untracked: bool, cx: &mut App) {
         let ws_path = self.git.read(cx).repo_path.clone();
         let p = path.to_string();
         let git = self.git.clone();
@@ -163,7 +166,9 @@ impl GitService {
             let p_task = p.clone();
             let _ = cx
                 .background_executor()
-                .spawn(async move { zest_core::git::git_discard_file(&ws_path, &p_task) })
+                .spawn(async move {
+                    zest_core::git::git_discard_file(&ws_path, &p_task, delete_untracked)
+                })
                 .await;
             cx.update(|cx| {
                 git.update(cx, |git, cx| {

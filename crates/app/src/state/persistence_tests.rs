@@ -406,3 +406,59 @@ fn test_request_persistence_state_and_remap(cx: &mut gpui::TestAppContext) {
         assert!(!per.is_dirty(&new_req_id));
     });
 }
+
+#[gpui::test]
+fn test_fs_batch_recreated_request_not_dropped(cx: &mut gpui::TestAppContext) {
+    use zest_core::storage::FsEvent;
+
+    let (dir, store) = setup_test_workspace("WatcherRecreated");
+    let ws_state =
+        cx.new(|_| WorkspaceDataState::new_for_path(dir.path().to_path_buf(), store.clone()));
+    let env_state =
+        cx.new(|_| EnvironmentState::new(store.clone(), "WatcherRecreated".to_string(), None));
+    let per_state = cx.new(|_| PersistenceState::new(store.clone(), dir.path().to_path_buf()));
+
+    // Create a request file on disk and load it into workspace state
+    let req_id = store
+        .create_request(None, "Get Users", HttpMethod::Get, "https://api.com/users")
+        .unwrap()
+        .1;
+    ws_state.update(cx, |ws, _| ws.reload_tree());
+    let req_file_path = dir.path().join("collections").join(&req_id);
+    assert!(req_file_path.is_file());
+    let in_memory = |cx: &mut gpui::TestAppContext| {
+        ws_state.read_with(cx, |ws, _| ws.find_request(&req_id).is_some())
+    };
+    assert!(in_memory(cx));
+
+    let dispatch = |events: Vec<FsEvent>, cx: &mut gpui::TestAppContext| {
+        let ws = ws_state.clone();
+        let env = env_state.clone();
+        per_state.update(cx, |per, cx| {
+            per.handle_fs_events_batch(events, ws, env, cx);
+        });
+    };
+
+    // 1. Atomic replace in one batch (`git restore`): Remove + Create. The
+    //    file still exists, so the request must never be dropped.
+    dispatch(
+        vec![
+            FsEvent::RequestDeleted(req_id.clone()),
+            FsEvent::RequestChanged(req_id.clone()),
+        ],
+        cx,
+    );
+    assert!(in_memory(cx), "replaced-in-place request was dropped");
+
+    // 2. Split batches: real deletion first...
+    let yaml = std::fs::read_to_string(&req_file_path).unwrap();
+    std::fs::remove_file(&req_file_path).unwrap();
+    dispatch(vec![FsEvent::RequestDeleted(req_id.clone())], cx);
+    assert!(!in_memory(cx), "truly deleted request was kept");
+
+    // 3. ...then the file reappears on disk (late `git restore` finish): the
+    //    follow-up change event must re-add it via a tree rescan.
+    std::fs::write(&req_file_path, yaml).unwrap();
+    dispatch(vec![FsEvent::RequestChanged(req_id.clone())], cx);
+    assert!(in_memory(cx), "recreated request was not re-added");
+}

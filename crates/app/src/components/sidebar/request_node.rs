@@ -285,7 +285,10 @@ pub fn render_request_inner_pill(
                                     }
                                 };
 
-                                svc_disc.discard_file(&path_to_discard, cx);
+                                // Never delete never-committed request files: for an
+                                // untracked request this only drops unsaved in-memory
+                                // edits via mark_clean + reload_all below.
+                                svc_disc.discard_file(&path_to_discard, false, cx);
                                 per_disc.update(cx, |per, cx| {
                                     per.mark_clean(&r_id_disc, cx);
                                 });

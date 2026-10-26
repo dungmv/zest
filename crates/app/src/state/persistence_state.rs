@@ -443,6 +443,27 @@ impl PersistenceState {
             }
         }
 
+        // Deletion events are verified against the filesystem: `git restore`
+        // and editors replace files via remove+recreate, so the file may exist
+        // again by the time the batch is handled. A pending deletion whose file
+        // is still on disk must not drop the request from the workspace; it is
+        // downgraded to a change and re-read via a full tree rescan.
+        let mut verified_deleted = std::collections::HashSet::new();
+        for rel_path in &req_deleted {
+            if self
+                .workspace_path
+                .join("collections")
+                .join(rel_path)
+                .is_file()
+            {
+                tree_changed = true;
+                req_changed.insert(rel_path.clone());
+            } else {
+                verified_deleted.insert(rel_path.clone());
+            }
+        }
+        let req_deleted = verified_deleted;
+
         let mut self_changed = false;
 
         for rel_path in &req_changed {
@@ -494,10 +515,11 @@ impl PersistenceState {
                     }
 
                     let mut reloaded_ids = Vec::with_capacity(reqs_to_update.len());
+                    let mut needs_rescan = false;
                     for (path, req_file) in reqs_to_update {
                         ws.parse_errors.remove(&path);
-                        let ws_name = ws.workspace_meta.name.clone();
                         if let Some(r) = ws.requests.iter_mut().find(|r| r.id == path) {
+                            let ws_name = ws.workspace_meta.name.clone();
                             let prev_status = r.last_status_code.or_else(|| {
                                 ws.store
                                     .load_response_cache(&r.id)
@@ -507,8 +529,14 @@ impl PersistenceState {
                             });
                             *r = req_file.into_item(&r.id, &ws_name, r.folder_id.clone());
                             r.last_status_code = prev_status;
+                            reloaded_ids.push(path);
+                        } else {
+                            // The file exists on disk but the request is absent
+                            // from memory: it was removed by an earlier deletion
+                            // batch and has been recreated since. Rescan so it is
+                            // re-added with correct ordering instead of ignored.
+                            needs_rescan = true;
                         }
-                        reloaded_ids.push(path);
                     }
 
                     for rel_path in req_deleted {
@@ -517,7 +545,10 @@ impl PersistenceState {
                     }
 
                     ws.bump_tree_version();
-                    if !reloaded_ids.is_empty() {
+                    if needs_rescan {
+                        ws.reload_tree();
+                        cx.emit(WorkspaceEvent::RequestsReloaded { req_ids: None });
+                    } else if !reloaded_ids.is_empty() {
                         cx.emit(WorkspaceEvent::RequestsReloaded {
                             req_ids: Some(reloaded_ids),
                         });

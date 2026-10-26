@@ -18,6 +18,26 @@ pub struct WorkspaceWatcher {
     _watcher: RecommendedWatcher,
 }
 
+/// A Remove event may be followed by the same file being recreated (atomic
+/// replace, e.g. `git restore` or an editor save-by-rename). At drain time the
+/// filesystem is the source of truth: a pending deletion whose file still
+/// exists is downgraded to a change so consumers never drop a live request.
+fn downgrade_existing_deletions(pending: &mut HashSet<FsEvent>, root: &Path) {
+    let deleted: Vec<String> = pending
+        .iter()
+        .filter_map(|ev| match ev {
+            FsEvent::RequestDeleted(rel) => Some(rel.clone()),
+            _ => None,
+        })
+        .collect();
+    for rel in deleted {
+        if root.join("collections").join(&rel).is_file() {
+            pending.remove(&FsEvent::RequestDeleted(rel.clone()));
+            pending.insert(FsEvent::RequestChanged(rel));
+        }
+    }
+}
+
 fn strip_unc_str(s: &str) -> &str {
     if let Some(stripped) = s.strip_prefix(r"\\?\") {
         stripped
@@ -88,6 +108,7 @@ pub fn start_workspace_watcher(
                     match raw_rx.recv_timeout(Duration::from_millis(200)) {
                         Ok(event) => Some(event),
                         Err(mpsc::RecvTimeoutError::Timeout) => {
+                            downgrade_existing_deletions(&mut pending_events, &root_buf);
                             for ev in pending_events.drain() {
                                 if event_sender.send(ev).is_err() {
                                     return;
@@ -96,6 +117,7 @@ pub fn start_workspace_watcher(
                             None
                         }
                         Err(mpsc::RecvTimeoutError::Disconnected) => {
+                            downgrade_existing_deletions(&mut pending_events, &root_buf);
                             for ev in pending_events.drain() {
                                 let _ = event_sender.send(ev);
                             }
@@ -187,5 +209,23 @@ mod tests {
             Path::new(r"C:\workspace\collections\req.yaml"),
             Path::new(r"C:\workspace\collections\other.yaml")
         ));
+    }
+
+    #[test]
+    fn test_existing_deletions_downgraded_to_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("collections")).unwrap();
+        std::fs::write(dir.path().join("collections").join("a.yaml"), "name: A\n").unwrap();
+
+        let mut pending = HashSet::new();
+        pending.insert(FsEvent::RequestDeleted("a.yaml".to_string()));
+        pending.insert(FsEvent::RequestDeleted("gone.yaml".to_string()));
+        downgrade_existing_deletions(&mut pending, dir.path());
+
+        // File replaced on disk (remove + recreate): must surface as a change
+        assert!(pending.contains(&FsEvent::RequestChanged("a.yaml".to_string())));
+        assert!(!pending.contains(&FsEvent::RequestDeleted("a.yaml".to_string())));
+        // File truly gone: stays a deletion
+        assert!(pending.contains(&FsEvent::RequestDeleted("gone.yaml".to_string())));
     }
 }
