@@ -1,4 +1,4 @@
-use super::WorkspaceDataState;
+use super::{FolderMoveOutcome, WorkspaceDataState, WorkspaceEvent};
 use crate::settings::AppSettings;
 use gpui::Context;
 use std::collections::HashMap;
@@ -110,8 +110,6 @@ impl WorkspaceDataState {
         // before the file is renamed away from under them.
         self.flush_request_to_disk(req_id);
         if let Ok(new_rel_path) = self.store.rename_request(req_id, trimmed) {
-            self.last_renamed_request = Some((req_id.to_string(), new_rel_path.clone()));
-
             if let Some(r) = self.requests.iter_mut().find(|r| r.id == req_id) {
                 r.id = new_rel_path.clone();
                 r.name = trimmed.to_string();
@@ -140,7 +138,13 @@ impl WorkspaceDataState {
         cx: &mut Context<Self>,
     ) -> Option<String> {
         let res = self.rename_request_internal(req_id, new_name);
-        if res.is_some() {
+        if let Some(new_id) = &res {
+            if new_id != req_id {
+                cx.emit(WorkspaceEvent::IdsRemapped(vec![(
+                    req_id.to_string(),
+                    new_id.clone(),
+                )]));
+            }
             cx.notify();
         }
         res
@@ -204,7 +208,11 @@ impl WorkspaceDataState {
         cx.notify();
     }
 
-    pub fn rename_folder_internal(&mut self, folder_id: &str, new_name: &str) -> Option<String> {
+    pub fn rename_folder_internal(
+        &mut self,
+        folder_id: &str,
+        new_name: &str,
+    ) -> Option<(String, Vec<(String, String)>)> {
         let trimmed = new_name.trim();
         if trimmed.is_empty() {
             return None;
@@ -216,16 +224,19 @@ impl WorkspaceDataState {
                 f.name = trimmed.to_string();
             }
             // Remap the folder id and every descendant id to the new prefix.
-            self.last_moved_items = self.repath_folder_descendants(folder_id, &new_rel_path);
+            let remapped_pairs = self.repath_folder_descendants(folder_id, &new_rel_path);
             self.bump_tree_version();
-            Some(new_rel_path)
+            Some((new_rel_path, remapped_pairs))
         } else {
             None
         }
     }
 
     pub fn rename_folder(&mut self, folder_id: &str, new_name: String, cx: &mut Context<Self>) {
-        if self.rename_folder_internal(folder_id, &new_name).is_some() {
+        if let Some((_new_path, pairs)) = self.rename_folder_internal(folder_id, &new_name) {
+            if !pairs.is_empty() {
+                cx.emit(WorkspaceEvent::IdsRemapped(pairs));
+            }
             cx.notify();
         }
     }
@@ -233,14 +244,13 @@ impl WorkspaceDataState {
     /// Moves a folder into another folder (or to the workspace root) and
     /// persists the move on disk. Dropping onto the current parent only
     /// reorders siblings in memory, matching the legacy behavior.
-    /// Returns `true` when the in-memory state changed.
     pub fn move_folder_internal(
         &mut self,
         src_folder_id: &str,
         target_folder_id: Option<String>,
-    ) -> bool {
+    ) -> Result<FolderMoveOutcome, String> {
         let Some(src) = self.folders.iter().find(|f| f.id == src_folder_id).cloned() else {
-            return false;
+            return Ok(FolderMoveOutcome::Unchanged);
         };
         let target = target_folder_id.filter(|t| !t.trim().is_empty() && t != src_folder_id);
 
@@ -263,17 +273,16 @@ impl WorkspaceDataState {
                         .unwrap_or(self.folders.len());
                     self.folders.insert(new_t_idx, folder);
                     self.bump_tree_version();
-                    return true;
+                    return Ok(FolderMoveOutcome::Reordered);
                 }
             }
-            return false;
+            return Ok(FolderMoveOutcome::Unchanged);
         }
 
         // A folder cannot be moved into itself or one of its descendants.
         if let Some(t) = &target {
             if self.folder_is_in_subtree(t, src_folder_id) {
-                self.last_crud_error = Some("Cannot move a folder into itself".to_string());
-                return false;
+                return Err("Cannot move a folder into itself".to_string());
             }
         }
 
@@ -283,18 +292,14 @@ impl WorkspaceDataState {
         match self.store.move_group(src_folder_id, target.as_deref()) {
             Ok(new_rel_path) => {
                 // Remap the folder id and every descendant id to the new path.
-                self.last_moved_items =
-                    self.repath_folder_descendants(src_folder_id, &new_rel_path);
+                let pairs = self.repath_folder_descendants(src_folder_id, &new_rel_path);
                 if let Some(f) = self.folders.iter_mut().find(|f| f.id == new_rel_path) {
                     f.parent_id = target;
                 }
                 self.bump_tree_version();
-                true
+                Ok(FolderMoveOutcome::Moved(pairs))
             }
-            Err(e) => {
-                self.last_crud_error = Some(format!("Failed to move folder: {}", e));
-                false
-            }
+            Err(e) => Err(format!("Failed to move folder: {}", e)),
         }
     }
 
@@ -304,8 +309,23 @@ impl WorkspaceDataState {
         target_folder_id: Option<String>,
         cx: &mut Context<Self>,
     ) {
-        if self.move_folder_internal(src_folder_id, target_folder_id) {
-            cx.notify();
+        match self.move_folder_internal(src_folder_id, target_folder_id) {
+            Ok(FolderMoveOutcome::Unchanged) => {}
+            Ok(FolderMoveOutcome::Reordered) => {
+                cx.notify();
+            }
+            Ok(FolderMoveOutcome::Moved(pairs)) => {
+                if !pairs.is_empty() {
+                    cx.emit(WorkspaceEvent::IdsRemapped(pairs));
+                }
+                cx.notify();
+            }
+            Err(message) => {
+                cx.emit(WorkspaceEvent::CrudFailed {
+                    title: "Cannot rename or move",
+                    message,
+                });
+            }
         }
     }
 
@@ -324,7 +344,14 @@ impl WorkspaceDataState {
             let src_eff = self.effective_folder_id(&src.folder_id);
             let target_eff = self.effective_folder_id(&target.folder_id);
             if src_eff != target_eff {
-                self.move_request_across_folders(src_req_id, target.folder_id.clone());
+                if let Some(new_id) =
+                    self.move_request_across_folders(src_req_id, target.folder_id.clone())
+                {
+                    cx.emit(WorkspaceEvent::IdsRemapped(vec![(
+                        src_req_id.to_string(),
+                        new_id,
+                    )]));
+                }
             } else {
                 let folder_id = src.folder_id.clone();
                 let mut stems: Vec<String> = self
@@ -386,10 +413,11 @@ impl WorkspaceDataState {
         target_folder_id: Option<String>,
         cx: &mut Context<Self>,
     ) {
-        if self
-            .move_request_to_folder_internal(src_req_id, target_folder_id)
-            .is_some()
-        {
+        if let Some(new_id) = self.move_request_to_folder_internal(src_req_id, target_folder_id) {
+            cx.emit(WorkspaceEvent::IdsRemapped(vec![(
+                src_req_id.to_string(),
+                new_id,
+            )]));
             cx.notify();
         }
     }
@@ -399,10 +427,10 @@ impl WorkspaceDataState {
         req_id: &str,
         old_name: &str,
         new_name: &str,
-    ) -> bool {
+    ) -> Option<String> {
         let trimmed = new_name.trim();
         if trimmed.is_empty() || trimmed == old_name {
-            return false;
+            return None;
         }
 
         if let Ok(mut req_file) = self.store.read_request(req_id) {
@@ -419,21 +447,16 @@ impl WorkspaceDataState {
             if let Some(ex) = req_file.examples.iter_mut().find(|e| e.name == old_name) {
                 ex.name = unique_name.clone();
             }
-            self.last_renamed_example = Some((
-                req_id.to_string(),
-                old_name.to_string(),
-                unique_name.clone(),
-            ));
             let _ = self.store.write_request(req_id, &req_file);
             if let Some(r) = self.requests.iter_mut().find(|r| r.id == req_id) {
                 if let Some(ex) = r.examples.iter_mut().find(|e| e.name == old_name) {
-                    ex.name = unique_name;
+                    ex.name = unique_name.clone();
                 }
             }
             self.bump_tree_version();
-            return true;
+            return Some(unique_name);
         }
-        false
+        None
     }
 
     pub fn rename_example(
@@ -443,7 +466,12 @@ impl WorkspaceDataState {
         new_name: &str,
         cx: &mut Context<Self>,
     ) {
-        if self.rename_example_internal(req_id, old_name, new_name) {
+        if let Some(unique_name) = self.rename_example_internal(req_id, old_name, new_name) {
+            cx.emit(WorkspaceEvent::ExampleRenamed {
+                req_id: req_id.to_string(),
+                old_name: old_name.to_string(),
+                new_name: unique_name,
+            });
             cx.notify();
         }
     }
@@ -708,7 +736,6 @@ impl WorkspaceDataState {
             self.pins[pos] = new_rel_path.clone();
             let _ = self.store.save_pins(&self.pins);
         }
-        self.last_moved_items = vec![(src_req_id.to_string(), new_rel_path.clone())];
         self.bump_tree_version();
         Some(new_rel_path)
     }

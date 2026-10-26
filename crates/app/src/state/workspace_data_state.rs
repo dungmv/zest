@@ -20,15 +20,6 @@ pub struct WorkspaceDataState {
     pub parse_errors: HashMap<String, String>,
     pub pins: Vec<String>,
     pub cookies: Vec<StoredCookie>,
-    pub last_renamed_request: Option<(String, String)>,
-    pub last_renamed_example: Option<(String, String, String)>,
-    /// (old id, new id) pairs produced by the last folder move/rename or
-    /// request move, consumed by the workspace observer so downstream states
-    /// (session pointer, response cache, dirty map) can follow id changes.
-    pub last_moved_items: Vec<(String, String)>,
-    /// Last user-facing CRUD failure message, consumed by the workspace
-    /// observer and surfaced as an error toast.
-    pub last_crud_error: Option<String>,
     pub recent_workspaces: Vec<String>,
     /// Monotonically increasing counter bumped whenever the sidebar tree structure,
     /// request names/methods/status codes/examples, pins, or parse errors change.
@@ -111,10 +102,6 @@ impl WorkspaceDataState {
             parse_errors: HashMap::new(),
             pins: Vec::new(),
             cookies: Vec::new(),
-            last_renamed_request: None,
-            last_renamed_example: None,
-            last_moved_items: Vec::new(),
-            last_crud_error: None,
             recent_workspaces: settings.recent_workspaces,
             tree_version: 0,
             url_version: 0,
@@ -142,10 +129,6 @@ impl WorkspaceDataState {
             parse_errors: HashMap::new(),
             pins: Vec::new(),
             cookies: Vec::new(),
-            last_renamed_request: None,
-            last_renamed_example: None,
-            last_moved_items: Vec::new(),
-            last_crud_error: None,
             recent_workspaces: Vec::new(),
             tree_version: 0,
             url_version: 0,

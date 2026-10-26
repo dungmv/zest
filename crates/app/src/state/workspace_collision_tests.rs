@@ -4,7 +4,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::state::WorkspaceDataState;
+    use crate::state::{FolderMoveOutcome, WorkspaceDataState};
     use std::path::PathBuf;
     use std::sync::Arc;
     use zest_core::storage::{FsWorkspaceStore, WorkspaceStore};
@@ -37,7 +37,6 @@ mod tests {
             ws.rename_request_internal(&b.id, "Login"),
             Some("login-2.yaml".to_string())
         );
-        assert!(ws.last_crud_error.is_none());
         let b_item = ws.requests.iter().find(|r| r.id == "login-2.yaml").unwrap();
         assert_eq!(b_item.name, "Login");
         assert!(store.collections_dir().join("login.yaml").exists());
@@ -65,7 +64,6 @@ mod tests {
             ws.rename_request_internal("login-2.yaml", "Logout"),
             Some("logout.yaml".to_string())
         );
-        assert!(ws.last_crud_error.is_none());
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
@@ -78,19 +76,17 @@ mod tests {
             .create_folder_internal(None, "Other".to_string())
             .unwrap();
 
-        assert_eq!(
-            ws.rename_folder_internal(&other, "Auth"),
-            Some("auth-2".to_string())
-        );
-        assert!(ws.last_crud_error.is_none());
+        let rename_res = ws.rename_folder_internal(&other, "Auth");
+        assert_eq!(rename_res.as_ref().map(|(p, _)| p.as_str()), Some("auth-2"));
         let renamed = ws.folders.iter().find(|f| f.id == "auth-2").unwrap();
         assert_eq!(renamed.name, "Auth");
         assert!(store.collections_dir().join("auth-2/_folder.yaml").exists());
 
         // Non-conflicting rename keeps working.
+        let rename_res2 = ws.rename_folder_internal("auth-2", "Other Stuff");
         assert_eq!(
-            ws.rename_folder_internal("auth-2", "Other Stuff"),
-            Some("other-stuff".to_string())
+            rename_res2.as_ref().map(|(p, _)| p.as_str()),
+            Some("other-stuff")
         );
 
         let _ = std::fs::remove_dir_all(&temp_dir);
@@ -117,7 +113,6 @@ mod tests {
             ws.move_request_to_folder_internal(&ra_id, Some(fb.clone())),
             Some("b/login-2.yaml".to_string())
         );
-        assert!(ws.last_crud_error.is_none());
         assert!(!store.collections_dir().join("a/login.yaml").exists());
         assert!(store.collections_dir().join("b/login.yaml").exists());
         assert!(store.collections_dir().join("b/login-2.yaml").exists());
@@ -127,27 +122,18 @@ mod tests {
             .find(|r| r.id == "b/login-2.yaml")
             .unwrap();
         assert_eq!(moved.name, "Login");
-        assert_eq!(
-            ws.last_moved_items,
-            vec![("a/login.yaml".to_string(), "b/login-2.yaml".to_string())]
-        );
 
         // Dropping onto the request's own folder is a no-op, never a further
         // suffixed duplicate file.
         assert!(ws
             .move_request_to_folder_internal("b/login-2.yaml", Some(fb.clone()))
             .is_none());
-        assert!(ws.last_crud_error.is_none());
         assert!(!store.collections_dir().join("b/login-3.yaml").exists());
 
         // A clean move to root still succeeds and records the id pair.
         assert_eq!(
             ws.move_request_to_folder_internal(&rb_id, None),
             Some("login.yaml".to_string())
-        );
-        assert_eq!(
-            ws.last_moved_items,
-            vec![("b/login.yaml".to_string(), "login.yaml".to_string())]
         );
         assert!(store.collections_dir().join("login.yaml").exists());
         assert!(!store.collections_dir().join("b/login.yaml").exists());
@@ -172,7 +158,11 @@ mod tests {
         // Pin the request so the remapping of pins is exercised too.
         ws.pins = vec![login_id.to_string()];
 
-        assert!(ws.move_folder_internal("users", Some("api".to_string())));
+        let move_res = ws.move_folder_internal("users", Some("api".to_string()));
+        let moved_pairs = match move_res {
+            Ok(FolderMoveOutcome::Moved(pairs)) => pairs,
+            other => panic!("expected Moved, got: {:?}", other),
+        };
 
         // Disk layout actually moved.
         assert!(store
@@ -205,10 +195,8 @@ mod tests {
         assert_eq!(ws.pins, vec!["api/users/admin/login.yaml".to_string()]);
 
         // (old, new) pairs are recorded for downstream state propagation.
-        assert!(ws
-            .last_moved_items
-            .contains(&("users".to_string(), "api/users".to_string())));
-        assert!(ws.last_moved_items.contains(&(
+        assert!(moved_pairs.contains(&("users".to_string(), "api/users".to_string())));
+        assert!(moved_pairs.contains(&(
             "users/admin/login.yaml".to_string(),
             "api/users/admin/login.yaml".to_string()
         )));
@@ -235,8 +223,9 @@ mod tests {
         ws.create_folder_internal(Some("parent".to_string()), "Child".to_string())
             .unwrap();
 
-        assert!(!ws.move_folder_internal("parent", Some("parent/child".to_string())));
-        let err = ws.last_crud_error.take().expect("error must be reported");
+        let err = ws
+            .move_folder_internal("parent", Some("parent/child".to_string()))
+            .expect_err("error must be reported");
         assert!(err.contains("into itself"), "got: {}", err);
         assert!(store
             .collections_dir()
@@ -257,8 +246,11 @@ mod tests {
         ws.create_folder_internal(Some("b".to_string()), "Shared".to_string())
             .unwrap();
 
-        assert!(ws.move_folder_internal("a/shared", Some("b".to_string())));
-        assert!(ws.last_crud_error.is_none());
+        let move_res = ws.move_folder_internal("a/shared", Some("b".to_string()));
+        let moved_pairs = match move_res {
+            Ok(FolderMoveOutcome::Moved(pairs)) => pairs,
+            other => panic!("expected Moved, got: {:?}", other),
+        };
 
         // The moved directory is suffixed in the destination; both display
         // names stay "Shared".
@@ -275,7 +267,7 @@ mod tests {
         assert_eq!(moved.name, "Shared");
         assert_eq!(moved.parent_id.as_deref(), Some("b"));
         assert_eq!(
-            ws.last_moved_items,
+            moved_pairs,
             vec![("a/shared".to_string(), "b/shared-2".to_string())]
         );
 

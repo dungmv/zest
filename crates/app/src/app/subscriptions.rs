@@ -421,7 +421,6 @@ pub fn setup_app_subscriptions(
     // 5. Observe workspace_state: synchronize workspace changes
     let ed_sync = editor_state.clone();
     let resp_sync = response_state.clone();
-    let per_sync = persistence_state.clone();
     let git_sync = targets.git_state.clone();
     let mut last_workspace_path = workspace_state.read(cx).workspace_path.clone();
     subscriptions.push(
@@ -442,7 +441,7 @@ pub fn setup_app_subscriptions(
                 });
                 let (next_id, ws_store) = {
                     let ws_ref = ws.read(cx);
-                    let per_ref = per_sync.read(cx);
+                    let per_ref = this.state.persistence.read(cx);
                     let id = per_ref
                         .local_state
                         .active_request
@@ -464,67 +463,18 @@ pub fn setup_app_subscriptions(
                 resp_sync.update(cx, |resp, cx| {
                     resp.load_for_request(&next_id, ws_store.as_ref(), cx);
                 });
-                return;
-            }
-
-            let last_renamed = ws.read(cx).last_renamed_request.clone();
-            if let Some((old_id, new_id)) = last_renamed {
-                resp_sync.update(cx, |resp, _cx| {
-                    resp.rename_request(&old_id, &new_id);
-                });
-                ed_sync.update(cx, |ed, cx| {
-                    if ed.active_request_id.as_deref() == Some(&old_id) {
-                        ed.active_request_id = Some(new_id);
-                        cx.notify();
-                    }
-                });
-            }
-
-            // Follow id changes produced by folder move/rename and request
-            // moves: response cache keys, the session pointer and the
-            // persistence dirty map must track the new on-disk paths.
-            let moved_items = ws.update(cx, |ws, _| std::mem::take(&mut ws.last_moved_items));
-            if !moved_items.is_empty() {
-                resp_sync.update(cx, |resp, _| {
-                    for (old_id, new_id) in &moved_items {
-                        resp.rename_request(old_id, new_id);
-                    }
-                });
-                let new_active = {
-                    let ed_ref = ed_sync.read(cx);
-                    moved_items.iter().find_map(|(old, new)| {
-                        (ed_ref.active_request_id.as_deref() == Some(old.as_str()))
-                            .then(|| new.clone())
-                    })
-                };
-                if let Some(new_id) = new_active {
-                    ed_sync.update(cx, |ed, cx| {
-                        ed.active_request_id = Some(new_id);
-                        cx.notify();
-                    });
-                }
-                per_sync.update(cx, |per, cx| {
-                    per.remap_request_ids(&moved_items, cx);
-                });
-            }
-
-            // Surface rejected renames/moves as an error toast.
-            if let Some(err) = ws.update(cx, |ws, _| ws.last_crud_error.take()) {
-                this.state.toast.update(cx, |t, cx| {
-                    t.push_error("Cannot rename or move", err, cx);
-                });
-            }
-
-            if ws.read(cx).last_renamed_example.is_some() {
-                let last_renamed_ex = ws.update(cx, |ws, _cx| ws.last_renamed_example.take());
-                if let Some((_req_id, old_ex, new_ex)) = last_renamed_ex {
-                    resp_sync.update(cx, |resp, cx| {
-                        resp.rename_example(&old_ex, &new_ex, cx);
-                    });
-                }
             }
         }),
     );
+
+    // 5b. Subscribe to workspace CRUD events
+    subscriptions.push(cx.subscribe_in(
+        workspace_state,
+        window,
+        |this, _ws, event: &crate::state::WorkspaceEvent, _window, cx| {
+            crate::app::workspace_event_handler::handle_workspace_event(this, event, cx);
+        },
+    ));
 
     // 6. Observe response_state: synchronize displays & re-render on response/example changes
     subscriptions.push(

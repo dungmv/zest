@@ -6,6 +6,7 @@ pub mod modals;
 pub mod request_composer;
 pub mod subscriptions;
 pub mod sync;
+pub mod workspace_event_handler;
 
 pub use actions::*;
 pub use composer_inputs::*;

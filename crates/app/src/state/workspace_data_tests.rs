@@ -353,16 +353,8 @@ mod tests {
 
         // 1. Rename "Success" -> "Auth OK"
         let renamed = ws_state.rename_example_internal(&rel_path, "Success", "Auth OK");
-        assert!(renamed);
+        assert_eq!(renamed, Some("Auth OK".to_string()));
         assert_eq!(ws_state.requests[0].examples[0].name, "Auth OK");
-        assert_eq!(
-            ws_state.last_renamed_example,
-            Some((
-                rel_path.clone(),
-                "Success".to_string(),
-                "Auth OK".to_string()
-            ))
-        );
 
         // Verify persisted on disk
         let disk_req = store.read_request(&rel_path).unwrap();
@@ -370,16 +362,8 @@ mod tests {
 
         // 2. Collision test: Rename "Error" -> "Auth OK", should become "Auth OK-2"
         let renamed2 = ws_state.rename_example_internal(&rel_path, "Error", "Auth OK");
-        assert!(renamed2);
+        assert_eq!(renamed2, Some("Auth OK-2".to_string()));
         assert_eq!(ws_state.requests[0].examples[1].name, "Auth OK-2");
-        assert_eq!(
-            ws_state.last_renamed_example,
-            Some((
-                rel_path.clone(),
-                "Error".to_string(),
-                "Auth OK-2".to_string()
-            ))
-        );
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
@@ -678,10 +662,6 @@ mod tests {
         assert_eq!(ws_state.requests.len(), 1);
         assert_eq!(ws_state.requests[0].id, new_id);
         assert_eq!(ws_state.requests[0].name, "Get Users");
-        assert_eq!(
-            ws_state.last_renamed_request,
-            Some((req1.id.clone(), new_id.clone()))
-        );
 
         // 3. Duplicate Request
         let dup = ws_state
@@ -710,11 +690,12 @@ mod tests {
         assert_eq!(moved_req.folder_id, Some(folder_id.clone()));
 
         // 6. Rename Folder
-        let new_folder_id = ws_state
+        let (new_folder_id, remapped_pairs) = ws_state
             .rename_folder_internal(&folder_id, "Authentication")
             .expect("rename folder should succeed");
         assert_eq!(ws_state.folders[0].name, "Authentication");
         assert_eq!(ws_state.folders[0].id, new_folder_id);
+        assert!(!remapped_pairs.is_empty());
 
         // Nested request should have its folder_id and id updated with new prefix
         let nested_req = ws_state
