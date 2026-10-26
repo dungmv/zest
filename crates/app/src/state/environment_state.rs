@@ -1,3 +1,4 @@
+use super::EnvironmentEvent;
 use gpui::{Context, Task};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -108,8 +109,12 @@ impl EnvironmentState {
     }
 
     pub fn set_active_environment(&mut self, env_id: Option<String>, cx: &mut Context<Self>) {
-        self.active_environment_id = env_id;
+        if self.active_environment_id == env_id {
+            return;
+        }
+        self.active_environment_id = env_id.clone();
         self.invalidate_cache();
+        cx.emit(EnvironmentEvent::ActiveEnvironmentChanged(env_id));
         cx.notify();
     }
 
@@ -214,10 +219,16 @@ impl EnvironmentState {
         {
             return;
         }
+        let was_active = self.active_environment_id.as_deref() == Some(env_id);
         let _ = self.store.rename_environment(env_id, trimmed);
-        self.reload_environments();
-        if self.active_environment_id.as_deref() == Some(env_id) {
+        if was_active {
             self.active_environment_id = Some(trimmed.to_string());
+        }
+        self.reload_environments();
+        if was_active {
+            cx.emit(EnvironmentEvent::ActiveEnvironmentChanged(
+                self.active_environment_id.clone(),
+            ));
         }
         cx.notify();
     }

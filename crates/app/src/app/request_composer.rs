@@ -1,5 +1,4 @@
 use super::auth_tab::{render_auth_tab, AuthTabContext, AuthTabInputs};
-use super::sync::save_active_request_without_redraw;
 use super::AppView;
 use crate::components::*;
 use crate::state::*;
@@ -295,7 +294,6 @@ impl AppView {
                             self.composer_inputs.raw_textarea.clone(),
                         )
                         .workspace_state(ws_entity.clone())
-                        .persistence_state(self.state.persistence.clone())
                         .env_state(self.state.env.clone())
                         .modal_state(self.state.modal.clone())
                         .toast_state(self.state.toast.clone()),
@@ -307,7 +305,6 @@ impl AppView {
                             .unwrap_or_default();
                         let ed_up = ed_entity.clone();
                         let ws_up = ws_entity.clone();
-                        let per_up = self.state.persistence.clone();
                         let ed_add = ed_entity.clone();
                         let ws_add = ws_entity.clone();
                         let ed_del = ed_entity.clone();
@@ -328,7 +325,6 @@ impl AppView {
                                     ed_up.update(cx, |state, cx| {
                                         state.mark_dirty(cx);
                                     });
-                                    save_active_request_without_redraw(&ed_up, &per_up, &ws_up, cx);
                                 },
                                 move |_, cx| {
                                     ws_add.update(cx, |ws, _| {
@@ -363,7 +359,6 @@ impl AppView {
                             .unwrap_or_default();
                         let ed_up = ed_entity.clone();
                         let ws_up = ws_entity.clone();
-                        let per_up = self.state.persistence.clone();
                         let ed_add = ed_entity.clone();
                         let ws_add = ws_entity.clone();
                         let ed_del = ed_entity.clone();
@@ -385,9 +380,6 @@ impl AppView {
                                         ed_up.update(cx, |state, cx| {
                                             state.mark_dirty(cx);
                                         });
-                                        save_active_request_without_redraw(
-                                            &ed_up, &per_up, &ws_up, cx,
-                                        );
                                     },
                                     move |_, cx| {
                                         ws_add.update(cx, |ws, _| {

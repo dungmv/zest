@@ -296,8 +296,10 @@ pub fn render_request_inner_pill(
                                     if active_id == r_id_disc {
                                         if ws.find_request(&r_id_disc).is_some() {
                                             ed_disc.update(cx, |ed, cx| {
-                                                ed.bump_request_version(cx);
-                                                ed.bump_body_version(cx);
+                                                ed.sync_composer_inputs(
+                                                    crate::state::ComposerSyncScope::All,
+                                                    cx,
+                                                );
                                             });
                                         } else {
                                             ed_disc.update(cx, |ed, cx| {

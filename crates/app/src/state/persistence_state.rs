@@ -1,4 +1,4 @@
-use super::{EnvironmentState, RequestSessionState, WorkspaceDataState};
+use super::{EnvironmentState, WorkspaceDataState, WorkspaceEvent};
 use gpui::{Context, Entity, Task};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -126,7 +126,6 @@ impl PersistenceState {
     pub fn schedule_save_active_request(
         &mut self,
         req_id: String,
-        editor: Entity<RequestSessionState>,
         workspace_data: Entity<WorkspaceDataState>,
         cx: &mut Context<Self>,
     ) {
@@ -136,8 +135,6 @@ impl PersistenceState {
             self.unsaved_version = self.unsaved_version.wrapping_add(1);
             cx.notify();
         }
-
-        let ed_clone = editor.clone();
 
         let task = cx.spawn(async move |this, cx| {
             cx.background_executor()
@@ -183,11 +180,6 @@ impl PersistenceState {
                     if p.unsaved_requests.remove(&final_req_id) {
                         p.unsaved_version = p.unsaved_version.wrapping_add(1);
                         cx.notify();
-                    }
-                });
-                ed_clone.update(cx, |ed, _| {
-                    if ed.active_request_id.as_deref() == Some(&final_req_id) {
-                        ed.is_dirty = false;
                     }
                 });
             }
@@ -294,6 +286,7 @@ impl PersistenceState {
         if tree_changed {
             workspace_data.update(cx, |ws, cx| {
                 ws.reload_tree();
+                cx.emit(WorkspaceEvent::RequestsReloaded { req_ids: None });
                 cx.notify();
             });
         } else {
@@ -315,6 +308,7 @@ impl PersistenceState {
                         ws.parse_errors.insert(path, err);
                     }
 
+                    let mut reloaded_ids = Vec::with_capacity(reqs_to_update.len());
                     for (path, req_file) in reqs_to_update {
                         ws.parse_errors.remove(&path);
                         let ws_name = ws.workspace_meta.name.clone();
@@ -329,6 +323,7 @@ impl PersistenceState {
                             *r = req_file.into_item(&r.id, &ws_name, r.folder_id.clone());
                             r.last_status_code = prev_status;
                         }
+                        reloaded_ids.push(path);
                     }
 
                     for rel_path in req_deleted {
@@ -337,6 +332,11 @@ impl PersistenceState {
                     }
 
                     ws.bump_tree_version();
+                    if !reloaded_ids.is_empty() {
+                        cx.emit(WorkspaceEvent::RequestsReloaded {
+                            req_ids: Some(reloaded_ids),
+                        });
+                    }
                     cx.notify();
                 });
             }
@@ -381,6 +381,9 @@ impl PersistenceState {
                     r.last_status_code = prev_status;
                 }
                 ws.bump_tree_version();
+                cx.emit(WorkspaceEvent::RequestsReloaded {
+                    req_ids: Some(vec![path]),
+                });
                 cx.notify();
             });
         }

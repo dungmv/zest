@@ -1,4 +1,4 @@
-use crate::state::{ResponseState, ResponseViewMode};
+use crate::state::ResponseState;
 use gpui::{App, AppContext as _, Entity, Window};
 use gpui_component::input::EditorState as CodeEditorState;
 use std::rc::Rc;
@@ -9,9 +9,6 @@ type HighlighterFactory =
 pub struct InspectorDisplays {
     pub response_editor: Entity<CodeEditorState>,
     pub request_body_editor: Entity<CodeEditorState>,
-    pub last_synced_response_id: Option<String>,
-    pub last_synced_response_view_mode: Option<ResponseViewMode>,
-    pub last_synced_example_name: Option<String>,
 }
 
 impl InspectorDisplays {
@@ -35,9 +32,6 @@ impl InspectorDisplays {
         Self {
             response_editor,
             request_body_editor,
-            last_synced_response_id: None,
-            last_synced_response_view_mode: None,
-            last_synced_example_name: None,
         }
     }
 
@@ -47,21 +41,9 @@ impl InspectorDisplays {
         window: &mut Window,
         cx: &mut App,
     ) {
-        let resp_s = response_state.read(cx);
-        let current_resp_id = resp_s.current_response.as_ref().map(|r| r.id.clone());
-        let current_mode = resp_s.view_mode;
-        let current_ex = resp_s.active_example_name.clone();
-
-        let resp_changed = current_resp_id != self.last_synced_response_id
-            || Some(current_mode) != self.last_synced_response_view_mode
-            || current_ex != self.last_synced_example_name;
-
-        if resp_changed {
-            self.last_synced_response_id = current_resp_id;
-            self.last_synced_response_view_mode = Some(current_mode);
-            self.last_synced_example_name = current_ex;
-
-            let (display_text, is_json, is_xml) = if let Some(fmt) = &resp_s.formatted_body {
+        let (display_text, is_json, is_xml) = {
+            let resp_s = response_state.read(cx);
+            if let Some(fmt) = &resp_s.formatted_body {
                 (fmt.display_text.to_string(), fmt.is_json, fmt.is_xml)
             } else if let Some(resp) = &resp_s.current_response {
                 let text = String::from_utf8_lossy(&resp.body).to_string();
@@ -75,22 +57,22 @@ impl InspectorDisplays {
                 (text, is_j, is_x)
             } else {
                 (String::new(), false, false)
-            };
+            }
+        };
 
-            let lang = if is_json {
-                "json"
-            } else if is_xml {
-                "xml"
-            } else {
-                "plaintext"
-            };
+        let lang = if is_json {
+            "json"
+        } else if is_xml {
+            "xml"
+        } else {
+            "plaintext"
+        };
 
-            self.response_editor.update(cx, |txt, cx| {
-                txt.set_value(display_text, window, cx);
-                txt.set_highlighter(lang, cx);
-                txt.set_readonly(true, cx);
-            });
-        }
+        self.response_editor.update(cx, |txt, cx| {
+            txt.set_value(display_text, window, cx);
+            txt.set_highlighter(lang, cx);
+            txt.set_readonly(true, cx);
+        });
     }
 
     pub fn sync_sent_request_preview(

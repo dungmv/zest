@@ -1,9 +1,6 @@
-use super::persist_active_request_without_redraw;
 use crate::components::env_autocomplete::{build_tokenized_content, detect_unclosed_env_var};
 use crate::components::env_input::render_env_input;
-use crate::state::{
-    EnvironmentState, ModalState, PersistenceState, RequestSessionState, WorkspaceDataState,
-};
+use crate::state::{EnvironmentState, ModalState, RequestSessionState, WorkspaceDataState};
 use crate::theme::theme;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -19,7 +16,6 @@ pub struct MultipartContext<'a> {
     pub req_id_str: &'a str,
     pub editor_state: &'a Entity<RequestSessionState>,
     pub workspace_state: Option<&'a Entity<WorkspaceDataState>>,
-    pub persistence_state: Option<&'a Entity<PersistenceState>>,
     pub env_state: Option<&'a Entity<EnvironmentState>>,
     pub modal_state: Option<&'a Entity<ModalState>>,
 }
@@ -35,7 +31,6 @@ pub fn render_multipart_editor(
     let ed_c = ctx.editor_state.clone();
     let req_id_str = ctx.req_id_str.to_string();
     let workspace_state = ctx.workspace_state;
-    let persistence_state = ctx.persistence_state;
     let env_state = ctx.env_state;
     let modal_state = ctx.modal_state;
 
@@ -73,9 +68,6 @@ pub fn render_multipart_editor(
             let ws_row = workspace_state.cloned();
             let ws_del = ws_row.clone();
             let ws_pick = ws_row.clone();
-            let per_row = persistence_state.cloned();
-            let per_del = per_row.clone();
-            let per_pick = per_row.clone();
             let id_row = req_id_str.clone();
             let id_del = id_row.clone();
             let id_pick = id_row.clone();
@@ -90,8 +82,6 @@ pub fn render_multipart_editor(
             let ed_up_v = ed_row.clone();
             let ws_up = workspace_state.cloned();
             let ws_up_v = ws_up.clone();
-            let per_up = persistence_state.cloned();
-            let per_up_v = per_up.clone();
             let fp_k = file_path.clone();
             let fp_v = file_path.clone();
             let env_init = env_state.cloned();
@@ -150,12 +140,6 @@ pub fn render_multipart_editor(
                                 ed_up_k.update(cx, |state, cx| {
                                     state.mark_dirty(cx);
                                 });
-                                persist_active_request_without_redraw(
-                                    &ed_up_k,
-                                    per_up.as_ref(),
-                                    ws_up.as_ref(),
-                                    cx,
-                                );
                                 if k.contains("}}") && detect_unclosed_env_var(&k).is_none() {
                                     if let Some(env_ent) = &env_sub1 {
                                         let tokenized =
@@ -190,12 +174,6 @@ pub fn render_multipart_editor(
                                 ed_up_v.update(cx, |state, cx| {
                                     state.mark_dirty(cx);
                                 });
-                                persist_active_request_without_redraw(
-                                    &ed_up_v,
-                                    per_up_v.as_ref(),
-                                    ws_up_v.as_ref(),
-                                    cx,
-                                );
                                 if v.contains("}}") && detect_unclosed_env_var(&v).is_none() {
                                     if let Some(env_ent) = &env_sub2 {
                                         let tokenized =
@@ -227,7 +205,6 @@ pub fn render_multipart_editor(
                 .child({
                     let ed_toggle = ed_row.clone();
                     let ws_toggle = ws_row.clone();
-                    let per_toggle = per_row.clone();
                     let id_toggle = id_row.clone();
                     let k = key_str.clone();
                     let v = val_str.clone();
@@ -264,12 +241,6 @@ pub fn render_multipart_editor(
                             ed_toggle.update(cx, |state, cx| {
                                 state.mark_dirty(cx);
                             });
-                            persist_active_request_without_redraw(
-                                &ed_toggle,
-                                per_toggle.as_ref(),
-                                ws_toggle.as_ref(),
-                                cx,
-                            );
                         })
                         .child(if enabled { "✓" } else { "" })
                 })
@@ -277,7 +248,6 @@ pub fn render_multipart_editor(
                 .child({
                     let ed_on_k = ed_row.clone();
                     let ws_on_k = ws_row.clone();
-                    let per_on_k = per_row.clone();
                     let id_on_k = id_row.clone();
                     let val_in_for_k = val_input.clone();
                     let fp_on_k = file_path.clone();
@@ -300,12 +270,6 @@ pub fn render_multipart_editor(
                         ed_on_k.update(cx, |state, cx| {
                             state.mark_dirty(cx);
                         });
-                        persist_active_request_without_redraw(
-                            &ed_on_k,
-                            per_on_k.as_ref(),
-                            ws_on_k.as_ref(),
-                            cx,
-                        );
                     };
 
                     div().w(px(160.)).child(render_env_input(
@@ -322,7 +286,6 @@ pub fn render_multipart_editor(
                 .child({
                     let ed_toggle_type = ed_row.clone();
                     let ws_toggle_type = ws_row.clone();
-                    let per_toggle_type = per_row.clone();
                     let id_toggle_type = id_row.clone();
                     let k = key_str.clone();
                     let v = val_str.clone();
@@ -359,12 +322,6 @@ pub fn render_multipart_editor(
                             ed_toggle_type.update(cx, |state, cx| {
                                 state.mark_dirty(cx);
                             });
-                            persist_active_request_without_redraw(
-                                &ed_toggle_type,
-                                per_toggle_type.as_ref(),
-                                ws_toggle_type.as_ref(),
-                                cx,
-                            );
                         })
                         .child(
                             div()
@@ -386,7 +343,6 @@ pub fn render_multipart_editor(
                 .child({
                     let ed_on_v = ed_row.clone();
                     let ws_on_v = ws_row.clone();
-                    let per_on_v = per_row.clone();
                     let id_on_v = id_row.clone();
                     let key_in_for_v = key_input.clone();
                     let fp_on_v = file_path.clone();
@@ -409,12 +365,6 @@ pub fn render_multipart_editor(
                         ed_on_v.update(cx, |state, cx| {
                             state.mark_dirty(cx);
                         });
-                        persist_active_request_without_redraw(
-                            &ed_on_v,
-                            per_on_v.as_ref(),
-                            ws_on_v.as_ref(),
-                            cx,
-                        );
                     };
 
                     div().flex_1().child(if is_file {
@@ -457,7 +407,6 @@ pub fn render_multipart_editor(
                 .child({
                     let ed_p = ed_pick.clone();
                     let ws_p = ws_pick.clone();
-                    let per_p = per_pick.clone();
                     let id_p = id_pick.clone();
                     let k = key_str.clone();
                     let v = val_str.clone();
@@ -493,7 +442,6 @@ pub fn render_multipart_editor(
                             .on_click(move |_, _, cx| {
                                 let ed_bg = ed_p.clone();
                                 let ws_bg = ws_p.clone();
-                                let per_bg = per_p.clone();
                                 let id_bg = id_p.clone();
                                 let k_bg = k.clone();
                                 let v_bg = v.clone();
@@ -520,12 +468,6 @@ pub fn render_multipart_editor(
                                             ed_bg.update(cx, |state, cx| {
                                                 state.mark_dirty(cx);
                                             });
-                                            persist_active_request_without_redraw(
-                                                &ed_bg,
-                                                per_bg.as_ref(),
-                                                ws_bg.as_ref(),
-                                                cx,
-                                            );
                                         });
                                     }
                                 })
@@ -561,12 +503,6 @@ pub fn render_multipart_editor(
                             ed_del.update(cx, |state, cx| {
                                 state.mark_dirty(cx);
                             });
-                            persist_active_request_without_redraw(
-                                &ed_del,
-                                per_del.as_ref(),
-                                ws_del.as_ref(),
-                                cx,
-                            );
                         })
                         .child("×"),
                 )
@@ -575,7 +511,6 @@ pub fn render_multipart_editor(
         .child(div().pt(px(4.)).child({
             let ed_add = ed_c.clone();
             let ws_add = workspace_state.cloned();
-            let per_add = persistence_state.cloned();
             let id_add = req_id_str.clone();
             div()
                 .id("btn-add-multipart-part")
@@ -605,12 +540,6 @@ pub fn render_multipart_editor(
                     ed_add.update(cx, |state, cx| {
                         state.mark_dirty(cx);
                     });
-                    persist_active_request_without_redraw(
-                        &ed_add,
-                        per_add.as_ref(),
-                        ws_add.as_ref(),
-                        cx,
-                    );
                 })
                 .child("+ Add Part")
         }))

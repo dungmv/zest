@@ -5,7 +5,6 @@ pub mod inspector_displays;
 pub mod modals;
 pub mod request_composer;
 pub mod subscriptions;
-pub mod sync;
 pub mod workspace_event_handler;
 
 pub use actions::*;
@@ -86,8 +85,9 @@ impl AppView {
             state.session.update(cx, |ed, cx| {
                 ed.set_active_request_id(&req.id, cx);
             });
-            composer_inputs.sync_active_request_editors(
-                &state.session,
+            composer_inputs.sync_inputs(
+                &req.id,
+                ComposerSyncScope::All,
                 &state.workspace,
                 &state.env,
                 window,
@@ -115,7 +115,6 @@ impl AppView {
                 toast_state: &state.toast,
                 composer_inputs: &composer_inputs,
             },
-            initial_req.as_ref(),
             window,
             cx,
         );

@@ -11,8 +11,7 @@ pub use multipart::*;
 pub use xml::*;
 
 use crate::state::{
-    EnvironmentState, ModalState, PersistenceState, RequestSessionState, ToastState,
-    WorkspaceDataState,
+    EnvironmentState, ModalState, RequestSessionState, ToastState, WorkspaceDataState,
 };
 use crate::theme::theme;
 use gpui::prelude::FluentBuilder as _;
@@ -24,24 +23,6 @@ use gpui_component::button::{Button, ButtonVariants as _};
 use gpui_component::input::{Editor, EditorState as CodeEditorState, Textarea, TextareaState};
 use gpui_component::menu::{DropdownMenu as _, PopupMenuItem};
 use zest_core::models::{KeyValuePair, MultipartItem, RequestBody};
-
-pub(crate) fn persist_active_request_without_redraw(
-    editor: &Entity<RequestSessionState>,
-    persistence: Option<&Entity<PersistenceState>>,
-    workspace: Option<&Entity<WorkspaceDataState>>,
-    cx: &mut App,
-) {
-    let req_id = editor.read(cx).active_request_id().to_string();
-    if req_id != "scratch" && !req_id.is_empty() {
-        if let (Some(persistence), Some(workspace)) = (persistence, workspace) {
-            let ed = editor.clone();
-            let ws = workspace.clone();
-            persistence.update(cx, |p, cx| {
-                p.schedule_save_active_request(req_id, ed, ws, cx)
-            });
-        }
-    }
-}
 
 pub(crate) fn clamp_char_boundary_left(s: &str, mut idx: usize) -> usize {
     if idx >= s.len() {
@@ -70,7 +51,6 @@ pub struct BodyEditor {
     xml_editor: Entity<CodeEditorState>,
     raw_textarea: Entity<TextareaState>,
     workspace_state: Option<Entity<WorkspaceDataState>>,
-    persistence_state: Option<Entity<PersistenceState>>,
     env_state: Option<Entity<EnvironmentState>>,
     modal_state: Option<Entity<ModalState>>,
     toast_state: Option<Entity<ToastState>>,
@@ -89,7 +69,6 @@ impl BodyEditor {
             xml_editor,
             raw_textarea,
             workspace_state: None,
-            persistence_state: None,
             env_state: None,
             modal_state: None,
             toast_state: None,
@@ -98,11 +77,6 @@ impl BodyEditor {
 
     pub fn workspace_state(mut self, ws: Entity<WorkspaceDataState>) -> Self {
         self.workspace_state = Some(ws);
-        self
-    }
-
-    pub fn persistence_state(mut self, ps: Entity<PersistenceState>) -> Self {
-        self.persistence_state = Some(ps);
         self
     }
 
@@ -274,7 +248,7 @@ impl RenderOnce for BodyEditor {
                                             }
                                             ed_json.update(cx, |state, cx| {
                                                 state.body_dropdown_open = false;
-                                                state.bump_body_version(cx);
+                                                state.notify_body_changed(cx);
                                             });
                                         }),
                                 );
@@ -306,7 +280,7 @@ impl RenderOnce for BodyEditor {
                                             }
                                             ed_xml.update(cx, |state, cx| {
                                                 state.body_dropdown_open = false;
-                                                state.bump_body_version(cx);
+                                                state.notify_body_changed(cx);
                                             });
                                         }),
                                 );
@@ -339,7 +313,7 @@ impl RenderOnce for BodyEditor {
                                             }
                                             ed_text.update(cx, |state, cx| {
                                                 state.body_dropdown_open = false;
-                                                state.bump_body_version(cx);
+                                                state.notify_body_changed(cx);
                                             });
                                         }),
                                 );
@@ -373,7 +347,7 @@ impl RenderOnce for BodyEditor {
                                             }
                                             ed_mp.update(cx, |state, cx| {
                                                 state.body_dropdown_open = false;
-                                                state.bump_body_version(cx);
+                                                state.notify_body_changed(cx);
                                             });
                                         }),
                                 );
@@ -404,7 +378,7 @@ impl RenderOnce for BodyEditor {
                                             }
                                             ed_form.update(cx, |state, cx| {
                                                 state.body_dropdown_open = false;
-                                                state.bump_body_version(cx);
+                                                state.notify_body_changed(cx);
                                             });
                                         }),
                                 );
@@ -436,7 +410,7 @@ impl RenderOnce for BodyEditor {
                                             }
                                             ed_bin.update(cx, |state, cx| {
                                                 state.body_dropdown_open = false;
-                                                state.bump_body_version(cx);
+                                                state.notify_body_changed(cx);
                                             });
                                         }),
                                 );
@@ -601,7 +575,6 @@ impl RenderOnce for BodyEditor {
                                 pairs,
                                 &ed_entity,
                                 self.workspace_state.as_ref(),
-                                self.persistence_state.as_ref(),
                                 self.env_state.as_ref(),
                                 self.modal_state.as_ref(),
                             )
@@ -612,7 +585,6 @@ impl RenderOnce for BodyEditor {
                                     req_id_str: &req_id_str,
                                     editor_state: &ed_entity,
                                     workspace_state: self.workspace_state.as_ref(),
-                                    persistence_state: self.persistence_state.as_ref(),
                                     env_state: self.env_state.as_ref(),
                                     modal_state: self.modal_state.as_ref(),
                                 },
@@ -653,7 +625,6 @@ impl RenderOnce for BodyEditor {
                                 file_path,
                                 &ed_entity,
                                 self.workspace_state.as_ref(),
-                                self.persistence_state.as_ref(),
                             )
                         }
                     }),

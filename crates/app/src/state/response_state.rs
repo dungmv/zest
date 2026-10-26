@@ -1,3 +1,4 @@
+use super::ResponseEvent;
 use gpui::Context;
 use std::sync::Arc;
 use zest_core::cache::ResponseCache;
@@ -120,6 +121,9 @@ impl ResponseState {
         cx: &mut Context<Self>,
     ) {
         self.load_for_request_internal(req_id, store);
+        cx.emit(ResponseEvent::ContentChanged {
+            sync_sent_preview: true,
+        });
         cx.notify();
     }
 
@@ -137,6 +141,9 @@ impl ResponseState {
 
     pub fn start_sending(&mut self, req_id: Option<&str>, cx: &mut Context<Self>) {
         self.start_sending_internal(req_id);
+        cx.emit(ResponseEvent::ContentChanged {
+            sync_sent_preview: true,
+        });
         cx.notify();
     }
 
@@ -154,6 +161,9 @@ impl ResponseState {
         self.current_response = Some(response);
         self.scroll_handle = gpui::UniformListScrollHandle::new();
         self.refresh_formatted_body();
+        cx.emit(ResponseEvent::ContentChanged {
+            sync_sent_preview: true,
+        });
         cx.notify();
     }
 
@@ -163,6 +173,9 @@ impl ResponseState {
 
     pub fn view_example(&mut self, example: &RequestExampleFile, cx: &mut Context<Self>) {
         self.view_example_internal(example);
+        cx.emit(ResponseEvent::ContentChanged {
+            sync_sent_preview: true,
+        });
         cx.notify();
     }
 
@@ -204,6 +217,9 @@ impl ResponseState {
         }
         self.scroll_handle = gpui::UniformListScrollHandle::new();
         self.refresh_formatted_body();
+        cx.emit(ResponseEvent::ContentChanged {
+            sync_sent_preview: true,
+        });
         cx.notify();
     }
 
@@ -305,6 +321,9 @@ impl ResponseState {
         self.current_response = response;
         self.scroll_handle = gpui::UniformListScrollHandle::new();
         self.refresh_formatted_body();
+        cx.emit(ResponseEvent::ContentChanged {
+            sync_sent_preview: true,
+        });
         cx.notify();
     }
 
@@ -314,8 +333,14 @@ impl ResponseState {
     }
 
     pub fn set_view_mode(&mut self, mode: ResponseViewMode, cx: &mut Context<Self>) {
+        if self.view_mode == mode {
+            return;
+        }
         self.view_mode = mode;
         self.refresh_formatted_body();
+        cx.emit(ResponseEvent::ContentChanged {
+            sync_sent_preview: false,
+        });
         cx.notify();
     }
 

@@ -1,5 +1,5 @@
 use crate::components::script_editor::{ScriptCompletionProvider, ScriptEditorKind};
-use crate::state::{EnvironmentState, RequestSessionState, WorkspaceDataState};
+use crate::state::{ComposerSyncScope, EnvironmentState, WorkspaceDataState};
 use gpui::{App, AppContext as _, Entity, Window};
 use gpui_component::input::{EditorState as CodeEditorState, InputState, TextareaState};
 use std::rc::Rc;
@@ -20,9 +20,6 @@ pub struct ComposerInputs {
     pub basic_pass_input: Entity<InputState>,
     pub apikey_key_input: Entity<InputState>,
     pub apikey_val_input: Entity<InputState>,
-    pub last_synced_request_id: Option<String>,
-    pub last_synced_request_version: usize,
-    pub last_synced_body_version: usize,
 }
 
 impl ComposerInputs {
@@ -97,52 +94,23 @@ impl ComposerInputs {
             basic_pass_input,
             apikey_key_input,
             apikey_val_input,
-            last_synced_request_id: None,
-            last_synced_request_version: 0,
-            last_synced_body_version: 0,
         }
     }
 
-    pub fn sync_active_request_editors(
+    pub fn sync_inputs(
         &mut self,
-        editor_state: &Entity<RequestSessionState>,
+        req_id: &str,
+        scope: ComposerSyncScope,
         workspace_state: &Entity<WorkspaceDataState>,
         env_state: &Entity<EnvironmentState>,
         window: &mut Window,
         cx: &mut App,
     ) {
-        let (req_switched, req_ver_changed, body_ver_changed, ed_body_ver, ed_req_ver, active_id) = {
-            let ed = editor_state.read(cx);
-            let active_id = ed.active_request_id().to_string();
-            let switched = match &self.last_synced_request_id {
-                Some(last_id) => last_id != &active_id,
-                None => true,
-            };
-            let req_changed = self.last_synced_request_version != ed.request_version;
-            let body_changed = self.last_synced_body_version != ed.body_version;
-            (
-                switched,
-                req_changed,
-                body_changed,
-                ed.body_version,
-                ed.request_version,
-                active_id,
-            )
-        };
-
-        if !req_switched && !req_ver_changed && !body_ver_changed {
-            return;
-        }
-
-        let Some(req) = workspace_state.read(cx).find_request(&active_id).cloned() else {
+        let Some(req) = workspace_state.read(cx).find_request(req_id).cloned() else {
             return;
         };
 
-        if req_switched || req_ver_changed {
-            self.last_synced_request_id = Some(req.id.clone());
-            self.last_synced_request_version = ed_req_ver;
-            self.last_synced_body_version = ed_body_ver;
-
+        if matches!(scope, ComposerSyncScope::All) {
             let tokenized_url = {
                 let env = env_state.read(cx);
                 crate::components::env_autocomplete::build_tokenized_content(&req.url, env)
@@ -249,38 +217,35 @@ impl ComposerInputs {
             });
         }
 
-        if req_switched || req_ver_changed || body_ver_changed {
-            self.last_synced_body_version = ed_body_ver;
-            match &req.body {
-                RequestBody::Json { content: json_str } => {
-                    self.json_editor.update(cx, |txt, cx| {
-                        txt.set_value(json_str.clone(), window, cx);
-                    });
-                }
-                RequestBody::Raw {
-                    content,
-                    content_type,
-                } => {
-                    if content_type == "application/xml" || content_type == "text/xml" {
-                        self.xml_editor.update(cx, |txt, cx| {
-                            txt.set_value(content.clone(), window, cx);
-                        });
-                    }
-                    self.raw_textarea.update(cx, |txt, cx| {
+        match &req.body {
+            RequestBody::Json { content: json_str } => {
+                self.json_editor.update(cx, |txt, cx| {
+                    txt.set_value(json_str.clone(), window, cx);
+                });
+            }
+            RequestBody::Raw {
+                content,
+                content_type,
+            } => {
+                if content_type == "application/xml" || content_type == "text/xml" {
+                    self.xml_editor.update(cx, |txt, cx| {
                         txt.set_value(content.clone(), window, cx);
                     });
                 }
-                RequestBody::None
-                | RequestBody::FormUrlEncoded { .. }
-                | RequestBody::Multipart { .. }
-                | RequestBody::Binary { .. } => {
-                    self.json_editor.update(cx, |txt, cx| {
-                        txt.set_value(String::new(), window, cx);
-                    });
-                    self.raw_textarea.update(cx, |txt, cx| {
-                        txt.set_value(String::new(), window, cx);
-                    });
-                }
+                self.raw_textarea.update(cx, |txt, cx| {
+                    txt.set_value(content.clone(), window, cx);
+                });
+            }
+            RequestBody::None
+            | RequestBody::FormUrlEncoded { .. }
+            | RequestBody::Multipart { .. }
+            | RequestBody::Binary { .. } => {
+                self.json_editor.update(cx, |txt, cx| {
+                    txt.set_value(String::new(), window, cx);
+                });
+                self.raw_textarea.update(cx, |txt, cx| {
+                    txt.set_value(String::new(), window, cx);
+                });
             }
         }
     }

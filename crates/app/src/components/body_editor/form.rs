@@ -1,8 +1,5 @@
-use super::persist_active_request_without_redraw;
 use crate::components::kv_table::KvTable;
-use crate::state::{
-    EnvironmentState, ModalState, PersistenceState, RequestSessionState, WorkspaceDataState,
-};
+use crate::state::{EnvironmentState, ModalState, RequestSessionState, WorkspaceDataState};
 use gpui::{div, AnyElement, Entity, IntoElement, ParentElement, Styled};
 use gpui_component::scroll::ScrollableElement as _;
 use zest_core::models::KeyValuePair;
@@ -12,7 +9,6 @@ pub fn render_form_editor(
     pairs: &[KeyValuePair],
     editor_state: &Entity<RequestSessionState>,
     workspace_state: Option<&Entity<WorkspaceDataState>>,
-    persistence_state: Option<&Entity<PersistenceState>>,
     env_state: Option<&Entity<EnvironmentState>>,
     modal_state: Option<&Entity<ModalState>>,
 ) -> AnyElement {
@@ -21,7 +17,6 @@ pub fn render_form_editor(
     let ws_up = workspace_state.cloned();
     let ws_add = ws_up.clone();
     let ws_del = ws_up.clone();
-    let per_up = persistence_state.cloned();
     let ed_add = editor_state.clone();
     let ed_del = editor_state.clone();
     let req_id_change = req_id_str.to_string();
@@ -46,12 +41,6 @@ pub fn render_form_editor(
                     ed_up.update(cx, |state, cx| {
                         state.mark_dirty(cx);
                     });
-                    persist_active_request_without_redraw(
-                        &ed_up,
-                        per_up.as_ref(),
-                        ws_up.as_ref(),
-                        cx,
-                    );
                 },
                 move |_, cx| {
                     if let Some(ws) = &ws_add {

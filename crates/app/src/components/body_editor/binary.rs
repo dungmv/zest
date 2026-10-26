@@ -1,10 +1,9 @@
-use super::persist_active_request_without_redraw;
-use crate::state::{PersistenceState, RequestSessionState, WorkspaceDataState};
+use crate::state::{RequestSessionState, WorkspaceDataState};
 use crate::theme::theme;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, px, AnyElement, App, Entity, InteractiveElement as _, IntoElement, ParentElement,
-    StatefulInteractiveElement as _, Styled, Window,
+    div, px, AnyElement, Entity, InteractiveElement as _, IntoElement, ParentElement,
+    StatefulInteractiveElement as _, Styled,
 };
 
 pub fn format_file_size(path_str: &str) -> String {
@@ -30,7 +29,6 @@ pub fn render_binary_editor(
     file_path: &str,
     editor_state: &Entity<RequestSessionState>,
     workspace_state: Option<&Entity<WorkspaceDataState>>,
-    persistence_state: Option<&Entity<PersistenceState>>,
 ) -> AnyElement {
     let t = theme();
     let file_path = file_path.to_string();
@@ -39,7 +37,6 @@ pub fn render_binary_editor(
     let size_str = format_file_size(&file_path);
     let req_id_str = req_id_str.to_string();
     let ws_state = workspace_state.cloned();
-    let per_state = persistence_state.cloned();
 
     div()
         .size_full()
@@ -131,7 +128,6 @@ pub fn render_binary_editor(
                                 .child({
                                     let ed_pick = ed_c.clone();
                                     let ws_pick = ws_state.clone();
-                                    let per_pick = per_state.clone();
                                     let id_pick = req_id_str.clone();
                                     div()
                                         .id("btn-browse-binary-file")
@@ -147,7 +143,6 @@ pub fn render_binary_editor(
                                         .on_click(move |_, _, cx| {
                                             let ed_bg = ed_pick.clone();
                                             let ws_bg = ws_pick.clone();
-                                            let per_bg = per_pick.clone();
                                             let id_bg = id_pick.clone();
                                             cx.spawn(async move |cx| {
                                                 if let Some(file) =
@@ -169,12 +164,6 @@ pub fn render_binary_editor(
                                                         ed_bg.update(cx, |state, cx| {
                                                             state.mark_dirty(cx);
                                                         });
-                                                        persist_active_request_without_redraw(
-                                                            &ed_bg,
-                                                            per_bg.as_ref(),
-                                                            ws_bg.as_ref(),
-                                                            cx,
-                                                        );
                                                     });
                                                 }
                                             })
@@ -185,7 +174,6 @@ pub fn render_binary_editor(
                                 .when(has_file, |this| {
                                     let ed_clr = ed_c.clone();
                                     let ws_clr = ws_state.clone();
-                                    let per_clr = per_state.clone();
                                     let id_clr = req_id_str.clone();
                                     this.child(
                                         div()
@@ -211,12 +199,6 @@ pub fn render_binary_editor(
                                                 ed_clr.update(cx, |state, cx| {
                                                     state.mark_dirty(cx);
                                                 });
-                                                persist_active_request_without_redraw(
-                                                    &ed_clr,
-                                                    per_clr.as_ref(),
-                                                    ws_clr.as_ref(),
-                                                    cx,
-                                                );
                                             })
                                             .child("Clear"),
                                     )

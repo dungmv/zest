@@ -1,3 +1,4 @@
+use super::WorkspaceEvent;
 use crate::settings::AppSettings;
 use gpui::Context;
 use std::collections::HashMap;
@@ -159,6 +160,16 @@ impl WorkspaceDataState {
         self.recent_workspaces = settings.recent_workspaces;
 
         self.reload_all();
+        let workspace_name = self
+            .active_workspace
+            .as_ref()
+            .map(|w| w.name.clone())
+            .unwrap_or_else(|| "Workspace".to_string());
+        cx.emit(WorkspaceEvent::WorkspaceOpened {
+            path: self.workspace_path.clone(),
+            workspace_name,
+            store: self.store.clone(),
+        });
         cx.notify();
     }
 
@@ -180,6 +191,7 @@ impl WorkspaceDataState {
             &options,
         )?;
         self.reload_tree();
+        cx.emit(WorkspaceEvent::RequestsReloaded { req_ids: None });
         cx.notify();
         Ok(summary)
     }

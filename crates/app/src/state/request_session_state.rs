@@ -1,3 +1,4 @@
+use super::{ComposerSyncScope, SessionEvent};
 use gpui::{Context, Task};
 use tokio::sync::oneshot;
 use zest_core::models::HttpRequestItem;
@@ -20,12 +21,9 @@ pub struct RequestSessionState {
     pub running_request_id: Option<String>,
     pub send_progress: Option<String>,
     pub cancel_tx: Option<oneshot::Sender<()>>,
-    pub is_dirty: bool,
     pub body_dropdown_open: bool,
     pub auth_dropdown_open: bool,
     pub script_error: Option<String>,
-    pub body_version: usize,
-    pub request_version: usize,
     input_refresh_task: Option<Task<()>>,
 }
 
@@ -38,12 +36,9 @@ impl RequestSessionState {
             running_request_id: None,
             send_progress: None,
             cancel_tx: None,
-            is_dirty: false,
             body_dropdown_open: false,
             auth_dropdown_open: false,
             script_error: None,
-            body_version: 0,
-            request_version: 0,
             input_refresh_task: None,
         }
     }
@@ -53,10 +48,13 @@ impl RequestSessionState {
     }
 
     pub fn set_active_request_id(&mut self, req_id: &str, cx: &mut Context<Self>) {
+        if self.active_request_id.as_deref() == Some(req_id) {
+            return;
+        }
         self.active_request_id = Some(req_id.to_string());
-        self.is_dirty = false;
-        self.request_version = self.request_version.wrapping_add(1);
-        self.body_version = self.body_version.wrapping_add(1);
+        cx.emit(SessionEvent::ActiveRequestChanged {
+            req_id: req_id.to_string(),
+        });
         cx.notify();
     }
 
@@ -88,21 +86,34 @@ impl RequestSessionState {
     }
 
     pub fn mark_dirty(&mut self, cx: &mut Context<Self>) {
-        if !self.is_dirty {
-            self.is_dirty = true;
-            cx.notify();
-        }
-    }
-
-    pub fn bump_request_version(&mut self, cx: &mut Context<Self>) {
-        self.request_version = self.request_version.wrapping_add(1);
-        self.is_dirty = true;
+        let req_id = self.active_request_id().to_string();
+        cx.emit(SessionEvent::RequestModified {
+            req_id,
+            sync_inputs: None,
+        });
         cx.notify();
     }
 
-    pub fn bump_body_version(&mut self, cx: &mut Context<Self>) {
-        self.body_version = self.body_version.wrapping_add(1);
-        self.is_dirty = true;
+    pub fn notify_request_reloaded(&mut self, cx: &mut Context<Self>) {
+        let req_id = self.active_request_id().to_string();
+        cx.emit(SessionEvent::RequestModified {
+            req_id,
+            sync_inputs: Some(ComposerSyncScope::All),
+        });
+        cx.notify();
+    }
+
+    pub fn notify_body_changed(&mut self, cx: &mut Context<Self>) {
+        let req_id = self.active_request_id().to_string();
+        cx.emit(SessionEvent::RequestModified {
+            req_id,
+            sync_inputs: Some(ComposerSyncScope::BodyOnly),
+        });
+        cx.notify();
+    }
+
+    pub fn sync_composer_inputs(&mut self, scope: ComposerSyncScope, cx: &mut Context<Self>) {
+        cx.emit(SessionEvent::SyncComposerInputs { scope });
         cx.notify();
     }
 
@@ -228,9 +239,6 @@ mod tests {
     fn test_editor_state_initial_and_active_request() {
         let mut editor = RequestSessionState::new();
         assert_eq!(editor.active_request_id(), "scratch");
-        assert!(!editor.is_dirty);
-        assert_eq!(editor.request_version, 0);
-        assert_eq!(editor.body_version, 0);
 
         editor.active_request_id = Some("req_1".to_string());
         assert_eq!(editor.active_request_id(), "req_1");

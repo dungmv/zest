@@ -1,13 +1,16 @@
 use super::composer_inputs::ComposerInputs;
-use super::sync::save_active_request_without_redraw;
+use super::workspace_event_handler::{
+    handle_environment_event, handle_response_event, handle_session_event, handle_workspace_event,
+};
 use super::AppView;
 use crate::state::{
-    EnvironmentState, GitState, ModalState, PersistenceState, RequestSessionState, ResponseState,
-    SidebarState, ToastState, WorkspaceDataState,
+    EnvironmentEvent, EnvironmentState, GitState, ModalState, PersistenceState,
+    RequestSessionState, ResponseEvent, ResponseState, SessionEvent, SidebarState, ToastState,
+    WorkspaceDataState, WorkspaceEvent,
 };
 use gpui::*;
 use gpui_component::input::InputEvent;
-use zest_core::models::{Auth, HttpRequestItem, RequestBody};
+use zest_core::models::{Auth, RequestBody};
 
 pub struct SubscriptionTargets<'a> {
     pub workspace_state: &'a Entity<WorkspaceDataState>,
@@ -25,7 +28,6 @@ pub struct SubscriptionTargets<'a> {
 
 pub fn setup_app_subscriptions(
     targets: SubscriptionTargets,
-    initial_req: Option<&HttpRequestItem>,
     window: &mut Window,
     cx: &mut Context<AppView>,
 ) -> Vec<Subscription> {
@@ -33,7 +35,6 @@ pub fn setup_app_subscriptions(
 
     let editor_state = targets.editor_state;
     let workspace_state = targets.workspace_state;
-    let persistence_state = targets.persistence_state;
     let url_input = &targets.composer_inputs.url_input;
     let json_editor = &targets.composer_inputs.json_editor;
     let xml_editor = &targets.composer_inputs.xml_editor;
@@ -50,7 +51,6 @@ pub fn setup_app_subscriptions(
     // 1. Subscribe to URL input change
     let ed_url = editor_state.clone();
     let ws_url = workspace_state.clone();
-    let per_url = persistence_state.clone();
     subscriptions.push(
         cx.subscribe(url_input, move |this, input, event, cx| match event {
             InputEvent::Change => {
@@ -72,10 +72,8 @@ pub fn setup_app_subscriptions(
                                 });
                             });
                             ed_url.update(cx, |ed, cx| {
-                                ed.bump_request_version(cx);
-                                ed.bump_body_version(cx);
+                                ed.notify_request_reloaded(cx);
                             });
-                            save_active_request_without_redraw(&ed_url, &per_url, &ws_url, cx);
                             this.state.toast.update(cx, |t, cx| {
                                 t.push_success(
                                     "cURL Imported",
@@ -108,12 +106,11 @@ pub fn setup_app_subscriptions(
                     });
                 });
                 ed_url.update(cx, |ed, cx| {
-                    ed.is_dirty = true;
+                    ed.mark_dirty(cx);
                     if needs_refresh {
                         ed.schedule_input_refresh(cx);
                     }
                 });
-                save_active_request_without_redraw(&ed_url, &per_url, &ws_url, cx);
             }
             InputEvent::PressEnter { .. } => {
                 this.send_current_request(cx);
@@ -125,7 +122,6 @@ pub fn setup_app_subscriptions(
     // 2. Subscribe to JSON editor change
     let ed_json = editor_state.clone();
     let ws_json = workspace_state.clone();
-    let per_json = persistence_state.clone();
     subscriptions.push(cx.subscribe(json_editor, move |_, txt, event, cx| {
         if let InputEvent::Change = event {
             let val = txt.read(cx).value().to_string();
@@ -134,14 +130,12 @@ pub fn setup_app_subscriptions(
                 ws.update_active_request(&active_id, |r| r.set_body_json(val));
             });
             ed_json.update(cx, |ed, cx| ed.mark_dirty(cx));
-            save_active_request_without_redraw(&ed_json, &per_json, &ws_json, cx);
         }
     }));
 
     // 2b. Subscribe to XML editor change
     let ed_xml = editor_state.clone();
     let ws_xml = workspace_state.clone();
-    let per_xml = persistence_state.clone();
     subscriptions.push(cx.subscribe(xml_editor, move |_, txt, event, cx| {
         if let InputEvent::Change = event {
             let val = txt.read(cx).value().to_string();
@@ -152,14 +146,12 @@ pub fn setup_app_subscriptions(
                 });
             });
             ed_xml.update(cx, |ed, cx| ed.mark_dirty(cx));
-            save_active_request_without_redraw(&ed_xml, &per_xml, &ws_xml, cx);
         }
     }));
 
     // 3. Subscribe to Raw textarea change
     let ed_raw = editor_state.clone();
     let ws_raw = workspace_state.clone();
-    let per_raw = persistence_state.clone();
     subscriptions.push(cx.subscribe(raw_textarea, move |_, txt, event, cx| {
         if let InputEvent::Change = event {
             let val = txt.read(cx).value().to_string();
@@ -174,14 +166,12 @@ pub fn setup_app_subscriptions(
                 });
             });
             ed_raw.update(cx, |ed, cx| ed.mark_dirty(cx));
-            save_active_request_without_redraw(&ed_raw, &per_raw, &ws_raw, cx);
         }
     }));
 
     // 3b. Subscribe to Auth inputs
     let ed_bearer = editor_state.clone();
     let ws_bearer = workspace_state.clone();
-    let per_bearer = persistence_state.clone();
     subscriptions.push(cx.subscribe(bearer_token_input, move |_, inp, event, cx| {
         if let InputEvent::Change = event {
             let val = inp.read(cx).value().to_string();
@@ -198,18 +188,16 @@ pub fn setup_app_subscriptions(
                 });
             });
             ed_bearer.update(cx, |ed, cx| {
-                ed.is_dirty = true;
+                ed.mark_dirty(cx);
                 if needs_refresh {
                     ed.schedule_input_refresh(cx);
                 }
             });
-            save_active_request_without_redraw(&ed_bearer, &per_bearer, &ws_bearer, cx);
         }
     }));
 
     let ed_basic_u = editor_state.clone();
     let ws_basic_u = workspace_state.clone();
-    let per_basic_u = persistence_state.clone();
     let pass_ref = basic_pass_input.clone();
     subscriptions.push(cx.subscribe(basic_user_input, move |_, inp, event, cx| {
         if let InputEvent::Change = event {
@@ -230,18 +218,16 @@ pub fn setup_app_subscriptions(
                 });
             });
             ed_basic_u.update(cx, |ed, cx| {
-                ed.is_dirty = true;
+                ed.mark_dirty(cx);
                 if needs_refresh {
                     ed.schedule_input_refresh(cx);
                 }
             });
-            save_active_request_without_redraw(&ed_basic_u, &per_basic_u, &ws_basic_u, cx);
         }
     }));
 
     let ed_basic_p = editor_state.clone();
     let ws_basic_p = workspace_state.clone();
-    let per_basic_p = persistence_state.clone();
     let user_ref = basic_user_input.clone();
     subscriptions.push(cx.subscribe(basic_pass_input, move |_, inp, event, cx| {
         if let InputEvent::Change = event {
@@ -262,18 +248,16 @@ pub fn setup_app_subscriptions(
                 });
             });
             ed_basic_p.update(cx, |ed, cx| {
-                ed.is_dirty = true;
+                ed.mark_dirty(cx);
                 if needs_refresh {
                     ed.schedule_input_refresh(cx);
                 }
             });
-            save_active_request_without_redraw(&ed_basic_p, &per_basic_p, &ws_basic_p, cx);
         }
     }));
 
     let ed_ak_k = editor_state.clone();
     let ws_ak_k = workspace_state.clone();
-    let per_ak_k = persistence_state.clone();
     let ak_val_ref = apikey_val_input.clone();
     subscriptions.push(cx.subscribe(apikey_key_input, move |_, inp, event, cx| {
         if let InputEvent::Change = event {
@@ -296,18 +280,16 @@ pub fn setup_app_subscriptions(
                 });
             });
             ed_ak_k.update(cx, |ed, cx| {
-                ed.is_dirty = true;
+                ed.mark_dirty(cx);
                 if needs_refresh {
                     ed.schedule_input_refresh(cx);
                 }
             });
-            save_active_request_without_redraw(&ed_ak_k, &per_ak_k, &ws_ak_k, cx);
         }
     }));
 
     let ed_ak_v = editor_state.clone();
     let ws_ak_v = workspace_state.clone();
-    let per_ak_v = persistence_state.clone();
     let ak_key_ref = apikey_key_input.clone();
     subscriptions.push(cx.subscribe(apikey_val_input, move |_, inp, event, cx| {
         if let InputEvent::Change = event {
@@ -330,19 +312,17 @@ pub fn setup_app_subscriptions(
                 });
             });
             ed_ak_v.update(cx, |ed, cx| {
-                ed.is_dirty = true;
+                ed.mark_dirty(cx);
                 if needs_refresh {
                     ed.schedule_input_refresh(cx);
                 }
             });
-            save_active_request_without_redraw(&ed_ak_v, &per_ak_v, &ws_ak_v, cx);
         }
     }));
 
     // 3c. Subscribe to Script editors
     let ed_pre = editor_state.clone();
     let ws_pre = workspace_state.clone();
-    let per_pre = persistence_state.clone();
     subscriptions.push(cx.subscribe(pre_script_editor, move |_, txt, event, cx| {
         if let InputEvent::Change = event {
             let val = txt.read(cx).value().to_string();
@@ -351,13 +331,11 @@ pub fn setup_app_subscriptions(
                 ws.update_active_request(&active_id, |r| r.set_pre_script(val));
             });
             ed_pre.update(cx, |ed, cx| ed.mark_dirty(cx));
-            save_active_request_without_redraw(&ed_pre, &per_pre, &ws_pre, cx);
         }
     }));
 
     let ed_test = editor_state.clone();
     let ws_test = workspace_state.clone();
-    let per_test = persistence_state.clone();
     subscriptions.push(cx.subscribe(test_script_editor, move |_, txt, event, cx| {
         if let InputEvent::Change = event {
             let val = txt.read(cx).value().to_string();
@@ -366,159 +344,49 @@ pub fn setup_app_subscriptions(
                 ws.update_active_request(&active_id, |r| r.set_test_script(val));
             });
             ed_test.update(cx, |ed, cx| ed.mark_dirty(cx));
-            save_active_request_without_redraw(&ed_test, &per_test, &ws_test, cx);
         }
     }));
 
-    // 4. Observe editor_state: sync inputs, reload response history & auto-save
-    let ws_clone = workspace_state.clone();
-    let per_clone = persistence_state.clone();
-    let resp_clone = response_state.clone();
-    let mut last_req_id = initial_req.map(|r| r.id.clone());
-    subscriptions.push(
-        cx.observe_in(editor_state, window, move |this, ed, window, cx| {
-            this.composer_inputs.sync_active_request_editors(
-                &ed,
-                &this.state.workspace,
-                &this.state.env,
-                window,
-                cx,
-            );
-
-            let (active_id, is_dirty) = {
-                let ed_ref = ed.read(cx);
-                (ed_ref.active_request_id().to_string(), ed_ref.is_dirty)
-            };
-            let is_scratch = active_id == "scratch" || active_id.is_empty();
-            if last_req_id.as_deref() != Some(&active_id) {
-                last_req_id = Some(active_id.clone());
-                // Persist the selection so the last opened request survives restarts.
-                // Scratch is transient: store None and let startup fall back to the
-                // first saved request.
-                let persisted_id = if is_scratch {
-                    None
-                } else {
-                    Some(active_id.clone())
-                };
-                per_clone.update(cx, |per, cx| {
-                    per.set_active_request(persisted_id, cx);
-                });
-                let ws_store = ws_clone.read(cx).store.clone();
-                resp_clone.update(cx, |r_state, cx| {
-                    r_state.load_for_request(&active_id, ws_store.as_ref(), cx);
-                });
-            } else if !is_scratch && is_dirty {
-                // Debounced auto-save active request to workspace storage
-                let ed_ent = ed.clone();
-                let ws_ent = ws_clone.clone();
-                per_clone.update(cx, |per, cx| {
-                    per.schedule_save_active_request(active_id, ed_ent, ws_ent, cx);
-                });
-            }
-        }),
-    );
-
-    // 5. Observe workspace_state: synchronize workspace changes
-    let ed_sync = editor_state.clone();
-    let resp_sync = response_state.clone();
-    let git_sync = targets.git_state.clone();
-    let mut last_workspace_path = workspace_state.read(cx).workspace_path.clone();
-    subscriptions.push(
-        cx.observe_in(workspace_state, window, move |this, ws, window, cx| {
-            this.composer_inputs.sync_active_request_editors(
-                &this.state.session,
-                &ws,
-                &this.state.env,
-                window,
-                cx,
-            );
-
-            let current_ws_path = ws.read(cx).workspace_path.clone();
-            if current_ws_path != last_workspace_path {
-                last_workspace_path = current_ws_path.clone();
-                git_sync.update(cx, |git, cx| {
-                    git.set_repo_path(current_ws_path, cx);
-                });
-                let (next_id, ws_store) = {
-                    let ws_ref = ws.read(cx);
-                    let per_ref = this.state.persistence.read(cx);
-                    let id = per_ref
-                        .local_state
-                        .active_request
-                        .as_ref()
-                        .and_then(|act_id| {
-                            ws_ref
-                                .requests
-                                .iter()
-                                .find(|r| &r.id == act_id)
-                                .map(|r| r.id.clone())
-                        })
-                        .or_else(|| ws_ref.requests.first().map(|r| r.id.clone()))
-                        .unwrap_or_else(|| "scratch".to_string());
-                    (id, ws_ref.store.clone())
-                };
-                ed_sync.update(cx, |ed, cx| {
-                    ed.set_active_request_id(&next_id, cx);
-                });
-                resp_sync.update(cx, |resp, cx| {
-                    resp.load_for_request(&next_id, ws_store.as_ref(), cx);
-                });
-            }
-        }),
-    );
-
-    // 5b. Subscribe to workspace CRUD events
+    // 4. Subscribe to typed state events (synchronous, single-dispatch command channel)
+    subscriptions.push(cx.subscribe_in(
+        editor_state,
+        window,
+        |this, _ed, event: &SessionEvent, window, cx| {
+            handle_session_event(this, event, window, cx);
+        },
+    ));
     subscriptions.push(cx.subscribe_in(
         workspace_state,
         window,
-        |this, _ws, event: &crate::state::WorkspaceEvent, _window, cx| {
-            crate::app::workspace_event_handler::handle_workspace_event(this, event, cx);
+        |this, _ws, event: &WorkspaceEvent, window, cx| {
+            handle_workspace_event(this, event, window, cx);
+        },
+    ));
+    subscriptions.push(cx.subscribe_in(
+        response_state,
+        window,
+        |this, _resp, event: &ResponseEvent, window, cx| {
+            handle_response_event(this, event, window, cx);
+        },
+    ));
+    subscriptions.push(cx.subscribe(
+        targets.env_state,
+        |this, _env, event: &EnvironmentEvent, cx| {
+            handle_environment_event(this, event, cx);
         },
     ));
 
-    // 6. Observe response_state: synchronize displays & re-render on response/example changes
-    subscriptions.push(
-        cx.observe_in(response_state, window, move |this, resp, window, cx| {
-            this.inspector_displays
-                .sync_response_editor(&resp, window, cx);
-            this.inspector_displays
-                .sync_sent_request_preview(&resp, window, cx);
-            cx.notify();
-        }),
-    );
+    // 5. Pure redraw observers: re-render AppView on entity state changes
+    subscriptions.push(cx.observe(editor_state, |_, _, cx| cx.notify()));
+    subscriptions.push(cx.observe(workspace_state, |_, _, cx| cx.notify()));
+    subscriptions.push(cx.observe(response_state, |_, _, cx| cx.notify()));
+    subscriptions.push(cx.observe(targets.sidebar_state, |_, _, cx| cx.notify()));
+    subscriptions.push(cx.observe(targets.modal_state, |_, _, cx| cx.notify()));
+    subscriptions.push(cx.observe(targets.git_state, |_, _, cx| cx.notify()));
+    subscriptions.push(cx.observe(targets.env_state, |_, _, cx| cx.notify()));
+    subscriptions.push(cx.observe(targets.persistence_state, |_, _, cx| cx.notify()));
 
-    // 7. Observe sidebar_state, modal_state, git_state, env_state, persistence_state: re-render AppView on UI changes
-    subscriptions.push(cx.observe(targets.sidebar_state, |_, _, cx| {
-        cx.notify();
-    }));
-    subscriptions.push(cx.observe(targets.modal_state, |_, _, cx| {
-        cx.notify();
-    }));
-    subscriptions.push(cx.observe(targets.git_state, |_, _, cx| {
-        cx.notify();
-    }));
-    // Persist the selected environment so it survives restarts (same mechanism as
-    // the active request above).
-    let env_entity = targets.env_state.clone();
-    let mut last_env_id = env_entity.read(cx).active_environment_id.clone();
-    let env_persist = persistence_state.clone();
-    subscriptions.push(
-        cx.observe(&env_entity, move |_, env: Entity<EnvironmentState>, cx| {
-            let next_env_id = env.read(cx).active_environment_id.clone();
-            if next_env_id != last_env_id {
-                last_env_id = next_env_id.clone();
-                env_persist.update(cx, |per, cx| {
-                    per.set_active_environment(next_env_id, cx);
-                });
-            }
-            cx.notify();
-        }),
-    );
-    subscriptions.push(cx.observe(targets.persistence_state, |_, _, cx| {
-        cx.notify();
-    }));
-
-    // 8. Observe OS appearance changes for System theme preference
+    // 6. Observe OS appearance changes for System theme preference
     let modal_theme = targets.modal_state.clone();
     subscriptions.push(window.observe_window_appearance(move |window, cx| {
         let app_appearance = window.appearance();
