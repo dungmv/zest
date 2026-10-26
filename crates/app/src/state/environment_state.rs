@@ -74,6 +74,17 @@ impl EnvironmentState {
 
         self.environments = envs;
 
+        let global_file = self.store.load_global_environment().unwrap_or_default();
+        let global_secrets = match self.store.load_global_secrets() {
+            Ok(s) => s,
+            Err(e) => {
+                self.corrupt_secrets_warning = Some(format!("{}", e));
+                HashMap::new()
+            }
+        };
+        self.global_environment =
+            global_file.to_environment("globals", &ws_name, "Globals", &global_secrets);
+
         if let Some(act) = &self.active_environment_id {
             if !self
                 .environments
@@ -169,7 +180,166 @@ impl EnvironmentState {
     pub fn save_global_environment(&mut self, env: Environment, cx: &mut Context<Self>) {
         self.global_environment = env;
         self.invalidate_cache();
+        cx.emit(EnvironmentEvent::GlobalsModified);
         cx.notify();
+    }
+
+    pub fn update_variable_key(
+        &mut self,
+        env_id: &str,
+        idx: usize,
+        new_key: String,
+        cx: &mut Context<Self>,
+    ) {
+        if env_id == "globals" {
+            if let Some(vr) = self.global_environment.variables.get_mut(idx) {
+                vr.key = new_key;
+                self.invalidate_cache();
+                cx.emit(EnvironmentEvent::GlobalsModified);
+                cx.notify();
+            }
+        } else if let Some(e) = self
+            .environments
+            .iter_mut()
+            .find(|x| x.id == env_id || x.name == env_id)
+        {
+            if let Some(vr) = e.variables.get_mut(idx) {
+                vr.key = new_key;
+                let env_name = e.name.clone();
+                self.invalidate_cache();
+                cx.emit(EnvironmentEvent::EnvironmentModified(env_name));
+                cx.notify();
+            }
+        }
+    }
+
+    pub fn update_variable_initial_value(
+        &mut self,
+        env_id: &str,
+        idx: usize,
+        new_val: String,
+        cx: &mut Context<Self>,
+    ) {
+        if env_id == "globals" {
+            if let Some(vr) = self.global_environment.variables.get_mut(idx) {
+                vr.initial_value = new_val;
+                self.invalidate_cache();
+                cx.emit(EnvironmentEvent::GlobalsModified);
+                cx.notify();
+            }
+        } else if let Some(e) = self
+            .environments
+            .iter_mut()
+            .find(|x| x.id == env_id || x.name == env_id)
+        {
+            if let Some(vr) = e.variables.get_mut(idx) {
+                vr.initial_value = new_val;
+                let env_name = e.name.clone();
+                self.invalidate_cache();
+                cx.emit(EnvironmentEvent::EnvironmentModified(env_name));
+                cx.notify();
+            }
+        }
+    }
+
+    pub fn update_variable_current_value(
+        &mut self,
+        env_id: &str,
+        idx: usize,
+        new_val: String,
+        cx: &mut Context<Self>,
+    ) {
+        if env_id == "globals" {
+            if let Some(vr) = self.global_environment.variables.get_mut(idx) {
+                vr.current_value = new_val;
+                self.invalidate_cache();
+                cx.emit(EnvironmentEvent::GlobalsModified);
+                cx.notify();
+            }
+        } else if let Some(e) = self
+            .environments
+            .iter_mut()
+            .find(|x| x.id == env_id || x.name == env_id)
+        {
+            if let Some(vr) = e.variables.get_mut(idx) {
+                vr.current_value = new_val;
+                let env_name = e.name.clone();
+                self.invalidate_cache();
+                cx.emit(EnvironmentEvent::EnvironmentModified(env_name));
+                cx.notify();
+            }
+        }
+    }
+
+    pub fn toggle_variable_secret(&mut self, env_id: &str, idx: usize, cx: &mut Context<Self>) {
+        if env_id == "globals" {
+            if let Some(vr) = self.global_environment.variables.get_mut(idx) {
+                vr.secret = !vr.secret;
+                self.invalidate_cache();
+                cx.emit(EnvironmentEvent::GlobalsModified);
+                cx.notify();
+            }
+        } else if let Some(e) = self
+            .environments
+            .iter_mut()
+            .find(|x| x.id == env_id || x.name == env_id)
+        {
+            if let Some(vr) = e.variables.get_mut(idx) {
+                vr.secret = !vr.secret;
+                let env_name = e.name.clone();
+                self.invalidate_cache();
+                cx.emit(EnvironmentEvent::EnvironmentModified(env_name));
+                cx.notify();
+            }
+        }
+    }
+
+    pub fn add_variable(&mut self, env_id: &str, cx: &mut Context<Self>) {
+        let new_var = zest_core::models::EnvironmentVariable {
+            key: "".to_string(),
+            initial_value: "".to_string(),
+            current_value: "".to_string(),
+            secret: false,
+        };
+        if env_id == "globals" {
+            self.global_environment.variables.push(new_var);
+            self.invalidate_cache();
+            cx.emit(EnvironmentEvent::GlobalsModified);
+            cx.notify();
+        } else if let Some(e) = self
+            .environments
+            .iter_mut()
+            .find(|x| x.id == env_id || x.name == env_id)
+        {
+            e.variables.push(new_var);
+            let env_name = e.name.clone();
+            self.invalidate_cache();
+            cx.emit(EnvironmentEvent::EnvironmentModified(env_name));
+            cx.notify();
+        }
+    }
+
+    pub fn delete_variable(&mut self, env_id: &str, idx: usize, cx: &mut Context<Self>) {
+        if env_id == "globals" {
+            if idx < self.global_environment.variables.len() {
+                self.global_environment.variables.remove(idx);
+                self.invalidate_cache();
+                cx.emit(EnvironmentEvent::GlobalsModified);
+                cx.notify();
+            }
+        } else if let Some(e) = self
+            .environments
+            .iter_mut()
+            .find(|x| x.id == env_id || x.name == env_id)
+        {
+            if idx < e.variables.len() {
+                e.variables.remove(idx);
+                let env_name = e.name.clone();
+                self.invalidate_cache();
+                cx.emit(EnvironmentEvent::EnvironmentModified(env_name));
+                cx.notify();
+            }
+        }
     }
 
     pub fn create_environment(&mut self, name: Option<String>, cx: &mut Context<Self>) -> String {

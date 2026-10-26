@@ -611,7 +611,9 @@ impl WorkspaceStore for FsWorkspaceStore {
                 let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
                 if ext == "yaml" || ext == "yml" {
                     if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                        list.push(stem.to_string());
+                        if stem != "globals" && !stem.starts_with('.') {
+                            list.push(stem.to_string());
+                        }
                     }
                 }
             }
@@ -734,6 +736,7 @@ impl WorkspaceStore for FsWorkspaceStore {
     fn save_secrets(&self, env_name: &str, secrets: &HashMap<String, String>) -> Result<()> {
         std::fs::create_dir_all(self.secrets_dir())?;
         let path = self.secrets_dir().join(format!("{}.yaml", env_name));
+        self.suppress_path(&path);
         let yaml = to_yaml_string(secrets)?;
         atomic_write_str(&path, &yaml)?;
         Ok(())

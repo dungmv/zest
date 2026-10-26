@@ -270,6 +270,74 @@ mod tests {
     }
 
     #[test]
+    fn test_globals_persistence_and_secret_split() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("test_globals_{}", uuid::Uuid::new_v4().simple()));
+        let store = FsWorkspaceStore::new(&temp_dir);
+        store.init_workspace("Test Globals").unwrap();
+
+        // 1. Initial state: no globals.yaml -> loads default empty
+        let initial_globals = store.load_global_environment().unwrap();
+        assert!(initial_globals.variables.is_empty());
+
+        // 2. Save globals with public and secret variables
+        let globals = EnvironmentFile {
+            variables: vec![
+                EnvVarFile {
+                    name: "api_url".to_string(),
+                    value: Some("https://api.example.com".to_string()),
+                    secret: false,
+                    enabled: true,
+                },
+                EnvVarFile {
+                    name: "global_token".to_string(),
+                    value: Some("top_secret_token_999".to_string()),
+                    secret: true,
+                    enabled: true,
+                },
+            ],
+        };
+        store.save_global_environment(&globals).unwrap();
+
+        // 3. Inspect committed file: public value present, secret value stripped
+        let committed_path = store.environments_dir().join("globals.yaml");
+        assert!(committed_path.exists());
+        let committed_raw = std::fs::read_to_string(&committed_path).unwrap();
+        assert!(committed_raw.contains("https://api.example.com"));
+        assert!(
+            !committed_raw.contains("top_secret_token_999"),
+            "Global secrets must not appear in environments/globals.yaml"
+        );
+
+        // 4. Inspect .local/secrets/globals.yaml
+        let secret_path = store.secrets_dir().join("globals.yaml");
+        assert!(secret_path.exists());
+        let secret_raw = std::fs::read_to_string(&secret_path).unwrap();
+        assert!(secret_raw.contains("top_secret_token_999"));
+
+        // 5. list_environments() must NOT list "globals"
+        let env_list = store.list_environments().unwrap();
+        assert!(!env_list.contains(&"globals".to_string()));
+
+        // 6. Reload globals through store: secret value is merged back
+        let loaded = store.load_global_environment().unwrap();
+        let pub_v = loaded
+            .variables
+            .iter()
+            .find(|v| v.name == "api_url")
+            .unwrap();
+        assert_eq!(pub_v.value.as_deref(), Some("https://api.example.com"));
+        let sec_v = loaded
+            .variables
+            .iter()
+            .find(|v| v.name == "global_token")
+            .unwrap();
+        assert_eq!(sec_v.value.as_deref(), Some("top_secret_token_999"));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
     fn test_request_lifecycle_and_orphan_loc_cleanup() {
         let temp_dir =
             std::env::temp_dir().join(format!("test_life_{}", uuid::Uuid::new_v4().simple()));

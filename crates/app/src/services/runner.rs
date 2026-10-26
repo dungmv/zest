@@ -150,8 +150,14 @@ impl Runner {
                                                 act_env.variables.retain(|v| v.key != *k);
                                             }
                                         }
-                                        let envs = env.environments.clone();
-                                        env.save_environments(envs, cx);
+                                        let act_name = act_env.name.clone();
+                                        env.invalidate_cache();
+                                        cx.emit(
+                                            crate::state::EnvironmentEvent::EnvironmentModified(
+                                                act_name,
+                                            ),
+                                        );
+                                        cx.notify();
                                     } else {
                                         for (k, v_opt) in &all_mutations {
                                             if let Some(val) = v_opt {
@@ -178,8 +184,9 @@ impl Runner {
                                                     .retain(|v| v.key != *k);
                                             }
                                         }
-                                        let global = env.global_environment.clone();
-                                        env.save_global_environment(global, cx);
+                                        env.invalidate_cache();
+                                        cx.emit(crate::state::EnvironmentEvent::GlobalsModified);
+                                        cx.notify();
                                     }
                                 });
                             }

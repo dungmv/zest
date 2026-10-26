@@ -113,6 +113,7 @@ fn render_flat_sidebar_row(row: &FlatSidebarRow, ctx: &SidebarRenderContext) -> 
                             let item = state.pins.remove(from_idx);
                             state.pins.insert(to_idx, item);
                             let _ = state.store.save_pins(&state.pins);
+                            cx.emit(crate::state::WorkspaceEvent::PinsModified);
                             state.bump_tree_version();
                             cx.notify();
                         }

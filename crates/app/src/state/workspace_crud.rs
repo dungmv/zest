@@ -491,6 +491,7 @@ impl WorkspaceDataState {
 
     pub fn rename_workspace(&mut self, new_name: String, cx: &mut Context<Self>) {
         if self.rename_workspace_internal(&new_name) {
+            cx.emit(crate::state::WorkspaceEvent::WorkspaceMetaModified);
             cx.notify();
         }
     }
@@ -552,6 +553,7 @@ impl WorkspaceDataState {
             self.pins.push(req_id.to_string());
         }
         let _ = self.store.save_pins(&self.pins);
+        cx.emit(crate::state::WorkspaceEvent::PinsModified);
         self.bump_tree_version();
         cx.notify();
     }
@@ -563,6 +565,7 @@ impl WorkspaceDataState {
     pub fn reorder_pins(&mut self, new_pins: Vec<String>, cx: &mut Context<Self>) {
         self.pins = new_pins;
         let _ = self.store.save_pins(&self.pins);
+        cx.emit(crate::state::WorkspaceEvent::PinsModified);
         self.bump_tree_version();
         cx.notify();
     }

@@ -73,25 +73,15 @@ impl EnvVarTableState {
         let sub1 = cx.subscribe_in(&k_in, window, move |this, _, ev, _, cx| {
             if let InputEvent::Change = ev {
                 let nk = k_ent1.read(cx).value().to_string();
-                let cid = cur_id1.clone();
+                let cid = if is_glob1 {
+                    "globals".to_string()
+                } else {
+                    cur_id1.clone()
+                };
                 let pos = this.rows.iter().position(|r| r.key_input == k_ent1);
                 if let Some(idx) = pos {
-                    ws_up_k.update(cx, |state, _cx| {
-                        if is_glob1 {
-                            let mut g = state.global_environment.clone();
-                            if let Some(vr) = g.variables.get_mut(idx) {
-                                vr.key = nk;
-                            }
-                            state.save_global_environment_silently(g);
-                        } else {
-                            let mut list = state.environments.clone();
-                            if let Some(e) = list.iter_mut().find(|x| x.id == cid) {
-                                if let Some(vr) = e.variables.get_mut(idx) {
-                                    vr.key = nk;
-                                }
-                            }
-                            state.save_environments_debounced(list, _cx);
-                        }
+                    ws_up_k.update(cx, |state, cx| {
+                        state.update_variable_key(&cid, idx, nk, cx);
                     });
                 }
             }
@@ -104,25 +94,15 @@ impl EnvVarTableState {
         let sub2 = cx.subscribe_in(&init_in, window, move |this, _, ev, _, cx| {
             if let InputEvent::Change = ev {
                 let n_init = init_ent2.read(cx).value().to_string();
-                let cid = cur_id2.clone();
+                let cid = if is_glob2 {
+                    "globals".to_string()
+                } else {
+                    cur_id2.clone()
+                };
                 let pos = this.rows.iter().position(|r| r.init_input == init_ent2);
                 if let Some(idx) = pos {
-                    ws_up_init.update(cx, |state, _cx| {
-                        if is_glob2 {
-                            let mut g = state.global_environment.clone();
-                            if let Some(vr) = g.variables.get_mut(idx) {
-                                vr.initial_value = n_init;
-                            }
-                            state.save_global_environment_silently(g);
-                        } else {
-                            let mut list = state.environments.clone();
-                            if let Some(e) = list.iter_mut().find(|x| x.id == cid) {
-                                if let Some(vr) = e.variables.get_mut(idx) {
-                                    vr.initial_value = n_init;
-                                }
-                            }
-                            state.save_environments_debounced(list, _cx);
-                        }
+                    ws_up_init.update(cx, |state, cx| {
+                        state.update_variable_initial_value(&cid, idx, n_init, cx);
                     });
                 }
             }
@@ -135,25 +115,15 @@ impl EnvVarTableState {
         let sub3 = cx.subscribe_in(&curr_in, window, move |this, _, ev, _, cx| {
             if let InputEvent::Change = ev {
                 let n_curr = curr_ent3.read(cx).value().to_string();
-                let cid = cur_id3.clone();
+                let cid = if is_glob3 {
+                    "globals".to_string()
+                } else {
+                    cur_id3.clone()
+                };
                 let pos = this.rows.iter().position(|r| r.curr_input == curr_ent3);
                 if let Some(idx) = pos {
-                    ws_up_curr.update(cx, |state, _cx| {
-                        if is_glob3 {
-                            let mut g = state.global_environment.clone();
-                            if let Some(vr) = g.variables.get_mut(idx) {
-                                vr.current_value = n_curr;
-                            }
-                            state.save_global_environment_silently(g);
-                        } else {
-                            let mut list = state.environments.clone();
-                            if let Some(e) = list.iter_mut().find(|x| x.id == cid) {
-                                if let Some(vr) = e.variables.get_mut(idx) {
-                                    vr.current_value = n_curr;
-                                }
-                            }
-                            state.save_environments_debounced(list, _cx);
-                        }
+                    ws_up_curr.update(cx, |state, cx| {
+                        state.update_variable_current_value(&cid, idx, n_curr, cx);
                     });
                 }
             }
@@ -779,23 +749,10 @@ impl RenderOnce for EnvironmentModal {
                                                             .font_weight(gpui::FontWeight::MEDIUM)
                                                             .on_click(move |_, _, cx| {
                                                                 ws_add.update(cx, |state, cx| {
-                                                                    let new_var = EnvironmentVariable {
-                                                                        key: "".to_string(),
-                                                                        initial_value: "".to_string(),
-                                                                        current_value: "".to_string(),
-                                                                        secret: false,
-                                                                    };
-                                                                    if is_glob {
-                                                                        let mut g = state.global_environment.clone();
-                                                                        g.variables.push(new_var);
-                                                                        state.save_global_environment(g, cx);
-                                                                    } else {
-                                                                        let mut list = state.environments.clone();
-                                                                        if let Some(e) = list.iter_mut().find(|x| x.id == cur_id) {
-                                                                            e.variables.push(new_var);
-                                                                        }
-                                                                        state.save_environments(list, cx);
-                                                                    }
+                                                                    state.add_variable(
+                                                                        if is_glob { "globals" } else { &cur_id },
+                                                                        cx,
+                                                                    );
                                                                 });
                                                             })
                                                             .child("+ Add Variable")
@@ -1034,21 +991,11 @@ impl RenderOnce for EnvironmentModal {
                                                                                 });
                                                                                 let cid = cur_id_s.clone();
                                                                                 ws_secret.update(cx, |state, cx| {
-                                                                                    if is_glob {
-                                                                                        let mut g = state.global_environment.clone();
-                                                                                        if let Some(vr) = g.variables.get_mut(pos) {
-                                                                                            vr.secret = next_sec;
-                                                                                        }
-                                                                                        state.save_global_environment(g, cx);
-                                                                                    } else {
-                                                                                        let mut list = state.environments.clone();
-                                                                                        if let Some(e) = list.iter_mut().find(|x| x.id == cid) {
-                                                                                            if let Some(vr) = e.variables.get_mut(pos) {
-                                                                                                vr.secret = next_sec;
-                                                                                            }
-                                                                                        }
-                                                                                        state.save_environments(list, cx);
-                                                                                    }
+                                                                                    state.toggle_variable_secret(
+                                                                                        if is_glob { "globals" } else { &cid },
+                                                                                        pos,
+                                                                                        cx,
+                                                                                    );
                                                                                 });
                                                                             }
                                                                         })
@@ -1082,21 +1029,11 @@ impl RenderOnce for EnvironmentModal {
                                                                                 });
                                                                                 let cid = cur_id_d.clone();
                                                                                 ws_del.update(cx, |state, cx| {
-                                                                                    if is_glob {
-                                                                                        let mut g = state.global_environment.clone();
-                                                                                        if pos < g.variables.len() {
-                                                                                            g.variables.remove(pos);
-                                                                                        }
-                                                                                        state.save_global_environment(g, cx);
-                                                                                    } else {
-                                                                                        let mut list = state.environments.clone();
-                                                                                        if let Some(e) = list.iter_mut().find(|x| x.id == cid) {
-                                                                                            if pos < e.variables.len() {
-                                                                                                e.variables.remove(pos);
-                                                                                            }
-                                                                                        }
-                                                                                        state.save_environments(list, cx);
-                                                                                    }
+                                                                                    state.delete_variable(
+                                                                                        if is_glob { "globals" } else { &cid },
+                                                                                        pos,
+                                                                                        cx,
+                                                                                    );
                                                                                 });
                                                                             }
                                                                         })

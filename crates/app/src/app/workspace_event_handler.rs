@@ -129,6 +129,47 @@ pub fn handle_workspace_event(
                 t.push_error(*title, message.clone(), cx);
             });
         }
+        WorkspaceEvent::WorkspaceMetaModified => {
+            let meta = this.state.workspace.read(cx).workspace_meta.clone();
+            this.state.persistence.update(cx, |per, cx| {
+                per.schedule_save_workspace_meta(meta, cx);
+            });
+        }
+        WorkspaceEvent::FolderMetaModified(folder_rel) => {
+            let fid = folder_rel.clone();
+            let store = this.state.workspace.read(cx).store.clone();
+            let meta_opt = this
+                .state
+                .workspace
+                .read(cx)
+                .folders
+                .iter()
+                .find(|f| f.id == fid)
+                .map(|f| {
+                    let mut meta = store.load_folder_meta(&fid).unwrap_or_else(|_| {
+                        zest_core::storage::models::FolderFile {
+                            name: f.name.clone(),
+                            order: Vec::new(),
+                            headers: Vec::new(),
+                            auth: zest_core::models::Auth::Inherit,
+                        }
+                    });
+                    meta.headers = f.headers.clone();
+                    meta.auth = f.auth.clone();
+                    meta
+                });
+            if let Some(meta) = meta_opt {
+                this.state.persistence.update(cx, |per, cx| {
+                    per.schedule_save_folder_meta(fid, meta, cx);
+                });
+            }
+        }
+        WorkspaceEvent::PinsModified => {
+            let pins = this.state.workspace.read(cx).pins.clone();
+            this.state.persistence.update(cx, |per, cx| {
+                per.schedule_save_pins(pins, cx);
+            });
+        }
     }
 }
 
@@ -230,6 +271,28 @@ pub fn handle_environment_event(
             let next_env = env_id.clone();
             this.state.persistence.update(cx, |per, cx| {
                 per.set_active_environment(next_env, cx);
+            });
+        }
+        EnvironmentEvent::EnvironmentModified(name) => {
+            let env_opt = this
+                .state
+                .env
+                .read(cx)
+                .environments
+                .iter()
+                .find(|e| &e.name == name || &e.id == name)
+                .cloned();
+            if let Some(env) = env_opt {
+                let env_name = env.name.clone();
+                this.state.persistence.update(cx, |per, cx| {
+                    per.schedule_save_environment(env_name, env, cx);
+                });
+            }
+        }
+        EnvironmentEvent::GlobalsModified => {
+            let env = this.state.env.read(cx).global_environment.clone();
+            this.state.persistence.update(cx, |per, cx| {
+                per.schedule_save_globals(env, cx);
             });
         }
     }

@@ -393,6 +393,7 @@ impl WorkspaceDataState {
             ws.auth = auth;
         }
         let _ = self.store.save_workspace_meta(&self.workspace_meta);
+        cx.emit(WorkspaceEvent::WorkspaceMetaModified);
         cx.notify();
     }
 
@@ -412,6 +413,7 @@ impl WorkspaceDataState {
             meta.auth = auth;
             let _ = self.store.save_folder_meta(folder_id, &meta);
         }
+        cx.emit(WorkspaceEvent::FolderMetaModified(folder_id.to_string()));
         cx.notify();
     }
 

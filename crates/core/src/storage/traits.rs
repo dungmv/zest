@@ -60,6 +60,23 @@ pub trait WorkspaceStore: Send + Sync {
     fn load_secrets(&self, env_name: &str) -> Result<HashMap<String, String>>;
     fn save_secrets(&self, env_name: &str, secrets: &HashMap<String, String>) -> Result<()>;
 
+    /// Globals & Globals Secrets
+    fn load_global_environment(&self) -> Result<EnvironmentFile> {
+        match self.load_environment("globals") {
+            Ok(env) => Ok(env),
+            Err(_) => Ok(EnvironmentFile::default()),
+        }
+    }
+    fn save_global_environment(&self, env: &EnvironmentFile) -> Result<()> {
+        self.save_environment("globals", env)
+    }
+    fn load_global_secrets(&self) -> Result<HashMap<String, String>> {
+        self.load_secrets("globals")
+    }
+    fn save_global_secrets(&self, secrets: &HashMap<String, String>) -> Result<()> {
+        self.save_secrets("globals", secrets)
+    }
+
     /// Response Cache (.loc)
     fn load_response_cache(&self, rel_path: &str) -> Result<Option<LocFile>>;
     fn save_response_cache(&self, rel_path: &str, cache: &LocFile) -> Result<()>;

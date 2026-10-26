@@ -38,6 +38,12 @@ pub enum WorkspaceEvent {
         title: &'static str,
         message: String,
     },
+    /// Workspace-level metadata, headers, or auth were modified.
+    WorkspaceMetaModified,
+    /// Folder-level metadata, headers, auth, or order were modified.
+    FolderMetaModified(String),
+    /// Request pin list was modified.
+    PinsModified,
 }
 
 impl fmt::Debug for WorkspaceEvent {
@@ -72,6 +78,12 @@ impl fmt::Debug for WorkspaceEvent {
                 .field("title", title)
                 .field("message", message)
                 .finish(),
+            Self::WorkspaceMetaModified => write!(f, "WorkspaceMetaModified"),
+            Self::FolderMetaModified(folder_rel) => f
+                .debug_tuple("FolderMetaModified")
+                .field(folder_rel)
+                .finish(),
+            Self::PinsModified => write!(f, "PinsModified"),
         }
     }
 }
@@ -117,6 +129,9 @@ impl PartialEq for WorkspaceEvent {
                     message: m2,
                 },
             ) => t1 == t2 && m1 == m2,
+            (Self::WorkspaceMetaModified, Self::WorkspaceMetaModified) => true,
+            (Self::FolderMetaModified(a), Self::FolderMetaModified(b)) => a == b,
+            (Self::PinsModified, Self::PinsModified) => true,
             _ => false,
         }
     }
@@ -180,6 +195,10 @@ impl EventEmitter<ResponseEvent> for ResponseState {}
 pub enum EnvironmentEvent {
     /// Active environment selection changed.
     ActiveEnvironmentChanged(Option<String>),
+    /// Environment variables or metadata were modified.
+    EnvironmentModified(String),
+    /// Globals variables were modified.
+    GlobalsModified,
 }
 
 impl EventEmitter<EnvironmentEvent> for EnvironmentState {}
