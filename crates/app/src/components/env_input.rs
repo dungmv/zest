@@ -157,7 +157,7 @@ where
                         .appearance(false)
                         .bordered(false)
                         .focus_bordered(false)
-                        .cleanable(true)
+                        .cleanable(false)
                         .px(px(0.))
                         .text_sm()
                         .font_family(".SystemMonoFont")

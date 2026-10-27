@@ -8,7 +8,7 @@ use gpui::{
     ParentElement, StatefulInteractiveElement as _, Styled, Window,
 };
 use gpui_component::scroll::ScrollableElement as _;
-use gpui_component::Icon;
+use gpui_component::{Icon, Sizable as _};
 use gpui_kit::assets::IconName;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -251,25 +251,6 @@ pub fn render_multipart_editor(
         .flex()
         .flex_col()
         .gap(px(6.))
-        // Multipart Table Header
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .px(px(6.))
-                .py(px(4.))
-                .text_xs()
-                .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(t.text_muted)
-                .border_b_1()
-                .border_color(t.border)
-                .child(div().w(px(24.)).child(""))
-                .child(div().w(px(160.)).child("Key"))
-                .child(div().w(px(70.)).child("Type"))
-                .child(div().flex_1().child("Value / File Path"))
-                .child(div().w(px(80.)).child("Browse"))
-                .child(div().w(px(28.)).child("")),
-        )
         // Multipart Rows
         .child({
             let table_state = window.use_keyed_state(
@@ -778,7 +759,6 @@ pub fn render_multipart_editor(
                                 .cursor_pointer()
                                 .hover(|s| s.bg(t.bg_hover).text_color(t.status_5xx))
                                 .text_color(t.text_muted)
-                                .text_xs()
                                 .on_click(move |_, _, cx| {
                                     let current_idx = {
                                         let st = ts_del.read(cx);
@@ -802,7 +782,7 @@ pub fn render_multipart_editor(
                                         });
                                     }
                                 })
-                                .child("×"),
+                                .child(Icon::new(IconName::Trash).small()),
                         )
                 }))
         })

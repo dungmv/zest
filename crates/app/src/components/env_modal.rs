@@ -1015,7 +1015,6 @@ impl RenderOnce for EnvironmentModal {
                                                                         .cursor_pointer()
                                                                         .hover(|s| s.bg(t.bg_card).text_color(t.status_5xx))
                                                                         .text_color(t.text_muted)
-                                                                        .text_xs()
                                                                         .on_click(move |_, _, cx| {
                                                                             let pos = {
                                                                                 let st = ts_del.read(cx);
@@ -1037,7 +1036,7 @@ impl RenderOnce for EnvironmentModal {
                                                                                 });
                                                                             }
                                                                         })
-                                                                        .child("×")
+                                                                        .child(Icon::new(IconName::Trash).small())
                                                                 })
                                                         }))
                                                     })

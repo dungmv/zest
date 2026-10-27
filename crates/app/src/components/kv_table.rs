@@ -11,7 +11,7 @@ use gpui::{
 use gpui_component::button::{Button, ButtonVariants as _};
 use gpui_component::input::{InputEvent, InputState};
 use gpui_component::popover::Popover;
-use gpui_component::Icon;
+use gpui_component::{Icon, Sizable as _};
 use gpui_kit::assets::IconName;
 use std::rc::Rc;
 use zest_core::models::KeyValuePair;
@@ -271,25 +271,6 @@ impl RenderOnce for KvTable {
             .flex_col()
             .gap(px(4.))
             .p(px(8.))
-            // Table Header
-            .child(
-                div()
-                    .w_full()
-                    .flex()
-                    .items_center()
-                    .px(px(6.))
-                    .py(px(4.))
-                    .gap(px(8.))
-                    .text_xs()
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(t.text_muted)
-                    .border_b_1()
-                    .border_color(t.border)
-                    .child(div().w(px(20.)).child(""))
-                    .child(div().w(KEY_COLUMN_WIDTH).child("Key"))
-                    .child(div().flex_1().child("Value"))
-                    .child(div().w(px(24.)).child("")),
-            )
             // Read-only rows (e.g. inherited headers): disabled inputs, info popover
             // in place of the delete button. Muted checkbox so it never reads as an
             // editable request row.
@@ -344,7 +325,7 @@ impl RenderOnce for KvTable {
                                         .compact()
                                         .child(
                                             Icon::new(IconName::Info)
-                                                .size(px(13.))
+                                                .small()
                                                 .text_color(t.text_muted),
                                         ),
                                     )
@@ -523,7 +504,6 @@ impl RenderOnce for KvTable {
                                     .cursor_pointer()
                                     .hover(|s| s.bg(t.bg_hover).text_color(t.status_5xx))
                                     .text_color(t.text_muted)
-                                    .text_xs()
                                     .on_click(move |_, window, cx| {
                                         let pos = {
                                             let st = ts_del.read(cx);
@@ -538,7 +518,7 @@ impl RenderOnce for KvTable {
                                             on_remove(pos, window, cx);
                                         }
                                     })
-                                    .child("×")
+                                    .child(Icon::new(IconName::Trash).small())
                             })
                     }))
             })
