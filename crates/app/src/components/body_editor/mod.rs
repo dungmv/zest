@@ -208,6 +208,7 @@ impl RenderOnce for BodyEditor {
                                                 ws.update(cx, |ws, _| {
                                                     ws.update_active_request(&id_none, |r| {
                                                         r.set_body_type(RequestBody::None);
+                                                        r.update_content_type_header(None);
                                                     });
                                                 });
                                             }
@@ -244,6 +245,9 @@ impl RenderOnce for BodyEditor {
                                                             _ => "{\n  \n}".to_string(),
                                                         };
                                                         r.set_body_json(current_str);
+                                                        r.update_content_type_header(Some(
+                                                            "application/json",
+                                                        ));
                                                     });
                                                 });
                                             }
@@ -276,6 +280,9 @@ impl RenderOnce for BodyEditor {
                                                             current_str,
                                                             "application/xml".to_string(),
                                                         );
+                                                        r.update_content_type_header(Some(
+                                                            "application/xml",
+                                                        ));
                                                     });
                                                 });
                                             }
@@ -309,6 +316,9 @@ impl RenderOnce for BodyEditor {
                                                             current_str,
                                                             "text/plain".to_string(),
                                                         );
+                                                        r.update_content_type_header(Some(
+                                                            "text/plain",
+                                                        ));
                                                     });
                                                 });
                                             }
@@ -343,6 +353,9 @@ impl RenderOnce for BodyEditor {
                                                         r.set_body_type(RequestBody::multipart(
                                                             current_items,
                                                         ));
+                                                        r.update_content_type_header(Some(
+                                                            "multipart/form-data",
+                                                        ));
                                                     });
                                                 });
                                             }
@@ -373,6 +386,9 @@ impl RenderOnce for BodyEditor {
                                                         };
                                                         r.set_body_type(RequestBody::form(
                                                             current_pairs,
+                                                        ));
+                                                        r.update_content_type_header(Some(
+                                                            "application/x-www-form-urlencoded",
                                                         ));
                                                     });
                                                 });
@@ -406,6 +422,9 @@ impl RenderOnce for BodyEditor {
                                                         r.set_body_type(RequestBody::Binary {
                                                             file_path: current_path,
                                                         });
+                                                        r.update_content_type_header(Some(
+                                                            "application/octet-stream",
+                                                        ));
                                                     });
                                                 });
                                             }
@@ -522,6 +541,76 @@ impl RenderOnce for BodyEditor {
                                             }
                                         })
                                         .child("Format XML"),
+                                )
+                        } else if is_multipart {
+                            let ed_c = ed_entity.clone();
+                            let ws_add = self.workspace_state.clone();
+                            let id_add = req_id_str.clone();
+                            div()
+                                .flex()
+                                .items_center()
+                                .child(
+                                    div()
+                                        .id("btn-add-multipart-part")
+                                        .px(px(8.))
+                                        .py(px(3.))
+                                        .rounded(px(4.))
+                                        .bg(t.bg_input)
+                                        .border_1()
+                                        .border_color(t.border)
+                                        .cursor_pointer()
+                                        .hover(|s| s.bg(t.bg_hover))
+                                        .text_xs()
+                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                        .text_color(t.text_secondary)
+                                        .on_click(move |_, _, cx| {
+                                            if let Some(ws) = &ws_add {
+                                                ws.update(cx, |ws, _| {
+                                                    ws.update_active_request(&id_add, |r| {
+                                                        r.add_multipart_item();
+                                                    });
+                                                });
+                                            }
+                                            ed_c.update(cx, |state, cx| {
+                                                state.mark_dirty(cx);
+                                            });
+                                        })
+                                        .child("Add Part"),
+                                )
+                        } else if is_form {
+                            let ed_c = ed_entity.clone();
+                            let ws_add = self.workspace_state.clone();
+                            let id_add = req_id_str.clone();
+                            div()
+                                .flex()
+                                .items_center()
+                                .child(
+                                    div()
+                                        .id("btn-add-form-row")
+                                        .px(px(8.))
+                                        .py(px(3.))
+                                        .rounded(px(4.))
+                                        .bg(t.bg_input)
+                                        .border_1()
+                                        .border_color(t.border)
+                                        .cursor_pointer()
+                                        .hover(|s| s.bg(t.bg_hover))
+                                        .text_xs()
+                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                        .text_color(t.text_secondary)
+                                        .on_click(move |_, _, cx| {
+                                            if let Some(ws) = &ws_add {
+                                                ws.update(cx, |ws, _| {
+                                                    ws.update_active_request(&id_add, |r| {
+                                                        r.add_form_param();
+                                                    });
+                                                });
+                                            }
+                                            ed_c.update(cx, |state, cx| {
+                                                state.mark_dirty(cx);
+                                            });
+                                        })
+                                        .child("Add Row"),
                                 )
                         } else {
                             div()

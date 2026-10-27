@@ -210,6 +210,7 @@ pub struct KvTable {
     env_state: Option<Entity<EnvironmentState>>,
     modal_state: Option<Entity<ModalState>>,
     readonly_rows: Vec<KvReadonlyRow>,
+    show_add_button: bool,
 }
 
 impl KvTable {
@@ -229,7 +230,13 @@ impl KvTable {
             env_state: None,
             modal_state: None,
             readonly_rows: Vec::new(),
+            show_add_button: true,
         }
+    }
+
+    pub fn show_add_button(mut self, show: bool) -> Self {
+        self.show_add_button = show;
+        self
     }
 
     /// Appends non-editable rows (inherited headers) below the editable pairs.
@@ -523,30 +530,32 @@ impl RenderOnce for KvTable {
                     }))
             })
             // Add row button
-            .child(
-                div().pt(px(6.)).flex().items_center().gap(px(8.)).child(
-                    div()
-                        .id(gpui::SharedString::from(format!("{}-btn-add", id_prefix)))
-                        .px(px(10.))
-                        .py(px(4.))
-                        .rounded(px(4.))
-                        .bg(t.bg_card)
-                        .border_1()
-                        .border_color(t.border)
-                        .cursor_pointer()
-                        .hover(|s| s.bg(t.bg_hover).text_color(t.text_primary))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .text_xs()
-                        .font_weight(gpui::FontWeight::MEDIUM)
-                        .text_color(t.text_secondary)
-                        .on_click(move |_, window, cx| {
-                            on_add_cb(window, cx);
-                        })
-                        .child("+ Add Row"),
-                ),
-            )
+            .when(self.show_add_button, |this| {
+                this.child(
+                    div().pt(px(6.)).flex().items_center().gap(px(8.)).child(
+                        div()
+                            .id(gpui::SharedString::from(format!("{}-btn-add", id_prefix)))
+                            .px(px(10.))
+                            .py(px(4.))
+                            .rounded(px(4.))
+                            .bg(t.bg_card)
+                            .border_1()
+                            .border_color(t.border)
+                            .cursor_pointer()
+                            .hover(|s| s.bg(t.bg_hover).text_color(t.text_primary))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_xs()
+                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .text_color(t.text_secondary)
+                            .on_click(move |_, window, cx| {
+                                on_add_cb(window, cx);
+                            })
+                            .child("+ Add Row"),
+                    ),
+                )
+            })
     }
 }
 

@@ -415,6 +415,24 @@ impl HttpRequestItem {
         self.body = body;
     }
 
+    pub fn update_content_type_header(&mut self, content_type: Option<&str>) {
+        if let Some(ct) = content_type {
+            if let Some(header) = self
+                .headers
+                .iter_mut()
+                .find(|h| h.key.eq_ignore_ascii_case("content-type"))
+            {
+                header.value = ct.to_string();
+                header.enabled = true;
+            } else {
+                self.headers.push(KeyValuePair::new("Content-Type", ct));
+            }
+        } else {
+            self.headers
+                .retain(|h| !h.key.eq_ignore_ascii_case("content-type"));
+        }
+    }
+
     pub fn update_form_param(&mut self, index: usize, key: String, val: String, enabled: bool) {
         if let RequestBody::FormUrlEncoded { params } = &mut self.body {
             if index < params.len() {
@@ -988,5 +1006,21 @@ mod tests {
             req.script.as_ref().unwrap().post_response.as_deref(),
             Some("z.test('ok');")
         );
+
+        // Content-Type update
+        req.update_content_type_header(Some("application/json"));
+        assert_eq!(req.headers.len(), 1);
+        assert_eq!(req.headers[0].key, "Content-Type");
+        assert_eq!(req.headers[0].value, "application/json");
+
+        // Overwrite existing header case-insensitively
+        req.headers[0].key = "content-type".to_string();
+        req.update_content_type_header(Some("multipart/form-data"));
+        assert_eq!(req.headers.len(), 1);
+        assert_eq!(req.headers[0].value, "multipart/form-data");
+
+        // Clear header
+        req.update_content_type_header(None);
+        assert!(req.headers.is_empty());
     }
 }

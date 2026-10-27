@@ -7,6 +7,8 @@ use gpui::{
     div, px, AnyElement, App, AppContext as _, Entity, InteractiveElement as _, IntoElement,
     ParentElement, StatefulInteractiveElement as _, Styled, Window,
 };
+use gpui_component::button::{Button, ButtonVariants as _};
+use gpui_component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_component::scroll::ScrollableElement as _;
 use gpui_component::{Icon, Sizable as _};
 use gpui_kit::assets::IconName;
@@ -284,13 +286,10 @@ pub fn render_multipart_editor(
                 .children(items.into_iter().enumerate().map(|(idx, item)| {
                     let ed_row = ed_c.clone();
                     let ed_del = ed_c.clone();
-                    let ed_pick = ed_c.clone();
                     let ws_row = workspace_state.cloned();
                     let ws_del = ws_row.clone();
-                    let ws_pick = ws_row.clone();
                     let id_row = req_id_str.clone();
                     let id_del = id_row.clone();
-                    let id_pick = id_row.clone();
                     let snapshot = row_inputs.get(idx).cloned().unwrap_or_else(|| {
                         let dummy = cx.new(|cx| gpui_component::input::InputState::new(window, cx));
                         MpRowSnapshot {
@@ -316,6 +315,7 @@ pub fn render_multipart_editor(
                     let key_in_del = key_input.clone();
 
                     div()
+                        .w_full()
                         .flex()
                         .items_center()
                         .px(px(6.))
@@ -332,6 +332,7 @@ pub fn render_multipart_editor(
                                 .id(format!("check-mp-{}", idx))
                                 .w(px(20.))
                                 .h(px(20.))
+                                .flex_shrink_0()
                                 .rounded(px(4.))
                                 .border_1()
                                 .border_color(if enabled { t.primary } else { t.border })
@@ -448,7 +449,7 @@ pub fn render_multipart_editor(
                                     }
                                 };
 
-                            div().w(px(160.)).child(render_env_input(
+                            div().w(px(160.)).flex_shrink_0().child(render_env_input(
                                 format!("{}-key", mp_prefix),
                                 &key_input,
                                 env_state,
@@ -458,221 +459,232 @@ pub fn render_multipart_editor(
                                 on_key_update,
                             ))
                         })
-                        // Type toggle: Text | File
+                        // Type dropdown: Text | File
                         .child({
-                            let ed_toggle_type = ed_row.clone();
-                            let ws_toggle_type = ws_row.clone();
-                            let id_toggle_type = id_row.clone();
-                            div()
-                                .id(format!("toggle-mp-type-{}", idx))
-                                .w(px(70.))
+                            let ed_t = ed_row.clone();
+                            let ws_t = ws_row.clone();
+                            let id_t = id_row.clone();
+                            let ts_t = ts_type;
+                            let key_in_t = key_in_type;
+                            let cur_type_label = if is_file { "File" } else { "Text" };
+
+                            Button::new(format!("dropdown-mp-type-{}", idx))
+                                .ghost()
+                                .compact()
+                                .px(px(8.))
+                                .py(px(2.))
                                 .h(px(28.))
+                                .w(px(76.))
+                                .flex_shrink_0()
                                 .rounded(px(4.))
                                 .bg(t.bg_card)
                                 .border_1()
                                 .border_color(t.border)
-                                .cursor_pointer()
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .text_xs()
-                                .text_color(t.text_secondary)
-                                .on_click(move |_, _, cx| {
-                                    let (current_idx, k, v, next_is_file, fp, cur_en) = {
-                                        let st = ts_type.read(cx);
-                                        let pos =
-                                            st.rows.iter().position(|r| r.key_input == key_in_type);
-                                        let meta = pos
-                                            .map(|i| {
-                                                (
-                                                    st.rows[i]
-                                                        .key_input
-                                                        .read(cx)
-                                                        .value()
-                                                        .to_string(),
-                                                    st.rows[i]
-                                                        .val_input
-                                                        .read(cx)
-                                                        .value()
-                                                        .to_string(),
-                                                    !st.rows[i].is_file,
-                                                    st.rows[i].file_path.clone(),
-                                                    st.rows[i].enabled,
-                                                )
-                                            })
-                                            .unwrap_or((
-                                                String::new(),
-                                                String::new(),
-                                                false,
-                                                None,
-                                                true,
-                                            ));
-                                        (pos, meta.0, meta.1, meta.2, meta.3, meta.4)
-                                    };
-                                    if let Some(pos) = current_idx {
-                                        ts_type.update(cx, |st, _| {
-                                            if pos < st.rows.len() {
-                                                st.rows[pos].is_file = next_is_file;
-                                            }
-                                        });
-                                        if let Some(ws) = &ws_toggle_type {
-                                            ws.update(cx, |ws, _| {
-                                                ws.update_active_request(&id_toggle_type, |r| {
-                                                    r.update_multipart_item(
-                                                        pos,
-                                                        k,
-                                                        v,
-                                                        next_is_file,
-                                                        fp,
-                                                        cur_en,
-                                                    );
-                                                });
-                                            });
-                                        }
-                                        ed_toggle_type.update(cx, |state, cx| {
-                                            state.mark_dirty(cx);
-                                        });
-                                    }
-                                })
                                 .child(
                                     div()
+                                        .w_full()
                                         .flex()
                                         .items_center()
-                                        .gap(px(3.))
+                                        .justify_between()
+                                        .gap(px(4.))
                                         .child(
-                                            Icon::new(if is_file {
-                                                IconName::File
-                                            } else {
-                                                IconName::Type
-                                            })
-                                            .size(px(12.)),
+                                            div()
+                                                .text_xs()
+                                                .font_weight(gpui::FontWeight::MEDIUM)
+                                                .text_color(t.text_primary)
+                                                .child(cur_type_label),
                                         )
-                                        .child(if is_file { "File" } else { "Text" }),
+                                        .child(
+                                            Icon::new(IconName::ChevronDown)
+                                                .size(px(12.))
+                                                .text_color(t.text_muted),
+                                        ),
                                 )
+                                .dropdown_menu(move |menu, _window, _cx| {
+                                    let ts_text = ts_t.clone();
+                                    let key_text = key_in_t.clone();
+                                    let ed_text = ed_t.clone();
+                                    let ws_text = ws_t.clone();
+                                    let id_text = id_t.clone();
+
+                                    let ts_file = ts_t.clone();
+                                    let key_file = key_in_t.clone();
+                                    let ed_file = ed_t.clone();
+                                    let ws_file = ws_t.clone();
+                                    let id_file = id_t.clone();
+
+                                    menu.item(
+                                        PopupMenuItem::new("Text").checked(!is_file).on_click(
+                                            move |_, _, cx| {
+                                                let (current_idx, k, v, fp, cur_en) = {
+                                                    let st = ts_text.read(cx);
+                                                    let pos = st
+                                                        .rows
+                                                        .iter()
+                                                        .position(|r| r.key_input == key_text);
+                                                    let meta = pos
+                                                        .map(|i| {
+                                                            (
+                                                                st.rows[i]
+                                                                    .key_input
+                                                                    .read(cx)
+                                                                    .value()
+                                                                    .to_string(),
+                                                                st.rows[i]
+                                                                    .val_input
+                                                                    .read(cx)
+                                                                    .value()
+                                                                    .to_string(),
+                                                                st.rows[i].file_path.clone(),
+                                                                st.rows[i].enabled,
+                                                            )
+                                                        })
+                                                        .unwrap_or((
+                                                            String::new(),
+                                                            String::new(),
+                                                            None,
+                                                            true,
+                                                        ));
+                                                    (pos, meta.0, meta.1, meta.2, meta.3)
+                                                };
+                                                if let Some(pos) = current_idx {
+                                                    ts_text.update(cx, |st, _| {
+                                                        if pos < st.rows.len() {
+                                                            st.rows[pos].is_file = false;
+                                                        }
+                                                    });
+                                                    if let Some(ws) = &ws_text {
+                                                        ws.update(cx, |ws, _| {
+                                                            ws.update_active_request(
+                                                                &id_text,
+                                                                |r| {
+                                                                    r.update_multipart_item(
+                                                                        pos, k, v, false, fp,
+                                                                        cur_en,
+                                                                    );
+                                                                },
+                                                            );
+                                                        });
+                                                    }
+                                                    ed_text.update(cx, |state, cx| {
+                                                        state.mark_dirty(cx);
+                                                    });
+                                                }
+                                            },
+                                        ),
+                                    )
+                                    .item(
+                                        PopupMenuItem::new("File").checked(is_file).on_click(
+                                            move |_, _, cx| {
+                                                let (current_idx, k, v, fp, cur_en) = {
+                                                    let st = ts_file.read(cx);
+                                                    let pos = st
+                                                        .rows
+                                                        .iter()
+                                                        .position(|r| r.key_input == key_file);
+                                                    let meta = pos
+                                                        .map(|i| {
+                                                            (
+                                                                st.rows[i]
+                                                                    .key_input
+                                                                    .read(cx)
+                                                                    .value()
+                                                                    .to_string(),
+                                                                st.rows[i]
+                                                                    .val_input
+                                                                    .read(cx)
+                                                                    .value()
+                                                                    .to_string(),
+                                                                st.rows[i].file_path.clone(),
+                                                                st.rows[i].enabled,
+                                                            )
+                                                        })
+                                                        .unwrap_or((
+                                                            String::new(),
+                                                            String::new(),
+                                                            None,
+                                                            true,
+                                                        ));
+                                                    (pos, meta.0, meta.1, meta.2, meta.3)
+                                                };
+                                                if let Some(pos) = current_idx {
+                                                    ts_file.update(cx, |st, _| {
+                                                        if pos < st.rows.len() {
+                                                            st.rows[pos].is_file = true;
+                                                        }
+                                                    });
+                                                    if let Some(ws) = &ws_file {
+                                                        ws.update(cx, |ws, _| {
+                                                            ws.update_active_request(
+                                                                &id_file,
+                                                                |r| {
+                                                                    r.update_multipart_item(
+                                                                        pos, k, v, true, fp, cur_en,
+                                                                    );
+                                                                },
+                                                            );
+                                                        });
+                                                    }
+                                                    ed_file.update(cx, |state, cx| {
+                                                        state.mark_dirty(cx);
+                                                    });
+                                                }
+                                            },
+                                        ),
+                                    )
+                                })
                         })
-                        // Value or Path
+                        // Value or Path (Single consolidated element fitting flex_1)
                         .child({
+                            let ts_v = table_state.clone();
+                            let val_in_v = val_input.clone();
+                            let key_in_v = key_input.clone();
                             let ed_on_v = ed_row;
                             let ws_on_v = ws_row;
                             let id_on_v = id_row;
-                            let ts_v = table_state.clone();
-                            let val_in_v = val_input.clone();
-                            let on_val_update =
-                                move |new_v: String, _window: &mut Window, cx: &mut App| {
-                                    let (current_idx, cur_k, is_f, fp, cur_en) = {
-                                        let st = ts_v.read(cx);
-                                        let pos =
-                                            st.rows.iter().position(|r| r.val_input == val_in_v);
-                                        let meta = pos
-                                            .map(|i| {
-                                                (
-                                                    st.rows[i]
-                                                        .key_input
-                                                        .read(cx)
-                                                        .value()
-                                                        .to_string(),
-                                                    st.rows[i].is_file,
-                                                    st.rows[i].file_path.clone(),
-                                                    st.rows[i].enabled,
-                                                )
-                                            })
-                                            .unwrap_or((String::new(), false, None, true));
-                                        (pos, meta.0, meta.1, meta.2, meta.3)
-                                    };
-                                    if let Some(pos) = current_idx {
-                                        if let Some(ws) = &ws_on_v {
-                                            ws.update(cx, |ws, _| {
-                                                ws.update_active_request(&id_on_v, |r| {
-                                                    r.update_multipart_item(
-                                                        pos, cur_k, new_v, is_f, fp, cur_en,
-                                                    );
-                                                });
-                                            });
-                                        }
-                                        ed_on_v.update(cx, |state, cx| {
-                                            state.mark_dirty(cx);
-                                        });
-                                    }
-                                };
 
-                            div().flex_1().child(if is_file {
+                            div().flex_1().min_w(px(0.)).child(if is_file {
+                                let ed_bg = ed_on_v;
+                                let ws_bg = ws_on_v;
+                                let id_bg = id_on_v;
+                                let ts_b = ts_v;
+                                let kin_b = key_in_v;
+                                let has_file = file_path.is_some();
+                                let display_text = file_path
+                                    .as_deref()
+                                    .and_then(|p| std::path::Path::new(p).file_name())
+                                    .and_then(|n| n.to_str())
+                                    .unwrap_or("Choose file...")
+                                    .to_string();
+                                let tip_path = file_path.clone();
+
                                 div()
+                                    .id(format!("btn-select-file-{}", idx))
                                     .h(px(28.))
-                                    .px(px(6.))
+                                    .w_full()
+                                    .min_w(px(0.))
+                                    .px(px(8.))
                                     .rounded(px(4.))
-                                    .bg(t.bg_input)
+                                    .bg(if has_file { t.bg_card } else { t.bg_input })
                                     .border_1()
                                     .border_color(t.border)
+                                    .hover(|s| s.bg(t.bg_hover).border_color(t.border_focus))
+                                    .cursor_pointer()
                                     .flex()
                                     .items_center()
-                                    .child(
-                                        div()
-                                            .px(px(4.))
-                                            .text_xs()
-                                            .font_family(".SystemMonoFont")
-                                            .text_color(t.text_primary)
-                                            .child(
-                                                file_path.clone().unwrap_or_else(|| {
-                                                    "Select a file...".to_string()
-                                                }),
-                                            ),
-                                    )
-                                    .into_any_element()
-                            } else {
-                                render_env_input(
-                                    format!("{}-val", mp_prefix),
-                                    &val_input,
-                                    env_state,
-                                    modal_state,
-                                    window,
-                                    cx,
-                                    on_val_update,
-                                )
-                                .into_any_element()
-                            })
-                        })
-                        // Browse button (only enabled if is_file)
-                        .child({
-                            let ed_p = ed_pick;
-                            let ws_p = ws_pick;
-                            let id_p = id_pick;
-                            let ts_browse = table_state.clone();
-                            let key_in_browse = key_input;
-                            let btn = div()
-                                .id(format!("browse-mp-{}", idx))
-                                .w(px(80.))
-                                .h(px(28.))
-                                .rounded(px(4.))
-                                .bg(if is_file {
-                                    t.bg_card
-                                } else {
-                                    gpui::transparent_black()
-                                })
-                                .border_1()
-                                .border_color(if is_file {
-                                    t.border
-                                } else {
-                                    gpui::transparent_black()
-                                })
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .text_xs()
-                                .text_color(if is_file {
-                                    t.text_secondary
-                                } else {
-                                    t.text_muted
-                                });
-
-                            if is_file {
-                                btn.cursor_pointer()
-                                    .hover(|s| s.bg(t.bg_hover))
+                                    .gap(px(6.))
+                                    .when_some(tip_path, |this, path| {
+                                        this.tooltip(move |window, cx| {
+                                            gpui_component::tooltip::Tooltip::new(path.clone())
+                                                .build(window, cx)
+                                        })
+                                    })
                                     .on_click(move |_, _, cx| {
-                                        let ed_bg = ed_p.clone();
-                                        let ws_bg = ws_p.clone();
-                                        let id_bg = id_p.clone();
-                                        let ts_b = ts_browse.clone();
-                                        let kin_b = key_in_browse.clone();
+                                        let ed_bg = ed_bg.clone();
+                                        let ws_bg = ws_bg.clone();
+                                        let id_bg = id_bg.clone();
+                                        let ts_b = ts_b.clone();
+                                        let kin_b = kin_b.clone();
                                         cx.spawn(async move |cx| {
                                             if let Some(file) =
                                                 rfd::AsyncFileDialog::new().pick_file().await
@@ -741,10 +753,95 @@ pub fn render_multipart_editor(
                                         })
                                         .detach();
                                     })
-                                    .child("Browse...")
+                                    .child(
+                                        Icon::new(if has_file {
+                                            IconName::File
+                                        } else {
+                                            IconName::Folder
+                                        })
+                                        .size(px(14.))
+                                        .flex_shrink_0()
+                                        .text_color(
+                                            if has_file {
+                                                t.text_primary
+                                            } else {
+                                                t.text_muted
+                                            },
+                                        ),
+                                    )
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w(px(0.))
+                                            .overflow_hidden()
+                                            .whitespace_nowrap()
+                                            .text_ellipsis()
+                                            .text_xs()
+                                            .font_family(if has_file {
+                                                ".SystemMonoFont"
+                                            } else {
+                                                ""
+                                            })
+                                            .text_color(if has_file {
+                                                t.text_primary
+                                            } else {
+                                                t.text_muted
+                                            })
+                                            .child(display_text),
+                                    )
+                                    .into_any_element()
                             } else {
-                                btn.child("")
-                            }
+                                let on_val_update =
+                                    move |new_v: String, _window: &mut Window, cx: &mut App| {
+                                        let (current_idx, cur_k, is_f, fp, cur_en) = {
+                                            let st = ts_v.read(cx);
+                                            let pos = st
+                                                .rows
+                                                .iter()
+                                                .position(|r| r.val_input == val_in_v);
+                                            let meta = pos
+                                                .map(|i| {
+                                                    (
+                                                        st.rows[i]
+                                                            .key_input
+                                                            .read(cx)
+                                                            .value()
+                                                            .to_string(),
+                                                        st.rows[i].is_file,
+                                                        st.rows[i].file_path.clone(),
+                                                        st.rows[i].enabled,
+                                                    )
+                                                })
+                                                .unwrap_or((String::new(), false, None, true));
+                                            (pos, meta.0, meta.1, meta.2, meta.3)
+                                        };
+                                        if let Some(pos) = current_idx {
+                                            if let Some(ws) = &ws_on_v {
+                                                ws.update(cx, |ws, _| {
+                                                    ws.update_active_request(&id_on_v, |r| {
+                                                        r.update_multipart_item(
+                                                            pos, cur_k, new_v, is_f, fp, cur_en,
+                                                        );
+                                                    });
+                                                });
+                                            }
+                                            ed_on_v.update(cx, |state, cx| {
+                                                state.mark_dirty(cx);
+                                            });
+                                        }
+                                    };
+
+                                render_env_input(
+                                    format!("{}-val", mp_prefix),
+                                    &val_input,
+                                    env_state,
+                                    modal_state,
+                                    window,
+                                    cx,
+                                    on_val_update,
+                                )
+                                .into_any_element()
+                            })
                         })
                         // Delete row
                         .child(
@@ -752,6 +849,7 @@ pub fn render_multipart_editor(
                                 .id(format!("del-mp-row-{}", idx))
                                 .w(px(24.))
                                 .h(px(24.))
+                                .flex_shrink_0()
                                 .rounded(px(4.))
                                 .flex()
                                 .items_center()
@@ -786,41 +884,5 @@ pub fn render_multipart_editor(
                         )
                 }))
         })
-        // Add Part button
-        .child(div().pt(px(4.)).child({
-            let ed_add = ed_c.clone();
-            let ws_add = workspace_state.cloned();
-            let id_add = req_id_str.clone();
-            div()
-                .id("btn-add-multipart-part")
-                .px(px(8.))
-                .py(px(4.))
-                .rounded(px(4.))
-                .w(px(90.))
-                .bg(t.bg_card)
-                .border_1()
-                .border_color(t.border)
-                .cursor_pointer()
-                .hover(|s| s.bg(t.bg_hover))
-                .flex()
-                .items_center()
-                .justify_center()
-                .gap(px(4.))
-                .text_xs()
-                .text_color(t.text_secondary)
-                .on_click(move |_, _, cx| {
-                    if let Some(ws) = &ws_add {
-                        ws.update(cx, |ws, _| {
-                            ws.update_active_request(&id_add, |r| {
-                                r.add_multipart_item();
-                            });
-                        });
-                    }
-                    ed_add.update(cx, |state, cx| {
-                        state.mark_dirty(cx);
-                    });
-                })
-                .child("+ Add Part")
-        }))
         .into_any_element()
 }

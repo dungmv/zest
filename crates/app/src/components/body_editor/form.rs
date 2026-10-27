@@ -67,6 +67,7 @@ pub fn render_form_editor(
                     });
                 },
             )
+            .show_add_button(false)
             .optional_env_state(env_state.cloned())
             .optional_modal_state(modal_state.cloned()),
         )
