@@ -43,20 +43,19 @@ Tài liệu này xác định lộ trình phát triển toàn diện của **Zes
    - Hỗ trợ đầy đủ cú pháp ES2023, async-safe, cô lập bộ nhớ, không crash UI.
 2. **Pre-request Scripts:**
    - Cho phép viết code JS chạy trước khi gửi request.
-   - Cung cấp API `client.environment.set(key, val)`, `client.environment.get/unset`, `client.variables.get(key)`.
-   - Tính toán dynamic signatures (`client.crypto.hmacSha256`, `md5`, `base64Encode`, `base64Decode`, timestamp, nonce).
-   - Đầy đủ alias `pm = client` tương thích Postman scripts.
+   - Cung cấp API `z.environment.set(key, val)`, `z.environment.get/unset`, `z.variables.get/set/has(key)`.
+   - Tính toán dynamic signatures (`z.crypto.hmacSha256`, `md5`, `base64Encode`, `base64Decode`, timestamp, nonce).
 3. **Test Scripts & Assertions (Request Chaining):**
    - Viết test assertions sau khi nhận response:
      ```javascript
-     client.test("Status code is 200", () => {
-         client.assert(client.response.status === 200, "Expected status 200");
+     z.test("Status code is 200", () => {
+         z.assert(z.response.status === 200, "Expected status 200");
      });
      // Request Chaining: Trích xuất access token từ response và lưu vào Environment
-     const data = client.response.json();
-     client.environment.set("access_token", data.token);
+     const data = z.response.json();
+     z.environment.set("access_token", data.token);
      ```
-   - Hiển thị tab "Tests" trong Response Inspector với badge kết quả (`Passed 3/3` màu xanh lá hoặc `Failed 1/3` màu đỏ), test execution duration và console logs.
+   - Hiển thị tab "Tests & Console" hợp nhất trong Response Inspector với badge kết quả (`Passed 3/3` màu xanh lá hoặc `Failed 1/3` màu đỏ), test execution duration và console logs có cấu trúc.
 4. **Dynamic Fake Variables (Faker built-in):**
    - Tích hợp các macro biến ngẫu nhiên trực tiếp trong URL/Headers/Body:
      - `{{$uuid}}` hoặc `{{$guid}}`: Sinh UUID v4
@@ -99,9 +98,9 @@ Tài liệu này xác định lộ trình phát triển toàn diện của **Zes
      - Implicit
    - Tự động bắt Authorization Code qua Local HTTP Callback Server (`http://localhost:random_port`).
    - Tự động Refresh Token khi token hết hạn dựa trên expiry header hoặc status code 401.
-2. **Kế Thừa Xác Thực (Auth Inheritance):**
-   - Cấu hình Auth một lần tại cấp độ **Workspace** hoặc **Folder**.
-   - Mọi request con bên trong chỉ cần chọn `Auth: Inherit from parent` để tự động sử dụng token mà không cần cấu hình lại từng request.
+2. **Kế Thừa Xác Thực & Headers (Auth & Headers Inheritance) — ✅ Đã hoàn thành:**
+   - Cấu hình Auth và Headers một lần tại cấp độ **Workspace** hoặc **Folder** (`ScopeSettingsModal`).
+   - Mọi request con bên trong tự động kế thừa headers (hiển thị read-only qua `InheritedHeaders`) và dùng `Auth: Inherit from parent` mà không cần cấu hình lại từng request.
 3. **Client Certificates & Mutual TLS (mTLS):**
    - Cấu hình file Certificate (`.pem`, `.pfx`, `.crt`) và Private Key (`.key`) tương ứng cho từng Host/Domain.
    - Tùy chọn Custom CA Certificate bundle cho môi trường nội bộ doanh nghiệp có SSL Proxy.
@@ -132,14 +131,14 @@ Tài liệu này xác định lộ trình phát triển toàn diện của **Zes
      - HTML Web Preview (sandboxed).
      - PDF viewer & Hex viewer.
    - **Response Diff:** So sánh 2 response từ History xem trường nào vừa thay đổi.
-3. **Mô Hình Phiên Làm Việc Single-Active Request & History Navigation — ✅ Đã hoàn thành (SL-001):**
+3. **Mô Hình Phiên Làm Việc Single-Active Request, Write-Behind Persistence & History Navigation — ✅ Đã hoàn thành (SL-001):**
    - Áp dụng mô hình gọn nhẹ chuẩn Insomnia/Yaak: `RequestSessionState` chỉ trỏ tới active request, dữ liệu mượn on-demand từ `WorkspaceDataState`.
    - History Navigation: ngăn xếp lịch sử chuyển đổi request với phím tắt `NavigateBack` (`Cmd+[`), `NavigateForward` (`Cmd+]`).
-   - Tự động lưu ngầm (debounced auto-save) kèm trạng thái `is_dirty` không làm gián đoạn luồng làm việc.
-4. **Tích hợp Git Trực Quan trong Ứng dụng:**
-   - Panel quản lý Git: Xem danh sách file request bị sửa đổi (`git status`).
-   - Visual Diff: So sánh trực quan request hiện tại với commit trước.
-   - Nút Commit & Push / Pull trực tiếp không cần mở terminal.
+   - Tự động lưu ngầm hợp nhất qua `PersistenceCoordinator` (coalesced write-behind theo `PersistTarget` với quản lý `revision` và `workspace_gen`).
+4. **Tích hợp Git Trực Quan trong Ứng dụng — ✅ Đã hoàn thành:**
+   - Panel quản lý Git (`GitModal` & `GitService`): Xem danh sách file bị sửa đổi (`git status`), lịch sử commit, quản lý nhánh và remotes.
+   - Visual Diff: So sánh trực quan thay đổi của file với commit trước.
+   - Nút Commit, Discard Changes, Fetch, Pull, Push trực tiếp không cần mở terminal, tự động đồng bộ với file watcher.
 
 ---
 
@@ -150,16 +149,15 @@ Tài liệu này xác định lộ trình phát triển toàn diện của **Zes
    - Tự động nhận diện lệnh cURL khi dán vào thanh URL input.
    - Trích xuất toàn bộ Method, URL, Query params, Headers, Auth (Bearer/Basic), Body (JSON/Form/Multipart/Raw).
    - Đồng bộ ngay lập tức toàn bộ giao diện và cập nhật request.
-2. **Import Postman Collections & Environments:**
-   - Hỗ trợ chuẩn Postman Collection v2.0 và v2.1 format.
-   - Chuyển đổi chính xác: Folders, Requests, URL params, Headers, Body, Auth, Scripts (pre-request & test), Environments.
+2. **Import Postman Collections & Environments — ✅ Đã hoàn thành:**
+   - Hỗ trợ chuẩn Postman Collection v2.0 và v2.1 format (`importers/postman.rs`).
+   - Chuyển đổi chính xác: Folders, Requests, URL params, Headers, Body, Auth, Scripts, Environments.
 3. **Import Insomnia Export:**
    - Hỗ trợ Insomnia Export v4 (YAML & JSON).
    - Mapping Workspaces, Request Groups (Folders), Requests, Environments.
-4. **Import OpenAPI / Swagger (v2.0, v3.0, v3.1):**
-   - Đọc OpenAPI specs từ file nội bộ hoặc URL (YAML/JSON).
-   - Tự động sinh cây request theo Tag/Path.
-   - Điền sẵn example query parameters, headers, sample JSON body dựa trên schema components.
+4. **Import OpenAPI / Swagger (v3.0, v3.1) — ✅ Đã hoàn thành:**
+   - Đọc OpenAPI specs (YAML/JSON) kèm bộ phân giải `$ref` chống đệ quy vòng lặp (`importers/openapi.rs`).
+   - Tự động sinh cây request theo Tag/Path kèm query parameters, headers, auth và sample JSON body từ schema.
 5. **Export đa định dạng:**
    - Xuất Collection sang Postman v2.1 JSON (để chia sẻ cho đồng nghiệp vẫn dùng Postman).
    - Xuất sang OpenAPI 3.0 YAML/JSON.

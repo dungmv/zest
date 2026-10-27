@@ -11,67 +11,76 @@ This skill governs data migration and conversion between external formats and Ze
 
 ---
 
-## 1. Supported Formats & Capabilities
+## 1. Format Support Matrix
 
-| Format | Source Specification | Supported Versions | Key Module |
-| :--- | :--- | :--- | :--- |
-| **OpenAPI / Swagger** | OpenAPI Specification | 3.0, 3.1 (JSON & YAML) | `crates/core/src/importers/openapi.rs` |
-| **Postman** | Postman Collection Format | v2.0, v2.1 (JSON) | `crates/core/src/importers/postman.rs` |
-| **Insomnia** | Insomnia Export Format | v4 (JSON/YAML) | `crates/core/src/importers/insomnia.rs` |
-| **cURL** | Shell command parser & exporter | Bash, PowerShell, CMD | `crates/core/src/curl/mod.rs` |
-| **HAR** | HTTP Archive 1.2 | Browser DevTools export | `crates/core/src/importers/har.rs` |
+| Format | Specification / Version | Status | Module / Spec Reference |
+| :--- | :--- | :---: | :--- |
+| **OpenAPI / Swagger** | OpenAPI 3.0, 3.1 (JSON & YAML) | ✅ Implemented | `crates/core/src/importers/openapi.rs` |
+| **Postman Collection** | Postman v2.0, v2.1 (JSON) | ✅ Implemented | `crates/core/src/importers/postman.rs` |
+| **cURL** | Bash, PowerShell (`` ` ``), CMD (`^`) parser & exporter | ✅ Implemented | `crates/core/src/curl/mod.rs` |
+| **Insomnia** | Insomnia Export v4 (JSON & YAML) | 📋 Planned (Spec 01) | [`docs/specs/01-import-export-compatibility.md`](docs/specs/01-import-export-compatibility.md) |
+| **HAR** | HTTP Archive 1.2 | 📋 Planned (Spec 01) | [`docs/specs/01-import-export-compatibility.md`](docs/specs/01-import-export-compatibility.md) |
+| **Multi-Language Codegen** | Python, JS/TS, Rust, Go, Java, C#, PHP, HTTPie | 📋 Planned (Spec 06) | [`docs/specs/06-developer-tools-codegen-diff-docs.md`](docs/specs/06-developer-tools-codegen-diff-docs.md) |
 
 ---
 
-## 2. OpenAPI 3.0 / 3.1 Importer Principles
+## 2. OpenAPI 3.0 / 3.1 Importer Principles (`importers/openapi.rs`)
 
-### 2.1 Cycle-Safe Reference Resolution (TD-014)
-When resolving `$ref` pointers (e.g., `#/components/schemas/Pet`), the resolver must guard against circular schemas:
+### 2.1 Iterative Cycle-Safe `$ref` Resolution (TD-014)
+When resolving `$ref` pointers (e.g., `#/components/schemas/Pet`), never use unbounded recursion. Use an iterative loop with a `visited` set and a hard hop bound (max 32):
 ```rust
-// ✅ MANDATORY: Use depth limits or a visited set to prevent recursion stack overflow
-fn resolve_ref<'a>(
-    root: &'a Value,
-    val: &'a Value,
-    visited: &mut HashSet<String>,
-    depth: usize,
-) -> Option<&'a Value> {
-    if depth > 32 { return None; } // Prevent deep/infinite recursion
-    // ...
+// ✅ MANDATORY: Iterative cycle-safe $ref resolution
+fn resolve_ref<'a>(mut val: &'a Value, root: &'a Value) -> &'a Value {
+    let mut visited = HashSet::new();
+    for _ in 0..32 {
+        if let Some(ref_str) = val.get("$ref").and_then(|v| v.as_str()) {
+            if !visited.insert(ref_str) {
+                break; // Circular reference detected
+            }
+            if let Some(stripped) = ref_str.strip_prefix("#/") {
+                let mut curr = root;
+                let mut found = true;
+                for part in stripped.split('/') {
+                    let unescaped = part.replace("~1", "/").replace("~0", "~");
+                    if let Some(next) = curr.get(&unescaped) {
+                        curr = next;
+                    } else {
+                        found = false;
+                        break;
+                    }
+                }
+                if found {
+                    val = curr;
+                    continue;
+                }
+            }
+        }
+        break;
+    }
+    val
 }
 ```
 
-### 2.2 Content-Type Parsing & Fallback (TD-01)
-Avoid `clippy::never_loop` bugs when iterating over media type mappings:
-```rust
-// ✅ CORRECT: Extract first media type safely
-if let Some((media_type, media_obj)) = content.into_iter().next() {
-    // Process single default body format
-}
-```
+### 2.2 Content-Type Extraction (TD-01)
+Extract the first media type entry via `.into_iter().next()` rather than looping with an unconditional `break` (which triggers `clippy::never_loop`).
 
 ---
 
-## 3. cURL Command Parser & Generator (`zest-core::curl`)
+## 3. Workspace Import Application (`importers/mod.rs`)
 
-### 3.1 Parser Capabilities
-- Detects cURL commands via `is_curl_command(text)`.
-- Handles multiline backslash (`\`) and PowerShell backtick (`` ` ``) line continuations.
-- Handles flags positioned before or after the URL (`-X POST`, `-H`, `-d`, `--data-raw`, `-u`).
-- Parses Basic Auth flags (`-u user:pass`) directly into `AuthType::Basic`.
-
-### 3.2 Importer Integration
-Imported cURL strings pasted into the URL address bar or import modal are mapped directly into canonical `HttpRequestItem` without intermediate allocations.
+`apply_import_to_workspace(store, result, options)` writes imported collections to disk safely:
+- **Folder Ordering**: Sorts `result.folders` by path depth (`f.path.len()`) so parent folders are always created on disk before nested subfolders.
+- **Enclosing Folder**: Supports wrapping the entire import inside a root collection folder when `options.create_enclosing_folder` is enabled.
+- **Event Notification**: After running an import in `WorkspaceDataState::execute_import_current_workspace`, emit `WorkspaceEvent::RequestsReloaded { req_ids: None }` so the sidebar and active composer inputs synchronize immediately.
 
 ---
 
-## 4. Code Generation Engine (Spec 06)
+## 4. cURL Command Parser & Generator (`crates/core/src/curl/mod.rs`)
 
-Refer to [`docs/specs/06-developer-tools-codegen-diff-docs.md`](docs/specs/06-developer-tools-codegen-diff-docs.md) when generating code snippets:
-- `cURL`: One-line or multiline shell snippet.
-- `Python`: `requests` and `httpx`.
-- `JavaScript / TypeScript`: `fetch` and `axios`.
-- `Rust`: `reqwest`.
-- `Go`: `net/http`.
+- **Auto-Detection on Paste**: `is_curl_command(text)` detects cURL commands pasted directly into the URL input bar (`subscriptions.rs`) or the Import Modal.
+- **Cross-Shell Normalization**: Strips leading `$ ` / `> ` prompts and joins multiline continuations across Bash (`\`), PowerShell (`` ` ``), and Windows CMD (`^`).
+- **Flag & Auth Mapping**: Parses `-X`/`--request`, `-H`/`--header`, `-d`/`--data`/`--data-raw`/`--data-binary`/`--data-urlencode`, `-F`/`--form`, `-u`/`--user` (`Auth::Basic`), and `Authorization: Bearer` (`Auth::Bearer`) directly into `HttpRequestItem`.
+- **Exporter (`to_curl_command`)**: Reuses a single `VariableInterpolator` across URL, headers, auth, and body to generate clean multiline Bash cURL snippets.
 
 ---
 
@@ -79,11 +88,11 @@ Refer to [`docs/specs/06-developer-tools-codegen-diff-docs.md`](docs/specs/06-de
 
 ```bash
 # 1. Run OpenAPI and Postman importer tests
-cargo test --package zest_core --lib importers::tests
+cargo test --package zest-core --lib importers::
 
 # 2. Run cURL parser and exporter tests
-cargo test --package zest_core --lib curl::tests
+cargo test --package zest-core --lib curl::
 
-# 3. Clippy check
-cargo clippy --package zest_core --lib importers curl -- -D warnings
+# 3. Verify with strict clippy
+cargo clippy --package zest-core --all-targets -- -D warnings
 ```

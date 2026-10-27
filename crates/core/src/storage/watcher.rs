@@ -40,8 +40,9 @@ fn downgrade_existing_deletions(pending: &mut HashSet<FsEvent>, root: &Path) {
 }
 
 fn strip_unc_str(s: &str) -> &str {
-    if let Some(stripped) = s.strip_prefix(r"\\?\") {
-        stripped
+    let s = s.strip_prefix(r"\\?\").unwrap_or(s);
+    if s.starts_with("/private/var/") || s.starts_with("/private/tmp/") {
+        &s["/private".len()..]
     } else {
         s
     }
@@ -94,6 +95,10 @@ pub fn start_workspace_watcher(
     watcher.watch(root_dir, RecursiveMode::Recursive)?;
 
     let root_buf = strip_unc_prefix(root_dir);
+    let canon_root_buf = root_dir
+        .canonicalize()
+        .map(|p| strip_unc_prefix(&p))
+        .unwrap_or_else(|_| root_buf.clone());
     std::thread::Builder::new()
         .name("workspace-watcher-debouncer".to_string())
         .spawn(move || {
@@ -137,7 +142,10 @@ pub fn start_workspace_watcher(
                         }
 
                         let clean_path = strip_unc_prefix(path);
-                        let Ok(rel) = clean_path.strip_prefix(&root_buf) else {
+                        let Ok(rel) = clean_path
+                            .strip_prefix(&root_buf)
+                            .or_else(|_| clean_path.strip_prefix(&canon_root_buf))
+                        else {
                             continue;
                         };
                         let rel_str = rel.to_string_lossy().replace('\\', "/");

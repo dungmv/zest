@@ -40,14 +40,14 @@ Thư mục `docs/` này bao gồm toàn bộ thiết kế chi tiết, kiến tr�
 | **Biến môi trường `{{var}}`** | Đầy đủ | Đầy đủ | **Đầy đủ + Dynamic Fake Vars (`{{$uuid}}`, `{{$timestamp}}`,...)** | **Đầy đủ + Dynamic Fake Vars** |
 | **Timing Breakdown** | DNS, TLS, TTFB | TTFB, Total | DNS, TCP, TLS, TTFB, Download | DNS, TCP, TLS, TTFB, Download |
 | **Response Cache & Examples** | Cloud sync | Local Storage | Local Response Cache (.loc) | Examples & Response Cache |
-| **Import Postman / Insomnia** | N/A | Postman | Đang lập kế hoạch | **1-Click Import hoàn chỉnh** |
+| **Import Postman / Insomnia** | N/A | Postman | **Postman v2.0/v2.1 (Đã hoàn thành)** | **1-Click Import hoàn chỉnh** |
 | **Import cURL khi dán (URL bar)** | Có | Có | **Đầy đủ (Auto-detect & parse đa nền tảng)** | **Đầy đủ** |
-| **Import OpenAPI 3.0 / 3.1** | Có | Có | Đang lập kế hoạch | **Full Spec Tree Generator** |
+| **Import OpenAPI 3.0 / 3.1** | Có | Có | **Đầy đủ (JSON/YAML + Cycle-safe `$ref`)** | **Full Spec Tree Generator** |
 | **Code Generator** | 15+ languages | 12+ languages | cURL | **16+ languages & frameworks** |
 | **Pre-request & Test Scripts** | JavaScript sandbox | JavaScript sandbox | **Embedded QuickJS (`rquickjs`) Sandbox** | **Embedded QuickJS (`rquickjs`) Sandbox** |
 | **Request Chaining** | `pm.environment.set` | Tag filters | **Tự động qua `z.environment.set`** | **Tự động qua Test Script** |
 | **GraphQL Client** | Có (Schema explorer) | Có | Gửi qua POST JSON | **Dedicated GraphQL IDE** |
 | **WebSocket / SSE** | Có | Có | Chưa có | **Realtime Messages Frame Log** |
-| **OAuth 2.0 PKCE / Auto-Refresh** | Có | Có | Bearer Token thủ công | **Tự động lấy & refresh token** |
+| **OAuth 2.0 PKCE / Auto-Refresh** | Có | Có | Bearer / Basic / API Key + Kế thừa Folder/Workspace | **Tự động lấy & refresh token** |
 | **Collection Runner (Testing)** | Có | Inso CLI | Chưa có | **UI Runner + Headless CLI** |
-| **In-app Git Client** | Fork/PR Cloud | Insomnia Git sync | Git branch chip | **Branch switch, Diff, Commit** |
+| **In-app Git Client** | Fork/PR Cloud | Insomnia Git sync | **Đầy đủ (Branch, Commit, Diff, Push/Pull, Remotes)** | **Branch switch, Diff, Commit** |

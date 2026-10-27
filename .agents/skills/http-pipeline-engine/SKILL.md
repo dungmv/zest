@@ -7,36 +7,41 @@ description: >-
 
 # HTTP Pipeline & Execution Engine Guide
 
-This skill governs the networking pipeline in `zest-core::http` and the application runner service in `crates/app/src/services/`.
+This skill governs the networking pipeline in `zest-core::http` and the application execution services in `crates/app/src/services/`.
 
 ---
 
 ## 1. Architectural Separation: `HttpEngine` vs `Runner`
 
-The HTTP execution flow is cleanly decoupled from the UI thread into two layers:
+The HTTP execution flow is decoupled from the GPUI main thread into two layers:
 
 ```
-UI Interaction (AppView / RequestComposer)
+UI Interaction (AppView / RequestComposer / URL Enter)
       │
       ▼
-Runner::send_active_request(cx)  [crates/app/src/services/runner.rs]
+Runner::send_current_request(cx)  [crates/app/src/services/runner.rs]
+      │  ├── 1. Resolve hierarchical headers & auth (ws.resolve_request_hierarchy)
+      │  ├── 2. Apply global network settings (timeout, redirects, validate_tls)
+      │  └── 3. Snapshot cached effective_environment()
       │
-      ▼ (Spawns background task via cx.background_executor())
-HttpEngine::execute(resolved_request, ...) [crates/app/src/services/http_engine.rs]
+      ▼ (Spawns onto Tokio runtime via HttpEngine::execute)
+HttpEngine::execute(req_item, env, cancel_rx) [crates/app/src/services/http_engine.rs]
       │
-      ├── 1. Run Pre-request Script (QuickJS)
-      ├── 2. Apply script mutations (headers, JSON body, env vars)
-      ├── 3. Send over network via ReqwestExecutor (Connection Pooled)
-      ├── 4. Run Post-response Script / Tests
-      └── 5. Return Arc<HttpResponseRecord> & PostResponseOutput
+      ├── 1. Resolve dynamic fake variables in-place (resolve_fake_vars_in_request)
+      ├── 2. Run Pre-request Script (ScriptSandbox::run_pre_request) & emit ExecEvent::Started
+      ├── 3. Merge pre-script env mutations & build ResolvedRequest + apply_pre_script_mutations
+      ├── 4. Send over network via ReqwestExecutor with HttpProgress streaming & cancel_rx select
+      ├── 5. Run Post-response / Test Script (ScriptSandbox::run_post_response)
+      └── 6. Emit ExecEvent::Success { Arc<HttpResponseRecord>, Box<PreRequestOutput>, Box<PostResponseOutput> }
       │
-      ▼ (Event dispatch)
-Runner dispatches ExecEvent::Success / Error back to GPUI state entities
+      ▼ (Unbounded mpsc channel consumed by GPUI async task)
+Runner updates RequestSessionState, EnvironmentState, ResponseState, and saves .loc cache
 ```
 
 ### Key Rules:
-1. **`HttpEngine` is 100% UI-independent**: It does not depend on GPUI or `Window`. It can be tested in isolation with standard Rust unit tests.
-2. **Zero-Copy Payload Transfer (SL-006)**: Always wrap `HttpResponseRecord` in an `Arc<HttpResponseRecord>` before returning from the background thread. Never deep-copy raw body buffers (`Vec<u8>`).
+1. **`HttpEngine` is 100% UI-independent**: It depends only on `zest-core` and `tokio`, never on GPUI or `Window`.
+2. **Zero-Copy Payload Transfer (SL-006, TD-009)**: Wrap `HttpResponseRecord` in `Arc<HttpResponseRecord>` and box `PreRequestOutput` / `PostResponseOutput` inside `ExecEvent::Success` to keep channel messages small and avoid deep-copying body buffers.
+3. **Cached Formatted Body (PERF-007)**: `ResponseState` caches `CachedResponseFormat` (pretty and raw text + line slices) keyed by the `Arc<HttpResponseRecord>` pointer so toggling `Pretty` / `Raw` in the inspector is $O(1)$ without re-parsing JSON/XML.
 
 ---
 
@@ -45,59 +50,47 @@ Runner dispatches ExecEvent::Success / Error back to GPUI state entities
 In `crates/core/src/http/executor.rs`, `ReqwestExecutor` manages persistent HTTP connection pools:
 
 - **Client Caching**: `reqwest::Client` instances are cached in an `RwLock<HashMap<(bool, bool), reqwest::Client>>` keyed by `(follow_redirects, validate_tls)`.
-- **Pre-warming**: The default client is pre-warmed during application startup (`ReqwestExecutor::new()`).
-- **No TCP Probing**: Redundant TCP connection probes (`probe_connection`) are completely eliminated.
-- **Connection Reuse Tracking**: Keep-alive socket reuse is detected via `active_hosts` tracking, populating `connection_reused = true` in `HttpResponseRecord` (displays `⚡ Connection Reused` badge in UI).
-- **Timeouts**: Configured per-request via `RequestBuilder::timeout(Duration::from_secs(t))`.
+- **Pre-warming**: The default `(true, true)` client is pre-warmed during `ReqwestExecutor::new()`.
+- **No TCP Probing**: Redundant pre-flight TCP connection probes are prohibited.
+- **Connection Reuse Tracking**: Keep-alive socket reuse is tracked via `active_hosts`, setting `connection_reused = true` in `HttpResponseRecord`.
+- **Poison-Safe Locks (TD-005)**: Always acquire `cookie_store` and `active_hosts` locks with `.unwrap_or_else(|poisoned| poisoned.into_inner())`.
 
 ---
 
 ## 3. Hierarchy & Variable Resolution
 
-Before executing a request, resolution must follow the strict inheritance chain:
+### 3.1 Shared Header & Auth Inheritance (`crates/core/src/http/hierarchy.rs`)
+Both send-time resolution (`resolve_hierarchical_headers_and_auth`) and the read-only composer projection (`resolve_inherited_headers` -> `Vec<InheritedHeader>`) use the same `HeaderMerger`:
+- **Precedence Chain**: `Workspace` -> `Parent Folder Chain` (outermost to innermost) -> `Request`.
+- **Headers**: Case-insensitive key matching where child overrides ancestor while preserving first-seen order. In the UI (`components/inherited_headers.rs`), ancestor headers overridden by the request are flagged `overridden_by_request: true`.
+- **Auth**: If a scope specifies `Auth::Inherit`, resolution walks upward from the nearest parent folder to the workspace, defaulting to `Auth::None`.
 
-```
-Global Environment
-      │
-      ▼
-Active Environment (with local secrets override)
-      │
-      ▼
-Workspace Settings (Headers, Auth)
-      │
-      ▼
-Parent Folder Hierarchy (Inherited Auth, Headers)
-      │
-      ▼
-Request Settings (Direct overrides)
-```
-
-### Variable Interpolation (`zest_core::interpolation`):
-- Double curly braces `{{variable_name}}` are replaced with resolved values.
-- Dynamic fake variables (`{{$uuid}}`, `{{$timestamp}}`, `{{$randomEmail}}`) are evaluated per execution.
-- Use `VariableInterpolator::interpolate_cow()` to avoid heap allocations when no variables are present.
+### 3.2 Variable Resolution Precedence & Interpolation (`zest_core::interpolation`)
+- **Environment Merging (`EnvironmentState::effective_environment`)**: Merges `global_environment` (`environments/globals.yaml` + `.local/secrets/globals.yaml`) with the active environment (active environment overrides globals), cached in an `Arc<Environment>`.
+- **Dynamic Fake Variables**: `{{$uuid}}`, `{{$guid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, `{{$randomInt}}`, `{{$randomEmail}}`, `{{$randomName}}`, `{{$randomPhoneNumber}}` are resolved per execution via `resolve_fake_vars_in_request` before standard `{{var}}` interpolation.
+- **Single Interpolator Reuse (PERF-009)**: Construct `VariableInterpolator::new(env)` once per request resolution or cURL export and call `interpolator.interpolate_cow(text)` across all fields to avoid recompiling regex/maps and to return `Cow::Borrowed` when no `{{` is present.
 
 ---
 
 ## 4. Multi-Protocol Extensions (Spec 03)
 
-Refer to [`docs/specs/03-protocols-graphql-websocket-grpc.md`](docs/specs/03-protocols-graphql-websocket-grpc.md) when adding protocol extensions:
-- **GraphQL**: Send POST request with JSON body `{ "query": "...", "variables": { ... } }`, automatic schema introspection via `__schema`.
-- **WebSocket**: Asynchronous duplex communication, message history log, auto-reconnect option.
-- **Server-Sent Events (SSE)**: Streaming tokens via `Transfer-Encoding: chunked` or `text/event-stream`, real-time incremental UI update in `InspectorDisplays`.
-- **gRPC**: HTTP/2 with Protobuf schema reflection.
+Refer to [`docs/specs/03-protocols-graphql-websocket-grpc.md`](docs/specs/03-protocols-graphql-websocket-grpc.md) when implementing protocol extensions:
+- **GraphQL**: Dedicated query + variables split editor and schema introspection via `__schema`.
+- **WebSocket**: Asynchronous duplex communication, frame log, and connection lifecycle management.
+- **Server-Sent Events (SSE)**: Incremental streaming (`text/event-stream`) into `InspectorDisplays`.
+- **gRPC**: HTTP/2 unary and streaming calls with Protobuf reflection.
 
 ---
 
 ## 5. Verification & Testing
 
 ```bash
-# 1. Run core HTTP unit tests
-cargo test --package zest_core --lib http::executor::tests
+# 1. Run core HTTP executor and hierarchy unit tests
+cargo test --package zest-core --lib http::
 
-# 2. Run runner and service unit tests
-cargo test --package zest --lib services::http_engine::tests
+# 2. Run variable interpolation unit tests
+cargo test --package zest-core --lib interpolation::
 
-# 3. Clippy check
-cargo clippy --package zest_core --lib -- -D warnings
+# 3. Verify with strict clippy
+cargo clippy --workspace --all-targets -- -D warnings
 ```
