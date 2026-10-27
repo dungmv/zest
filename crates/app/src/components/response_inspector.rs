@@ -12,8 +12,9 @@ use gpui_component::button::{Button, ButtonVariants as _};
 use gpui_component::input::{Editor, EditorState as CodeEditorState};
 use gpui_component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_component::scroll::ScrollableElement as _;
+use gpui_component::spinner::Spinner;
 use gpui_component::text::TextView;
-use gpui_component::Icon;
+use gpui_component::{Icon, Sizable as _};
 use gpui_kit::assets::IconName;
 use zest_core::models::HttpResponseRecord;
 use zest_core::storage::models::{RequestExampleFile, RequestFile, RequestKvItem};
@@ -105,7 +106,12 @@ impl RenderOnce for ResponseInspector {
                                         .text_xs()
                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                         .text_color(t.primary)
-                                        .child(Icon::new(IconName::RefreshCw).size(px(12.)))
+                                        .child(
+                                            Spinner::new()
+                                                .icon(IconName::RefreshCw)
+                                                .with_size(px(12.))
+                                                .color(t.primary),
+                                        )
                                         .child(progress_text),
                                 )
                         } else if let Some(resp) = &current_resp {
@@ -433,7 +439,12 @@ impl RenderOnce for ResponseInspector {
                                                 .rounded_full()
                                                 .bg(gpui::Hsla { a: 0.1, ..t.primary })
                                                 .text_color(t.primary)
-                                                .child(Icon::new(IconName::RefreshCw).size(px(26.))),
+                                                .child(
+                                                    Spinner::new()
+                                                        .icon(IconName::RefreshCw)
+                                                        .with_size(px(26.))
+                                                        .color(t.primary),
+                                                ),
                                         )
                                         .child(
                                             div()
@@ -885,7 +896,12 @@ impl RenderOnce for ResponseInspector {
                                         .items_center()
                                         .justify_center()
                                         .gap(px(8.))
-                                        .child(Icon::new(IconName::RefreshCw).size(px(20.)).text_color(t.primary))
+                                        .child(
+                                            Spinner::new()
+                                                .icon(IconName::RefreshCw)
+                                                .with_size(px(20.))
+                                                .color(t.primary),
+                                        )
                                         .child(
                                             div()
                                                 .text_xs()
@@ -1054,7 +1070,12 @@ impl RenderOnce for ResponseInspector {
                                         .items_center()
                                         .justify_center()
                                         .gap(px(8.))
-                                        .child(Icon::new(IconName::RefreshCw).size(px(20.)).text_color(t.primary))
+                                        .child(
+                                            Spinner::new()
+                                                .icon(IconName::RefreshCw)
+                                                .with_size(px(20.))
+                                                .color(t.primary),
+                                        )
                                         .child(
                                             div()
                                                 .text_xs()
@@ -1109,7 +1130,12 @@ impl RenderOnce for ResponseInspector {
                                         .items_center()
                                         .justify_center()
                                         .gap(px(8.))
-                                        .child(Icon::new(IconName::RefreshCw).size(px(20.)).text_color(t.primary))
+                                        .child(
+                                            Spinner::new()
+                                                .icon(IconName::RefreshCw)
+                                                .with_size(px(20.))
+                                                .color(t.primary),
+                                        )
                                         .child(
                                             div()
                                                 .text_xs()
@@ -1196,9 +1222,10 @@ impl RenderOnce for ResponseInspector {
                                         .justify_center()
                                         .gap(px(8.))
                                         .child(
-                                            Icon::new(IconName::RefreshCw)
-                                                .size(px(20.))
-                                                .text_color(t.primary),
+                                            Spinner::new()
+                                                .icon(IconName::RefreshCw)
+                                                .with_size(px(20.))
+                                                .color(t.primary),
                                         )
                                         .child(
                                             div()
