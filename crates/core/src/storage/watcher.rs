@@ -12,6 +12,7 @@ pub enum FsEvent {
     RequestDeleted(String),     // rel_path of request
     EnvironmentChanged(String), // env name
     TreeChanged,                // collections folder structure or workspace.yaml
+    GitChanged,                 // Git index, HEAD, refs, or repository status changed
 }
 
 pub struct WorkspaceWatcher {
@@ -141,9 +142,20 @@ pub fn start_workspace_watcher(
                         };
                         let rel_str = rel.to_string_lossy().replace('\\', "/");
 
+                        // Handle Git metadata changes (index, HEAD, refs, FETCH_HEAD, etc.)
+                        // Skip heavy object churn, logs, and lock files.
+                        if rel_str == ".git" || rel_str.starts_with(".git/") {
+                            if !rel_str.ends_with(".lock")
+                                && !rel_str.starts_with(".git/objects")
+                                && !rel_str.starts_with(".git/logs")
+                            {
+                                pending_events.insert(FsEvent::GitChanged);
+                            }
+                            continue;
+                        }
+
                         // Ignore internal / non-collection files
-                        if rel_str.starts_with(".git")
-                            || rel_str.starts_with(".local")
+                        if rel_str.starts_with(".local")
                             || rel_str.ends_with(".loc")
                             || rel_str.ends_with(".tmp")
                             || rel_str.ends_with(".bak")
@@ -227,5 +239,51 @@ mod tests {
         assert!(!pending.contains(&FsEvent::RequestDeleted("a.yaml".to_string())));
         // File truly gone: stays a deletion
         assert!(pending.contains(&FsEvent::RequestDeleted("gone.yaml".to_string())));
+    }
+
+    #[tokio::test]
+    async fn test_watcher_git_and_collections_events() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join(".git").join("refs").join("heads")).unwrap();
+        std::fs::create_dir_all(root.join(".git").join("objects")).unwrap();
+        std::fs::create_dir_all(root.join("collections")).unwrap();
+
+        let sup = Arc::new(Mutex::new(HashSet::new()));
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let _watcher = start_workspace_watcher(root, sup, tx).unwrap();
+
+        // 1. Modify git index
+        std::fs::write(root.join(".git").join("index"), "fake index").unwrap();
+        // 2. Modify git objects (should be ignored)
+        std::fs::write(root.join(".git").join("objects").join("abc"), "blob").unwrap();
+        // 3. Modify git lock (should be ignored)
+        std::fs::write(root.join(".git").join("index.lock"), "lock").unwrap();
+        // 4. Modify a request
+        std::fs::write(root.join("collections").join("req.yaml"), "name: Req\n").unwrap();
+
+        let mut received = HashSet::new();
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        while std::time::Instant::now() < deadline {
+            if let Ok(Some(event)) =
+                tokio::time::timeout(Duration::from_millis(400), rx.recv()).await
+            {
+                received.insert(event);
+                if received.contains(&FsEvent::GitChanged)
+                    && received.contains(&FsEvent::RequestChanged("req.yaml".to_string()))
+                {
+                    break;
+                }
+            }
+        }
+
+        assert!(
+            received.contains(&FsEvent::GitChanged),
+            "Expected GitChanged event"
+        );
+        assert!(
+            received.contains(&FsEvent::RequestChanged("req.yaml".to_string())),
+            "Expected RequestChanged event"
+        );
     }
 }

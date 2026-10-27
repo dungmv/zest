@@ -1,5 +1,6 @@
 use super::common::{
-    render_checkbox, render_error_banner, render_not_a_repo_view, render_status_badge,
+    collect_unified_changes, render_checkbox, render_error_banner, render_not_a_repo_view,
+    render_status_badge, UnifiedChangeItem,
 };
 use super::diff_view::{render_diff_content, render_diff_view_toggle, DiffViewMode};
 use crate::services::GitService;
@@ -14,8 +15,8 @@ use gpui_component::input::{Input, InputState};
 use gpui_component::scroll::ScrollableElement as _;
 use gpui_component::Icon;
 use gpui_kit::assets::IconName;
-use std::collections::{HashMap, HashSet};
-use zest_core::git::{GitFileStatus, GitStatusResult};
+use std::collections::HashSet;
+use zest_core::git::GitStatusResult;
 
 #[derive(IntoElement)]
 pub struct GitCommitModal {
@@ -36,46 +37,6 @@ impl GitCommitModal {
             git_service,
         }
     }
-}
-
-/// A single pending change shown in the unified file list. A path that has both
-/// staged and working-tree changes collapses into one item; the working-tree
-/// state wins because that is what a commit includes.
-struct UnifiedChangeItem {
-    path: String,
-    status: GitFileStatus,
-    has_worktree_changes: bool,
-}
-
-fn collect_unified_changes(status: &GitStatusResult) -> Vec<UnifiedChangeItem> {
-    let mut items: Vec<UnifiedChangeItem> = Vec::new();
-    let mut index: HashMap<String, usize> = HashMap::new();
-
-    for f in &status.staged_files {
-        index.insert(f.path.clone(), items.len());
-        items.push(UnifiedChangeItem {
-            path: f.path.clone(),
-            status: f.status,
-            has_worktree_changes: false,
-        });
-    }
-    for f in status.unstaged_files.iter().chain(&status.untracked_files) {
-        match index.get(&f.path) {
-            Some(&i) => {
-                items[i].status = f.status;
-                items[i].has_worktree_changes = true;
-            }
-            None => {
-                index.insert(f.path.clone(), items.len());
-                items.push(UnifiedChangeItem {
-                    path: f.path.clone(),
-                    status: f.status,
-                    has_worktree_changes: true,
-                });
-            }
-        }
-    }
-    items
 }
 
 pub struct ChangesViewProps {
@@ -248,11 +209,18 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui::AnyElement {
                                             .hover(|s| s.bg(t.bg_card).text_color(t.status_5xx))
                                             .on_click(move |_, _, cx| {
                                                 cx.stop_propagation();
-                                                svc_disc.discard_file(&p_disc, true, cx);
-                                                ws_disc.update(cx, |ws, cx| {
-                                                    ws.reload_all();
-                                                    cx.notify();
-                                                });
+                                                let ws = ws_disc.clone();
+                                                svc_disc.discard_file(
+                                                    &p_disc,
+                                                    true,
+                                                    cx,
+                                                    move |cx| {
+                                                        ws.update(cx, |ws, cx| {
+                                                            ws.reload_all();
+                                                            cx.notify();
+                                                        });
+                                                    },
+                                                );
                                             })
                                             .child("↺"),
                                     )

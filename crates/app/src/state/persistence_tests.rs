@@ -431,11 +431,13 @@ fn test_fs_batch_recreated_request_not_dropped(cx: &mut gpui::TestAppContext) {
     };
     assert!(in_memory(cx));
 
+    let git_state = cx.new(|_| GitState::new(dir.path().to_path_buf()));
     let dispatch = |events: Vec<FsEvent>, cx: &mut gpui::TestAppContext| {
         let ws = ws_state.clone();
         let env = env_state.clone();
+        let git = git_state.clone();
         per_state.update(cx, |per, cx| {
-            per.handle_fs_events_batch(events, ws, env, cx);
+            per.handle_fs_events_batch(events, ws, env, git, cx);
         });
     };
 
@@ -461,4 +463,95 @@ fn test_fs_batch_recreated_request_not_dropped(cx: &mut gpui::TestAppContext) {
     std::fs::write(&req_file_path, yaml).unwrap();
     dispatch(vec![FsEvent::RequestChanged(req_id.clone())], cx);
     assert!(in_memory(cx), "recreated request was not re-added");
+}
+
+#[gpui::test]
+fn test_external_change_reconciles_clean_vs_dirty(cx: &mut gpui::TestAppContext) {
+    use zest_core::storage::FsEvent;
+
+    let (dir, store) = setup_test_workspace("test_reconcile");
+    let ws_state =
+        cx.new(|_| WorkspaceDataState::new_for_path(dir.path().to_path_buf(), store.clone()));
+    let per_state = cx.new(|_| PersistenceState::new(store.clone(), dir.path().to_path_buf()));
+    let env_state =
+        cx.new(|_| EnvironmentState::new(store.clone(), "test_reconcile".to_string(), None));
+    let git_state = cx.new(|_| GitState::new(dir.path().to_path_buf()));
+
+    let req_id = store
+        .create_request(
+            None,
+            "Original Name",
+            HttpMethod::Get,
+            "https://api.com/users",
+        )
+        .unwrap()
+        .1;
+    ws_state.update(cx, |ws, _| ws.reload_tree());
+
+    // 1. Clean request: external edit on disk is automatically reloaded into memory
+    let req_file_path = dir.path().join("collections").join(&req_id);
+    let mut modified_yaml = std::fs::read_to_string(&req_file_path).unwrap();
+    modified_yaml = modified_yaml.replace("Original Name", "External Name");
+    std::fs::write(&req_file_path, &modified_yaml).unwrap();
+
+    let ws = ws_state.clone();
+    let env = env_state.clone();
+    let git = git_state.clone();
+    per_state.update(cx, |per, cx| {
+        per.handle_fs_events_batch(
+            vec![FsEvent::RequestChanged(req_id.clone())],
+            ws,
+            env,
+            git,
+            cx,
+        );
+    });
+
+    let current_name =
+        ws_state.read_with(cx, |ws, _| ws.find_request(&req_id).map(|r| r.name.clone()));
+    assert_eq!(current_name.as_deref(), Some("External Name"));
+    assert!(!per_state.read_with(cx, |per, _| per.conflicts.contains_key(&req_id)));
+
+    // 2. Dirty request: external edit triggers conflict, keeps in-memory edits intact
+    per_state.update(cx, |per, cx| {
+        per.mark_dirty(req_id.clone(), cx);
+    });
+    ws_state.update(cx, |ws, _| {
+        if let Some(r) = ws.requests.iter_mut().find(|r| r.id == req_id) {
+            r.name = "In-Memory Edits".to_string();
+        }
+    });
+
+    let mut external_cli_yaml = std::fs::read_to_string(&req_file_path).unwrap();
+    external_cli_yaml = external_cli_yaml.replace("External Name", "CLI Branch Edit");
+    std::fs::write(&req_file_path, &external_cli_yaml).unwrap();
+
+    let ws2 = ws_state.clone();
+    let env2 = env_state.clone();
+    let git2 = git_state.clone();
+    per_state.update(cx, |per, cx| {
+        per.handle_fs_events_batch(
+            vec![FsEvent::RequestChanged(req_id.clone())],
+            ws2,
+            env2,
+            git2,
+            cx,
+        );
+    });
+
+    // In-memory edits preserved
+    let memory_name =
+        ws_state.read_with(cx, |ws, _| ws.find_request(&req_id).map(|r| r.name.clone()));
+    assert_eq!(memory_name.as_deref(), Some("In-Memory Edits"));
+    // Conflict registered
+    assert!(per_state.read_with(cx, |per, _| per.conflicts.contains_key(&req_id)));
+
+    // 3. Discard cancellation: user discards changes
+    per_state.update(cx, |per, cx| {
+        per.cancel_request(&req_id, cx);
+        per.mark_clean(&req_id, cx);
+        per.conflicts.remove(&req_id);
+    });
+    assert!(!per_state.read_with(cx, |per, _| per.is_dirty(&req_id)));
+    assert!(!per_state.read_with(cx, |per, _| per.conflicts.contains_key(&req_id)));
 }

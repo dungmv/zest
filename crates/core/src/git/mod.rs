@@ -499,37 +499,96 @@ pub fn git_unstage_all(repo_dir: &Path) -> Result<()> {
 /// (git-clean semantics). Workspace-data callers (sidebar) must pass `false`
 /// so a never-committed file is kept on disk instead of being destroyed.
 pub fn git_discard_file(repo_dir: &Path, file_path: &str, delete_untracked: bool) -> Result<()> {
-    let root = find_git_root(repo_dir).unwrap_or_else(|| repo_dir.to_path_buf());
     let norm_path = file_path.replace('\\', "/");
+    let path_obj = Path::new(&norm_path);
 
-    // Check if file existed in HEAD
+    // Validate path: reject empty, absolute paths, and traversal (..)
+    if norm_path.is_empty()
+        || norm_path.starts_with('/')
+        || path_obj.is_absolute()
+        || path_obj.components().any(|c| {
+            matches!(
+                c,
+                std::path::Component::ParentDir
+                    | std::path::Component::Prefix(_)
+                    | std::path::Component::RootDir
+            )
+        })
+    {
+        return Err(anyhow!(
+            "Invalid relative file path for discard: '{}'",
+            file_path
+        ));
+    }
+
+    let root = find_git_root(repo_dir).unwrap_or_else(|| repo_dir.to_path_buf());
+
+    // Check if file exists in HEAD and/or git index
     let in_head = run_git_cmd(&root, &["cat-file", "-e", &format!("HEAD:{}", norm_path)]).is_ok();
+    let in_index = run_git_cmd(&root, &["ls-files", "--error-unmatch", "--", &norm_path]).is_ok();
 
-    // A file that never existed in HEAD has nothing to restore to; without the
-    // git-clean opt-in the discard is a no-op and the file is left untouched.
-    if !in_head && !delete_untracked {
+    if in_head {
+        // Tracked file in HEAD
+        // 1. Unstage if staged
+        let _ = run_git_cmd(&root, &["restore", "--staged", "--", &norm_path])
+            .or_else(|_| run_git_cmd(&root, &["reset", "HEAD", "--", &norm_path]));
+
+        // 2. Restore working tree
+        run_git_cmd(&root, &["restore", "--", &norm_path])
+            .or_else(|_| run_git_cmd(&root, &["checkout", "HEAD", "--", &norm_path]))
+            .map_err(|e| anyhow!("Failed to restore working tree for '{}': {}", norm_path, e))?;
+
         return Ok(());
     }
 
-    // 1. Unstage if staged
-    let _ = run_git_cmd(&root, &["restore", "--staged", "--", &norm_path]);
+    if in_index {
+        // Staged newly-added file (in index, but never in HEAD)
+        // 1. Unstage so it moves to untracked
+        let _ = run_git_cmd(&root, &["restore", "--staged", "--", &norm_path])
+            .or_else(|_| run_git_cmd(&root, &["reset", "HEAD", "--", &norm_path]));
 
-    // 2. Restore working tree
-    let res = run_git_cmd(&root, &["restore", "--", &norm_path])
-        .or_else(|_| run_git_cmd(&root, &["checkout", "--", &norm_path]));
+        if !delete_untracked {
+            // Workspace-data semantics: keep untracked file on disk
+            return Ok(());
+        }
+    } else if !delete_untracked {
+        // Untracked file (never in HEAD, not in index), sidebar semantics: no-op, keep file
+        return Ok(());
+    }
 
-    if delete_untracked && (!in_head || res.is_err()) {
-        // File never existed in HEAD, so it was a newly added or untracked file.
-        // First try git clean to remove safely via git
-        let full = root.join(file_path);
-        if run_git_cmd(&root, &["clean", "-f", "--", &norm_path]).is_err() {
-            // Fallback: only delete if canonical path is verified to reside strictly within root
+    // Git-panel clean semantics for untracked/newly-added file: delete the file
+    let full = root.join(&norm_path);
+    if full.exists() {
+        let clean_res = run_git_cmd(&root, &["clean", "-f", "--", &norm_path]);
+        if clean_res.is_err() || full.exists() {
             if let (Ok(can_full), Ok(can_root)) = (full.canonicalize(), root.canonicalize()) {
                 if can_full.starts_with(&can_root) && can_full.is_file() {
-                    let _ = std::fs::remove_file(can_full);
+                    std::fs::remove_file(&can_full).map_err(|e| {
+                        anyhow!("Failed to remove untracked file '{}': {}", norm_path, e)
+                    })?;
+                } else if can_full.is_dir()
+                    && can_full.starts_with(&can_root)
+                    && can_full != can_root
+                {
+                    std::fs::remove_dir_all(&can_full).map_err(|e| {
+                        anyhow!(
+                            "Failed to remove untracked directory '{}': {}",
+                            norm_path,
+                            e
+                        )
+                    })?;
                 }
+            } else if full.exists() {
+                let _ = std::fs::remove_file(&full);
             }
         }
+    }
+
+    if full.exists() {
+        return Err(anyhow!(
+            "Untracked file '{}' still exists after discard",
+            norm_path
+        ));
     }
 
     Ok(())
@@ -949,6 +1008,39 @@ mod tests {
         // Git-panel semantics (delete_untracked = true): untracked file is removed
         assert!(git_discard_file(&temp_dir, "new_req.yaml", true).is_ok());
         assert!(!new_untracked.exists());
+
+        // 11b. discard path validation
+        assert!(git_discard_file(&temp_dir, "", false).is_err());
+        assert!(git_discard_file(&temp_dir, "../outside.yaml", false).is_err());
+        assert!(git_discard_file(&temp_dir, "/abs/path.yaml", false).is_err());
+
+        // 11c. discard staged-added file (in index, not in HEAD)
+        let staged_added = temp_dir.join("staged_added.yaml");
+        std::fs::write(&staged_added, "name: Staged Added\n").unwrap();
+        assert!(git_stage_files(&temp_dir, &["staged_added.yaml"]).is_ok());
+        assert!(git_status(&temp_dir)
+            .unwrap()
+            .staged_files
+            .iter()
+            .any(|f| f.path == "staged_added.yaml"));
+
+        // delete_untracked = false: unstage, but keep file on disk
+        assert!(git_discard_file(&temp_dir, "staged_added.yaml", false).is_ok());
+        assert!(staged_added.is_file());
+        let st = git_status(&temp_dir).unwrap();
+        assert!(!st
+            .staged_files
+            .iter()
+            .any(|f| f.path == "staged_added.yaml"));
+        assert!(st
+            .untracked_files
+            .iter()
+            .any(|f| f.path == "staged_added.yaml"));
+
+        // Re-stage and discard with delete_untracked = true: unstage and remove file
+        assert!(git_stage_files(&temp_dir, &["staged_added.yaml"]).is_ok());
+        assert!(git_discard_file(&temp_dir, "staged_added.yaml", true).is_ok());
+        assert!(!staged_added.exists());
 
         // 12. remote management
         assert!(git_add_remote(&temp_dir, "origin", "https://github.com/test/repo.git").is_ok());

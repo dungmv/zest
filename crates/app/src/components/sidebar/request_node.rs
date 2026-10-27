@@ -287,41 +287,54 @@ pub fn render_request_inner_pill(
 
                                 // Never delete never-committed request files: for an
                                 // untracked request this only drops unsaved in-memory
-                                // edits via mark_clean + reload_all below.
-                                svc_disc.discard_file(&path_to_discard, false, cx);
+                                // edits via mark_clean + reload_all in on_success below.
                                 per_disc.update(cx, |per, cx| {
-                                    per.mark_clean(&r_id_disc, cx);
+                                    per.cancel_request(&r_id_disc, cx);
                                 });
-                                ws_disc.update(cx, |ws, cx| {
-                                    ws.reload_all();
-                                    let active_id =
-                                        ed_disc.read(cx).active_request_id().to_string();
-                                    if active_id == r_id_disc {
-                                        if ws.find_request(&r_id_disc).is_some() {
-                                            ed_disc.update(cx, |ed, cx| {
-                                                ed.sync_composer_inputs(
-                                                    crate::state::ComposerSyncScope::All,
-                                                    cx,
-                                                );
-                                            });
-                                        } else {
-                                            ed_disc.update(cx, |ed, cx| {
-                                                if let Some(first_req) = ws.requests.first() {
-                                                    ed.set_active_request_id(&first_req.id, cx);
-                                                } else {
-                                                    ed.set_active_request_id("scratch", cx);
-                                                }
-                                            });
+                                let r_id_task = r_id_disc.clone();
+                                let per_cb = per_disc.clone();
+                                let ws_cb = ws_disc.clone();
+                                let ed_cb = ed_disc.clone();
+                                let toast_cb = toast_disc.clone();
+                                let req_name_cb = req_name.clone();
+                                svc_disc.discard_file(&path_to_discard, false, cx, move |cx| {
+                                    per_cb.update(cx, |per, cx| {
+                                        per.mark_clean(&r_id_task, cx);
+                                        if per.conflicts.remove(&r_id_task).is_some() {
+                                            cx.notify();
                                         }
-                                    }
-                                    cx.notify();
-                                });
-                                toast_disc.update(cx, |ts, cx| {
-                                    ts.push_info(
-                                        "Git Discard",
-                                        format!("Discarded changes in '{}'", req_name),
-                                        cx,
-                                    );
+                                    });
+                                    ws_cb.update(cx, |ws, cx| {
+                                        ws.reload_all();
+                                        let active_id =
+                                            ed_cb.read(cx).active_request_id().to_string();
+                                        if active_id == r_id_task {
+                                            if ws.find_request(&r_id_task).is_some() {
+                                                ed_cb.update(cx, |ed, cx| {
+                                                    ed.sync_composer_inputs(
+                                                        crate::state::ComposerSyncScope::All,
+                                                        cx,
+                                                    );
+                                                });
+                                            } else {
+                                                ed_cb.update(cx, |ed, cx| {
+                                                    if let Some(first_req) = ws.requests.first() {
+                                                        ed.set_active_request_id(&first_req.id, cx);
+                                                    } else {
+                                                        ed.set_active_request_id("scratch", cx);
+                                                    }
+                                                });
+                                            }
+                                        }
+                                        cx.notify();
+                                    });
+                                    toast_cb.update(cx, |ts, cx| {
+                                        ts.push_info(
+                                            "Git Discard",
+                                            format!("Discarded changes in '{}'", req_name_cb),
+                                            cx,
+                                        );
+                                    });
                                 });
                             }),
                         );

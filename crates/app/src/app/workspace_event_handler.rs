@@ -24,9 +24,10 @@ pub fn handle_workspace_event(
         } => {
             let ws_ent = this.state.workspace.clone();
             let env_ent = this.state.env.clone();
+            let git_ent = this.state.git.clone();
             this.state.persistence.update(cx, |per, cx| {
                 per.set_workspace(store.clone(), path.clone(), cx);
-                per.start_watcher(ws_ent, env_ent, cx);
+                per.start_watcher(ws_ent, env_ent, git_ent, cx);
             });
 
             let (active_env, next_id) = {

@@ -1,6 +1,6 @@
 use super::{
-    EnvironmentState, PersistPayload, PersistTarget, PersistenceCoordinator, TargetStatus,
-    WorkspaceDataState, WorkspaceEvent,
+    EnvironmentState, GitState, PersistPayload, PersistTarget, PersistenceCoordinator,
+    TargetStatus, WorkspaceDataState, WorkspaceEvent,
 };
 use gpui::{Context, Entity, Task};
 use std::collections::{HashMap, HashSet};
@@ -369,6 +369,7 @@ impl PersistenceState {
         &mut self,
         workspace_data: Entity<WorkspaceDataState>,
         env_state: Entity<EnvironmentState>,
+        git_state: Entity<GitState>,
         cx: &mut Context<Self>,
     ) {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<FsEvent>();
@@ -379,6 +380,7 @@ impl PersistenceState {
             self.watcher = Some(watcher);
             let ws_clone = workspace_data.clone();
             let env_clone = env_state.clone();
+            let git_clone = git_state.clone();
             let task = cx.spawn(async move |this, cx| {
                 while let Some(event) = rx.recv().await {
                     let mut batch = vec![event];
@@ -386,7 +388,7 @@ impl PersistenceState {
                         batch.push(ev);
                     }
                     cx.background_executor()
-                        .timer(std::time::Duration::from_millis(100))
+                        .timer(Duration::from_millis(100))
                         .await;
                     while let Ok(ev) = rx.try_recv() {
                         batch.push(ev);
@@ -395,8 +397,9 @@ impl PersistenceState {
                     if let Some(this) = this.upgrade() {
                         let ws = ws_clone.clone();
                         let env = env_clone.clone();
+                        let git = git_clone.clone();
                         this.update(cx, |p, cx| {
-                            p.handle_fs_events_batch(batch, ws, env, cx);
+                            p.handle_fs_events_batch(batch, ws, env, git, cx);
                         });
                     }
                 }
@@ -410,9 +413,10 @@ impl PersistenceState {
         event: FsEvent,
         workspace_data: Entity<WorkspaceDataState>,
         env_state: Entity<EnvironmentState>,
+        git_state: Entity<GitState>,
         cx: &mut Context<Self>,
     ) {
-        self.handle_fs_events_batch(vec![event], workspace_data, env_state, cx);
+        self.handle_fs_events_batch(vec![event], workspace_data, env_state, git_state, cx);
     }
 
     pub fn handle_fs_events_batch(
@@ -420,8 +424,10 @@ impl PersistenceState {
         events: Vec<FsEvent>,
         workspace_data: Entity<WorkspaceDataState>,
         env_state: Entity<EnvironmentState>,
+        git_state: Entity<GitState>,
         cx: &mut Context<Self>,
     ) {
+        let mut git_changed = false;
         let mut tree_changed = false;
         let mut env_changed = false;
         let mut req_changed = std::collections::HashSet::new();
@@ -429,6 +435,7 @@ impl PersistenceState {
 
         for event in events {
             match event {
+                FsEvent::GitChanged => git_changed = true,
                 FsEvent::TreeChanged => tree_changed = true,
                 FsEvent::EnvironmentChanged(_) => env_changed = true,
                 FsEvent::RequestDeleted(rel_path) => {
@@ -467,7 +474,7 @@ impl PersistenceState {
         let mut self_changed = false;
 
         for rel_path in &req_changed {
-            if self.unsaved_requests.contains(rel_path) {
+            if self.is_dirty(rel_path) {
                 self.conflicts.insert(
                     rel_path.clone(),
                     "File was modified externally while you have unsaved changes.".to_string(),
@@ -499,11 +506,11 @@ impl PersistenceState {
             let mut reqs_to_update = Vec::new();
             let mut parse_errors = Vec::new();
 
-            for rel_path in req_changed {
-                if !self.unsaved_requests.contains(&rel_path) {
-                    match self.store.read_request(&rel_path) {
-                        Ok(req_file) => reqs_to_update.push((rel_path, req_file)),
-                        Err(e) => parse_errors.push((rel_path, e.to_string())),
+            for rel_path in &req_changed {
+                if !self.is_dirty(rel_path) {
+                    match self.store.read_request(rel_path) {
+                        Ok(req_file) => reqs_to_update.push((rel_path.clone(), req_file)),
+                        Err(e) => parse_errors.push((rel_path.clone(), e.to_string())),
                     }
                 }
             }
@@ -539,9 +546,9 @@ impl PersistenceState {
                         }
                     }
 
-                    for rel_path in req_deleted {
-                        ws.parse_errors.remove(&rel_path);
-                        ws.requests.retain(|r| r.id != rel_path);
+                    for rel_path in &req_deleted {
+                        ws.parse_errors.remove(rel_path);
+                        ws.requests.retain(|r| &r.id != rel_path);
                     }
 
                     ws.bump_tree_version();
@@ -567,6 +574,12 @@ impl PersistenceState {
 
         if self_changed {
             cx.notify();
+        }
+
+        let working_tree_changed =
+            tree_changed || env_changed || !req_changed.is_empty() || !req_deleted.is_empty();
+        if git_changed || working_tree_changed {
+            git_state.update(cx, |git, cx| git.refresh_status(cx));
         }
     }
 

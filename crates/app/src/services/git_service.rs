@@ -158,28 +158,63 @@ impl GitService {
     /// Discards changes in a file. `delete_untracked` opts into git-clean
     /// semantics (deleting never-committed files); only the git panel may pass
     /// `true` — sidebar callers pass `false` to keep workspace data intact.
-    pub fn discard_file(&self, path: &str, delete_untracked: bool, cx: &mut App) {
+    pub fn discard_file(
+        &self,
+        path: &str,
+        delete_untracked: bool,
+        cx: &mut App,
+        on_success: impl FnOnce(&mut App) + Send + 'static,
+    ) {
+        if self.git.read(cx).loading {
+            return;
+        }
         let ws_path = self.git.read(cx).repo_path.clone();
         let p = path.to_string();
+        self.git.update(cx, |git, cx| {
+            git.loading = true;
+            git.error = None;
+            cx.notify();
+        });
+
         let git = self.git.clone();
+        let toast = self.toast.clone();
         cx.spawn(async move |cx| {
             let p_task = p.clone();
-            let _ = cx
+            let res = cx
                 .background_executor()
                 .spawn(async move {
                     zest_core::git::git_discard_file(&ws_path, &p_task, delete_untracked)
                 })
                 .await;
             cx.update(|cx| {
+                let success = res.is_ok();
                 git.update(cx, |git, cx| {
-                    if let Some((sel, _)) = &git.selected_file {
-                        if sel == &p {
-                            git.selected_file = None;
-                            git.diff_content = None;
+                    git.loading = false;
+                    match res {
+                        Ok(()) => {
+                            git.error = None;
+                            if let Some((sel, _)) = &git.selected_file {
+                                if sel == &p {
+                                    git.selected_file = None;
+                                    git.diff_content = None;
+                                }
+                            }
+                            git.refresh_status(cx);
+                            cx.notify();
+                        }
+                        Err(e) => {
+                            let err_str = e.to_string();
+                            git.error = Some(err_str.clone());
+                            toast.update(cx, |ts, cx| {
+                                ts.push_error("Git Discard Failed", err_str, cx);
+                            });
+                            cx.notify();
                         }
                     }
-                    git.refresh_status(cx);
                 });
+                if success {
+                    on_success(cx);
+                }
             })
         })
         .detach();

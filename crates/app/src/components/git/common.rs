@@ -8,7 +8,48 @@ use gpui::{
 };
 use gpui_component::Icon;
 use gpui_kit::assets::IconName;
-use zest_core::git::GitFileStatus;
+use std::collections::HashMap;
+use zest_core::git::{GitFileStatus, GitStatusResult};
+
+/// A single pending change shown in the unified file list. A path that has both
+/// staged and working-tree changes collapses into one item; the working-tree
+/// state wins because that is what a commit includes.
+pub struct UnifiedChangeItem {
+    pub path: String,
+    pub status: GitFileStatus,
+    pub has_worktree_changes: bool,
+}
+
+pub fn collect_unified_changes(status: &GitStatusResult) -> Vec<UnifiedChangeItem> {
+    let mut items: Vec<UnifiedChangeItem> = Vec::new();
+    let mut index: HashMap<String, usize> = HashMap::new();
+
+    for f in &status.staged_files {
+        index.insert(f.path.clone(), items.len());
+        items.push(UnifiedChangeItem {
+            path: f.path.clone(),
+            status: f.status,
+            has_worktree_changes: false,
+        });
+    }
+    for f in status.unstaged_files.iter().chain(&status.untracked_files) {
+        match index.get(&f.path) {
+            Some(&i) => {
+                items[i].status = f.status;
+                items[i].has_worktree_changes = true;
+            }
+            None => {
+                index.insert(f.path.clone(), items.len());
+                items.push(UnifiedChangeItem {
+                    path: f.path.clone(),
+                    status: f.status,
+                    has_worktree_changes: true,
+                });
+            }
+        }
+    }
+    items
+}
 
 pub fn render_status_badge(status: GitFileStatus) -> gpui::AnyElement {
     let color = match status {

@@ -34,16 +34,17 @@ impl AppState {
         let initial_active_env = persistence.read(cx).local_state.active_environment.clone();
         let env = cx.new(|_| EnvironmentState::new(ws_store, ws_name, initial_active_env));
 
-        persistence.update(cx, |p, cx| {
-            p.start_watcher(workspace.clone(), env.clone(), cx);
-        });
-
-        let sidebar = cx.new(|_| SidebarState::new());
-        let modal = cx.new(|_| ModalState::new());
         let git = cx.new(|_| GitState::new(ws_dir));
         git.update(cx, |g, cx| {
             g.refresh_status(cx);
         });
+
+        persistence.update(cx, |p, cx| {
+            p.start_watcher(workspace.clone(), env.clone(), git.clone(), cx);
+        });
+
+        let sidebar = cx.new(|_| SidebarState::new());
+        let modal = cx.new(|_| ModalState::new());
         let session = cx.new(|_| RequestSessionState::new());
         let response = cx.new(|_| ResponseState::new());
         let toast = cx.new(|_| ToastState::new());
