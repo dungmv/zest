@@ -11,6 +11,7 @@ use gpui_component::input::{
     CompletionProvider, Editor, EditorState as CodeEditorState, FoldRange, HighlightStyleResolver,
     InputEdit, InputHighlighter, Rope,
 };
+use gpui_component::scroll::{Scrollbar, ScrollbarMode};
 use gpui_component::RopeExt;
 use lsp_types::{
     CompletionContext, CompletionItem, CompletionItemKind, CompletionResponse, CompletionTextEdit,
@@ -1126,6 +1127,7 @@ pub struct ScriptEditor {
     kind: ScriptEditorKind,
     error_message: Option<String>,
     on_insert_snippet: Rc<dyn Fn(&str, &mut Window, &mut App)>,
+    split_layout_vertical: bool,
 }
 
 impl ScriptEditor {
@@ -1140,15 +1142,31 @@ impl ScriptEditor {
             kind,
             error_message,
             on_insert_snippet: Rc::new(on_insert_snippet),
+            split_layout_vertical: false,
         }
+    }
+
+    pub fn split_layout_vertical(mut self, vertical: bool) -> Self {
+        self.split_layout_vertical = vertical;
+        self
     }
 }
 
 impl RenderOnce for ScriptEditor {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let t = theme();
         let kind = self.kind;
         let on_insert = self.on_insert_snippet.clone();
+
+        let scroll_handle = window.use_keyed_state(
+            SharedString::from(match kind {
+                ScriptEditorKind::PreRequest => "snippets-top-scroll-pre",
+                ScriptEditorKind::Tests => "snippets-top-scroll-tests",
+            }),
+            cx,
+            |_window, _cx| gpui::ScrollHandle::new(),
+        );
+        let scr_h = scroll_handle.read(cx).clone();
 
         let snippets: Vec<(&'static str, &'static str)> = match kind {
             ScriptEditorKind::PreRequest => vec![
@@ -1189,6 +1207,144 @@ impl RenderOnce for ScriptEditor {
             ],
         };
 
+        let snippet_buttons: Vec<_> = snippets
+            .into_iter()
+            .enumerate()
+            .map(|(idx, (label, code))| {
+                let insert_cb = on_insert.clone();
+                let snippet_code = code;
+                div()
+                    .id(format!(
+                        "snippet-btn-{}-{}",
+                        match kind {
+                            ScriptEditorKind::PreRequest => "pre",
+                            ScriptEditorKind::Tests => "test",
+                        },
+                        idx
+                    ))
+                    .flex_shrink_0()
+                    .px(px(8.))
+                    .py(px(if self.split_layout_vertical { 5. } else { 3. }))
+                    .rounded(px(4.))
+                    .bg(t.bg_editor)
+                    .border_1()
+                    .border_color(t.border)
+                    .text_xs()
+                    .text_color(t.text_primary)
+                    .hover(|s| s.bg(t.bg_hover).border_color(t.border_focus))
+                    .cursor_pointer()
+                    .on_click(move |_, window, cx| {
+                        insert_cb(snippet_code, window, cx);
+                    })
+                    .child(label)
+            })
+            .collect();
+
+        let workspace = if self.split_layout_vertical {
+            // Horizontal split (Top: Composer / Bottom: Response): snippets on the RIGHT (vertical column)
+            div()
+                .flex_1()
+                .flex()
+                .overflow_hidden()
+                .child(
+                    // Left: Code Editor Area
+                    div().flex_1().h_full().overflow_hidden().p(px(8.)).child(
+                        Editor::new(&self.editor)
+                            .appearance(false)
+                            .bordered(false)
+                            .h(gpui::relative(1.)),
+                    ),
+                )
+                // Right: Snippets Toolbar (vertical column)
+                .child(
+                    div()
+                        .w(px(200.))
+                        .h_full()
+                        .flex_shrink_0()
+                        .border_l_1()
+                        .border_color(t.border)
+                        .bg(t.bg_panel)
+                        .p(px(10.))
+                        .flex()
+                        .flex_col()
+                        .gap(px(6.))
+                        .child(
+                            div()
+                                .text_xs()
+                                .font_weight(gpui::FontWeight::BOLD)
+                                .text_color(t.text_secondary)
+                                .mb(px(4.))
+                                .child("SNIPPETS"),
+                        )
+                        .children(snippet_buttons),
+                )
+        } else {
+            // Vertical split (Left: Composer / Right: Response columns): snippets on TOP in a single horizontal row with scroll
+            div()
+                .flex_1()
+                .flex()
+                .flex_col()
+                .overflow_hidden()
+                .child(
+                    // Top: Snippets Toolbar (single horizontal row with scroll)
+                    div()
+                        .w_full()
+                        .flex_shrink_0()
+                        .border_b_1()
+                        .border_color(t.border)
+                        .bg(t.bg_panel)
+                        .h(px(38.))
+                        .px(px(8.))
+                        .flex()
+                        .flex_row()
+                        .items_center()
+                        .gap(px(8.))
+                        .overflow_hidden()
+                        .child(
+                            div()
+                                .flex_shrink_0()
+                                .text_xs()
+                                .font_weight(gpui::FontWeight::BOLD)
+                                .text_color(t.text_secondary)
+                                .child("SNIPPETS:"),
+                        )
+                        .child(
+                            div()
+                                .id("snippets-top-scroll-container")
+                                .flex_1()
+                                .min_w(px(0.))
+                                .h_full()
+                                .relative()
+                                .child(
+                                    div()
+                                        .id("snippets-top-scroll-track")
+                                        .size_full()
+                                        .track_scroll(&scr_h)
+                                        .overflow_x_scroll()
+                                        .flex()
+                                        .flex_row()
+                                        .items_center()
+                                        .gap(px(6.))
+                                        .pr(px(24.))
+                                        .children(snippet_buttons)
+                                        .child(div().w(px(24.)).h(px(1.)).flex_shrink_0()),
+                                )
+                                .child(div().absolute().inset_0().child(
+                                    Scrollbar::horizontal(&scr_h).mode(ScrollbarMode::Always),
+                                )),
+                        ),
+                )
+                .child(
+                    // Bottom: Code Editor Area
+                    div().flex_1().w_full().overflow_hidden().p(px(8.)).child(
+                        Editor::new(&self.editor)
+                            .appearance(false)
+                            .bordered(false)
+                            .h(gpui::relative(1.)),
+                    ),
+                )
+        };
+
         div()
             .size_full()
             .flex()
@@ -1218,71 +1374,8 @@ impl RenderOnce for ScriptEditor {
                         .child(err),
                 )
             })
-            // Main workspace: Code Editor on left, Snippets pane on right
-            .child(
-                div()
-                    .flex_1()
-                    .flex()
-                    .child(
-                        // Left: Code Editor Area
-                        div().flex_1().h_full().p(px(8.)).child(
-                            Editor::new(&self.editor)
-                                .appearance(false)
-                                .bordered(false)
-                                .h(gpui::relative(1.)),
-                        ),
-                    )
-                    // Right: Snippets Toolbar
-                    .child(
-                        div()
-                            .w(px(200.))
-                            .h_full()
-                            .border_l_1()
-                            .border_color(t.border)
-                            .bg(t.bg_panel)
-                            .p(px(10.))
-                            .flex()
-                            .flex_col()
-                            .gap(px(6.))
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .font_weight(gpui::FontWeight::BOLD)
-                                    .text_color(t.text_secondary)
-                                    .mb(px(4.))
-                                    .child("SNIPPETS"),
-                            )
-                            .children(snippets.into_iter().enumerate().map(
-                                |(idx, (label, code))| {
-                                    let insert_cb = on_insert.clone();
-                                    let snippet_code = code;
-                                    div()
-                                        .id(format!(
-                                            "snippet-btn-{}-{}",
-                                            match kind {
-                                                ScriptEditorKind::PreRequest => "pre",
-                                                ScriptEditorKind::Tests => "test",
-                                            },
-                                            idx
-                                        ))
-                                        .px(px(8.))
-                                        .py(px(5.))
-                                        .rounded(px(4.))
-                                        .bg(t.bg_editor)
-                                        .border_1()
-                                        .border_color(t.border)
-                                        .text_xs()
-                                        .text_color(t.text_primary)
-                                        .hover(|s| s.bg(t.bg_hover).border_color(t.border_focus))
-                                        .cursor_pointer()
-                                        .on_click(move |_, window, cx| {
-                                            insert_cb(snippet_code, window, cx);
-                                        })
-                                        .child(label)
-                                },
-                            )),
-                    ),
-            )
+            // Main workspace
+            .child(workspace)
     }
 }
 
@@ -1439,5 +1532,22 @@ mod tests {
         assert!(ScriptCompletionProvider::should_trigger("$"));
         assert!(!ScriptCompletionProvider::should_trigger(" "));
         assert!(!ScriptCompletionProvider::should_trigger("\n"));
+    }
+
+    #[gpui::test]
+    fn test_script_editor_split_layout_vertical_builder(cx: &mut gpui::TestAppContext) {
+        let (editor, _cx) = cx.add_window_view(CodeEditorState::new);
+        let pre_editor = ScriptEditor::new(
+            editor.clone(),
+            ScriptEditorKind::PreRequest,
+            None,
+            |_, _, _| {},
+        )
+        .split_layout_vertical(true);
+        assert!(pre_editor.split_layout_vertical);
+
+        let test_editor = ScriptEditor::new(editor, ScriptEditorKind::Tests, None, |_, _, _| {})
+            .split_layout_vertical(false);
+        assert!(!test_editor.split_layout_vertical);
     }
 }

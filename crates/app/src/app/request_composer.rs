@@ -436,46 +436,54 @@ impl AppView {
                     RequestTabKind::PreRequestScript => {
                         let pre_txt = self.composer_inputs.pre_script_editor.clone();
                         let script_err = ed_entity.read(cx).script_error.clone();
-                        div().size_full().child(ScriptEditor::new(
-                            self.composer_inputs.pre_script_editor.clone(),
-                            ScriptEditorKind::PreRequest,
-                            script_err,
-                            move |snippet, window, cx| {
-                                pre_txt.update(cx, |t, cx| {
-                                    let cur = t.value().to_string();
-                                    let new_val = if cur.is_empty() {
-                                        snippet.to_string()
-                                    } else if cur.ends_with('\n') {
-                                        format!("{}{}", cur, snippet)
-                                    } else {
-                                        format!("{}\n{}", cur, snippet)
-                                    };
-                                    t.set_value(new_val, window, cx);
-                                });
-                            },
-                        ))
+                        let is_vert = self.state.modal.read(cx).split_layout_vertical;
+                        div().size_full().child(
+                            ScriptEditor::new(
+                                self.composer_inputs.pre_script_editor.clone(),
+                                ScriptEditorKind::PreRequest,
+                                script_err,
+                                move |snippet, window, cx| {
+                                    pre_txt.update(cx, |t, cx| {
+                                        let cur = t.value().to_string();
+                                        let new_val = if cur.is_empty() {
+                                            snippet.to_string()
+                                        } else if cur.ends_with('\n') {
+                                            format!("{}{}", cur, snippet)
+                                        } else {
+                                            format!("{}\n{}", cur, snippet)
+                                        };
+                                        t.set_value(new_val, window, cx);
+                                    });
+                                },
+                            )
+                            .split_layout_vertical(is_vert),
+                        )
                     }
                     RequestTabKind::Tests => {
                         let test_txt = self.composer_inputs.test_script_editor.clone();
                         let script_err = ed_entity.read(cx).script_error.clone();
-                        div().size_full().child(ScriptEditor::new(
-                            self.composer_inputs.test_script_editor.clone(),
-                            ScriptEditorKind::Tests,
-                            script_err,
-                            move |snippet, window, cx| {
-                                test_txt.update(cx, |t, cx| {
-                                    let cur = t.value().to_string();
-                                    let new_val = if cur.is_empty() {
-                                        snippet.to_string()
-                                    } else if cur.ends_with('\n') {
-                                        format!("{}{}", cur, snippet)
-                                    } else {
-                                        format!("{}\n{}", cur, snippet)
-                                    };
-                                    t.set_value(new_val, window, cx);
-                                });
-                            },
-                        ))
+                        let is_vert = self.state.modal.read(cx).split_layout_vertical;
+                        div().size_full().child(
+                            ScriptEditor::new(
+                                self.composer_inputs.test_script_editor.clone(),
+                                ScriptEditorKind::Tests,
+                                script_err,
+                                move |snippet, window, cx| {
+                                    test_txt.update(cx, |t, cx| {
+                                        let cur = t.value().to_string();
+                                        let new_val = if cur.is_empty() {
+                                            snippet.to_string()
+                                        } else if cur.ends_with('\n') {
+                                            format!("{}{}", cur, snippet)
+                                        } else {
+                                            format!("{}\n{}", cur, snippet)
+                                        };
+                                        t.set_value(new_val, window, cx);
+                                    });
+                                },
+                            )
+                            .split_layout_vertical(is_vert),
+                        )
                     }
                 }
             }))
