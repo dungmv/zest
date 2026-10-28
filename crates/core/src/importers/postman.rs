@@ -3,7 +3,8 @@ use super::models::{
 };
 use super::{push_folder_chain, split_folder_segments};
 use crate::models::{
-    Auth, EnvironmentVariable, HttpMethod, KeyValuePair, MultipartItem, RequestBody, ScriptConfig,
+    ApiKeyLocation, Auth, EnvironmentVariable, HttpMethod, KeyValuePair, MultipartItem,
+    RequestBody, ScriptConfig,
 };
 use crate::storage::models::{RequestExampleFile, RequestKvItem};
 use anyhow::{anyhow, Result};
@@ -344,7 +345,11 @@ fn extract_postman_auth(auth_val: Option<&Value>) -> Auth {
             Auth::ApiKey {
                 key,
                 value,
-                in_header: where_in.eq_ignore_ascii_case("header"),
+                add_to: if where_in.eq_ignore_ascii_case("query") {
+                    ApiKeyLocation::Query
+                } else {
+                    ApiKeyLocation::Header
+                },
             }
         }
         _ => Auth::None,

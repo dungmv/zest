@@ -379,12 +379,8 @@ pub fn request_to_curl(item: &HttpRequestItem, env: Option<&Environment>) -> Str
                 p.replace('\'', "'\\''")
             ));
         }
-        Auth::ApiKey {
-            key,
-            value,
-            in_header,
-        } => {
-            if *in_header && !key.trim().is_empty() {
+        Auth::ApiKey { key, value, add_to } => {
+            if add_to.is_header() && !key.trim().is_empty() {
                 let k = interpolator.interpolate_cow(key);
                 let v = interpolator.interpolate_cow(value);
                 parts.push("-H".to_string());

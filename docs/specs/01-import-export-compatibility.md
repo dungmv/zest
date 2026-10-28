@@ -105,7 +105,7 @@ Postman v2.1 có cấu trúc lồng nhau dạng đệ quy (`item` có thể là 
 3. **Authentication:**
    - `type: "bearer"` -> `Auth::Bearer { token: ... }`.
    - `type: "basic"` -> `Auth::Basic { username, password }`.
-   - `type: "apikey"` -> `Auth::ApiKey { key, value, in_header }`.
+   - `type: "apikey"` -> `Auth::ApiKey { key, value, add_to }`.
 4. **Pre-request & Tests Script:**
    - Postman lưu trong mảng `event`:
      - `listen: "prerequest"` -> map sang `request.pre_request_script`.

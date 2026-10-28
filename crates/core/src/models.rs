@@ -79,6 +79,31 @@ impl KeyValuePair {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ApiKeyLocation {
+    #[default]
+    Header,
+    Query,
+}
+
+impl ApiKeyLocation {
+    pub fn is_header(&self) -> bool {
+        matches!(self, Self::Header)
+    }
+
+    pub fn is_query(&self) -> bool {
+        matches!(self, Self::Query)
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Header => "header",
+            Self::Query => "query",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Auth {
@@ -96,8 +121,8 @@ pub enum Auth {
     ApiKey {
         key: String,
         value: String,
-        #[serde(default = "default_true")]
-        in_header: bool,
+        #[serde(default)]
+        add_to: ApiKeyLocation,
     },
 }
 
@@ -514,12 +539,8 @@ impl HttpRequestItem {
         self.auth = Auth::Basic { username, password };
     }
 
-    pub fn set_api_key(&mut self, key: String, value: String, in_header: bool) {
-        self.auth = Auth::ApiKey {
-            key,
-            value,
-            in_header,
-        };
+    pub fn set_api_key(&mut self, key: String, value: String, add_to: ApiKeyLocation) {
+        self.auth = Auth::ApiKey { key, value, add_to };
     }
 
     pub fn set_timeout_secs(&mut self, secs: u64) {
@@ -977,13 +998,17 @@ mod tests {
                 password: "p".to_string()
             }
         );
-        req.set_api_key("x-api-key".to_string(), "secret".to_string(), true);
+        req.set_api_key(
+            "x-api-key".to_string(),
+            "secret".to_string(),
+            ApiKeyLocation::Header,
+        );
         assert_eq!(
             req.auth,
             Auth::ApiKey {
                 key: "x-api-key".to_string(),
                 value: "secret".to_string(),
-                in_header: true
+                add_to: ApiKeyLocation::Header,
             }
         );
 
@@ -1022,5 +1047,29 @@ mod tests {
         // Clear header
         req.update_content_type_header(None);
         assert!(req.headers.is_empty());
+    }
+
+    #[test]
+    fn test_auth_apikey_yaml_serialization() {
+        let auth_header = Auth::ApiKey {
+            key: "X-API-Key".to_string(),
+            value: "secret123".to_string(),
+            add_to: ApiKeyLocation::Header,
+        };
+        let yaml_str = serde_yaml::to_string(&auth_header).expect("serialize yaml");
+        assert!(yaml_str.contains("add_to: header"));
+        let deserialized: Auth = serde_yaml::from_str(&yaml_str).expect("deserialize yaml");
+        assert_eq!(auth_header, deserialized);
+
+        let auth_query = Auth::ApiKey {
+            key: "api_key".to_string(),
+            value: "secret456".to_string(),
+            add_to: ApiKeyLocation::Query,
+        };
+        let yaml_query_str = serde_yaml::to_string(&auth_query).expect("serialize yaml");
+        assert!(yaml_query_str.contains("add_to: query"));
+        let deserialized_query: Auth =
+            serde_yaml::from_str(&yaml_query_str).expect("deserialize yaml");
+        assert_eq!(auth_query, deserialized_query);
     }
 }

@@ -1,7 +1,7 @@
 use super::models::{ImportFormat, ImportResult, ImportedEnvironment, ImportedRequest};
 use super::{push_folder_chain, split_folder_segments};
 use crate::models::{
-    Auth, EnvironmentVariable, HttpMethod, KeyValuePair, MultipartItem, RequestBody,
+    ApiKeyLocation, Auth, EnvironmentVariable, HttpMethod, KeyValuePair, MultipartItem, RequestBody,
 };
 use crate::storage::models::{RequestExampleFile, RequestKvItem};
 use anyhow::{anyhow, Result};
@@ -587,7 +587,11 @@ fn extract_auth(root: &Value, op_obj: &Map<String, Value>) -> Auth {
                                 return Auth::ApiKey {
                                     key: key_name,
                                     value: "{{apiKey}}".to_string(),
-                                    in_header: key_in.eq_ignore_ascii_case("header"),
+                                    add_to: if key_in.eq_ignore_ascii_case("query") {
+                                        ApiKeyLocation::Query
+                                    } else {
+                                        ApiKeyLocation::Header
+                                    },
                                 };
                             }
                             _ => {}

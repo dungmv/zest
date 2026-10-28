@@ -1,6 +1,6 @@
 use crate::components::kv_table::KvReadonlyRow;
 use crate::state::WorkspaceDataState;
-use zest_core::models::{Auth, HttpRequestItem};
+use zest_core::models::{ApiKeyLocation, Auth, HttpRequestItem};
 
 /// Masks an inherited secret for read-only display with a fixed-length placeholder so the
 /// value length is not leaked. Values that reference an environment variable (contain
@@ -59,7 +59,7 @@ pub fn inherited_readonly_rows(
                 Auth::ApiKey {
                     key,
                     value,
-                    in_header: true,
+                    add_to: ApiKeyLocation::Header,
                 } => rows.push(KvReadonlyRow {
                     key: key.clone(),
                     value: mask_secret(value),

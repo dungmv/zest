@@ -153,13 +153,8 @@ impl ResolvedRequest {
         }
 
         // Check if auth is ApiKey in query
-        if let Auth::ApiKey {
-            key,
-            value,
-            in_header,
-        } = &item.auth
-        {
-            if !in_header && !key.trim().is_empty() {
+        if let Auth::ApiKey { key, value, add_to } = &item.auth {
+            if add_to.is_query() && !key.trim().is_empty() {
                 let k = interpolator.interpolate_cow(key);
                 let v = interpolator.interpolate_cow(value);
                 enabled_params.push((k, v));
@@ -207,12 +202,8 @@ impl ResolvedRequest {
                 let encoded = base64::engine::general_purpose::STANDARD.encode(creds.as_bytes());
                 headers.push(("Authorization".to_string(), format!("Basic {}", encoded)));
             }
-            Auth::ApiKey {
-                key,
-                value,
-                in_header,
-            } => {
-                if *in_header && !key.trim().is_empty() {
+            Auth::ApiKey { key, value, add_to } => {
+                if add_to.is_header() && !key.trim().is_empty() {
                     let k = interpolator.interpolate_cow(key);
                     let v = interpolator.interpolate_cow(value);
                     headers.push((k.into_owned(), v.into_owned()));

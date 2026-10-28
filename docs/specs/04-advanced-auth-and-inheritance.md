@@ -29,7 +29,7 @@ pub enum Auth {
     None,
     Bearer { token: String },
     Basic { username: String, password: String },
-    ApiKey { key: String, value: String, in_header: bool },
+    ApiKey { key: String, value: String, add_to: ApiKeyLocation },
     OAuth2(OAuth2Config),
     AwsSigV4(AwsSigV4Config),
 }

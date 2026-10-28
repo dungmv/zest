@@ -14,7 +14,7 @@ use gpui_component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_component::scroll::ScrollableElement as _;
 use gpui_component::Icon;
 use gpui_kit::assets::IconName;
-use zest_core::models::{Auth, KeyValuePair};
+use zest_core::models::{ApiKeyLocation, Auth, KeyValuePair};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ScopeSettingsTab {
@@ -391,13 +391,11 @@ impl RenderOnce for ScopeSettingsModal {
                 let sub = cx.subscribe_in(&input, window, move |_, inp, ev, window, cx| {
                     if let InputEvent::Change = ev {
                         let k = inp.read(cx).value().to_string();
-                        let (v, in_h) = match &tgt {
+                        let (v, add_to) = match &tgt {
                             ScopeSettingsTarget::Workspace => {
                                 match &ws_s.read(cx).workspace_meta.auth {
-                                    Auth::ApiKey {
-                                        value, in_header, ..
-                                    } => (value.clone(), *in_header),
-                                    _ => (String::new(), true),
+                                    Auth::ApiKey { value, add_to, .. } => (value.clone(), *add_to),
+                                    _ => (String::new(), ApiKeyLocation::Header),
                                 }
                             }
                             ScopeSettingsTarget::Folder(fid) => match ws_s
@@ -407,16 +405,16 @@ impl RenderOnce for ScopeSettingsModal {
                                 .find(|f| &f.id == fid)
                                 .map(|f| &f.auth)
                             {
-                                Some(Auth::ApiKey {
-                                    value, in_header, ..
-                                }) => (value.clone(), *in_header),
-                                _ => (String::new(), true),
+                                Some(Auth::ApiKey { value, add_to, .. }) => {
+                                    (value.clone(), *add_to)
+                                }
+                                _ => (String::new(), ApiKeyLocation::Header),
                             },
                         };
                         let new_auth = Auth::ApiKey {
                             key: k.clone(),
                             value: v,
-                            in_header: in_h,
+                            add_to,
                         };
                         match &tgt {
                             ScopeSettingsTarget::Workspace => {
@@ -472,13 +470,11 @@ impl RenderOnce for ScopeSettingsModal {
                 let sub = cx.subscribe_in(&input, window, move |_, inp, ev, window, cx| {
                     if let InputEvent::Change = ev {
                         let v = inp.read(cx).value().to_string();
-                        let (k, in_h) = match &tgt {
+                        let (k, add_to) = match &tgt {
                             ScopeSettingsTarget::Workspace => {
                                 match &ws_s.read(cx).workspace_meta.auth {
-                                    Auth::ApiKey { key, in_header, .. } => {
-                                        (key.clone(), *in_header)
-                                    }
-                                    _ => ("X-API-Key".to_string(), true),
+                                    Auth::ApiKey { key, add_to, .. } => (key.clone(), *add_to),
+                                    _ => ("X-API-Key".to_string(), ApiKeyLocation::Header),
                                 }
                             }
                             ScopeSettingsTarget::Folder(fid) => match ws_s
@@ -488,16 +484,14 @@ impl RenderOnce for ScopeSettingsModal {
                                 .find(|f| &f.id == fid)
                                 .map(|f| &f.auth)
                             {
-                                Some(Auth::ApiKey { key, in_header, .. }) => {
-                                    (key.clone(), *in_header)
-                                }
-                                _ => ("X-API-Key".to_string(), true),
+                                Some(Auth::ApiKey { key, add_to, .. }) => (key.clone(), *add_to),
+                                _ => ("X-API-Key".to_string(), ApiKeyLocation::Header),
                             },
                         };
                         let new_auth = Auth::ApiKey {
                             key: k,
                             value: v.clone(),
-                            in_header: in_h,
+                            add_to,
                         };
                         match &tgt {
                             ScopeSettingsTarget::Workspace => {
@@ -994,6 +988,7 @@ impl RenderOnce for ScopeSettingsModal {
                                                 .child(
                                                     div()
                                                         .w(px(70.))
+                                                        .flex_none()
                                                         .text_xs()
                                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                                         .text_color(t.text_secondary)
@@ -1006,6 +1001,7 @@ impl RenderOnce for ScopeSettingsModal {
                                                     Button::new("btn-scope-auth-type-dropdown")
                                                         .ghost()
                                                         .compact()
+                                                        .min_w(px(120.))
                                                         .px(px(8.))
                                                         .py(px(4.))
                                                         .h(px(28.))
@@ -1100,7 +1096,7 @@ impl RenderOnce for ScopeSettingsModal {
                                                                 PopupMenuItem::new("API Key")
                                                                     .checked(is_apikey)
                                                                     .on_click(move |_, _, cx| {
-                                                                        let new_auth = Auth::ApiKey { key: "X-API-Key".to_string(), value: String::new(), in_header: true };
+                                                                        let new_auth = Auth::ApiKey { key: "X-API-Key".to_string(), value: String::new(), add_to: ApiKeyLocation::Header };
                                                                         match &tgt_api {
                                                                             ScopeSettingsTarget::Workspace => {
                                                                                 let cur_h = ws_api.read(cx).active_workspace.as_ref().map(|w| w.headers.clone()).unwrap_or_default();
@@ -1173,6 +1169,7 @@ impl RenderOnce for ScopeSettingsModal {
                                                         .child(
                                                             div()
                                                                 .w(px(70.))
+                                                                .flex_none()
                                                                 .text_xs()
                                                                 .font_weight(gpui::FontWeight::SEMIBOLD)
                                                                 .text_color(t.text_secondary)
@@ -1257,6 +1254,7 @@ impl RenderOnce for ScopeSettingsModal {
                                                                 .child(
                                                                     div()
                                                                         .w(px(70.))
+                                                                        .flex_none()
                                                                         .text_xs()
                                                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                                                         .text_color(t.text_secondary)
@@ -1284,6 +1282,7 @@ impl RenderOnce for ScopeSettingsModal {
                                                                 .child(
                                                                     div()
                                                                         .w(px(70.))
+                                                                        .flex_none()
                                                                         .text_xs()
                                                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                                                         .text_color(t.text_secondary)
@@ -1304,21 +1303,22 @@ impl RenderOnce for ScopeSettingsModal {
                                                                 ),
                                                         )
                                                 }
-                                                Auth::ApiKey { in_header, .. } => {
+                                                Auth::ApiKey { add_to, .. } => {
+                                                    let add_to_val = add_to;
                                                     let ws_s_k = ws_clone.clone();
                                                     let tgt_k = target.clone();
                                                     let on_api_key_update = move |k: String, _window: &mut Window, cx: &mut App| {
-                                                        let (v, in_h) = match &tgt_k {
+                                                        let (v, cur_loc) = match &tgt_k {
                                                             ScopeSettingsTarget::Workspace => match &ws_s_k.read(cx).workspace_meta.auth {
-                                                                Auth::ApiKey { value, in_header, .. } => (value.clone(), *in_header),
-                                                                _ => (String::new(), true),
+                                                                Auth::ApiKey { value, add_to, .. } => (value.clone(), *add_to),
+                                                                _ => (String::new(), ApiKeyLocation::Header),
                                                             },
                                                             ScopeSettingsTarget::Folder(fid) => match ws_s_k.read(cx).folders.iter().find(|f| &f.id == fid).map(|f| &f.auth) {
-                                                                Some(Auth::ApiKey { value, in_header, .. }) => (value.clone(), *in_header),
-                                                                _ => (String::new(), true),
+                                                                Some(Auth::ApiKey { value, add_to, .. }) => (value.clone(), *add_to),
+                                                                _ => (String::new(), ApiKeyLocation::Header),
                                                             },
                                                         };
-                                                        let new_auth = Auth::ApiKey { key: k, value: v, in_header: in_h };
+                                                        let new_auth = Auth::ApiKey { key: k, value: v, add_to: cur_loc };
                                                         match &tgt_k {
                                                             ScopeSettingsTarget::Workspace => {
                                                                 let cur_h = ws_s_k.read(cx).active_workspace.as_ref().map(|w| w.headers.clone()).unwrap_or_default();
@@ -1334,17 +1334,17 @@ impl RenderOnce for ScopeSettingsModal {
                                                     let ws_s_v = ws_clone.clone();
                                                     let tgt_v = target.clone();
                                                     let on_api_val_update = move |v: String, _window: &mut Window, cx: &mut App| {
-                                                        let (k, in_h) = match &tgt_v {
+                                                        let (k, cur_loc) = match &tgt_v {
                                                             ScopeSettingsTarget::Workspace => match &ws_s_v.read(cx).workspace_meta.auth {
-                                                                Auth::ApiKey { key, in_header, .. } => (key.clone(), *in_header),
-                                                                _ => ("X-API-Key".to_string(), true),
+                                                                Auth::ApiKey { key, add_to, .. } => (key.clone(), *add_to),
+                                                                _ => ("X-API-Key".to_string(), ApiKeyLocation::Header),
                                                             },
                                                             ScopeSettingsTarget::Folder(fid) => match ws_s_v.read(cx).folders.iter().find(|f| &f.id == fid).map(|f| &f.auth) {
-                                                                Some(Auth::ApiKey { key, in_header, .. }) => (key.clone(), *in_header),
-                                                                _ => ("X-API-Key".to_string(), true),
+                                                                Some(Auth::ApiKey { key, add_to, .. }) => (key.clone(), *add_to),
+                                                                _ => ("X-API-Key".to_string(), ApiKeyLocation::Header),
                                                             },
                                                         };
-                                                        let new_auth = Auth::ApiKey { key: k, value: v, in_header: in_h };
+                                                        let new_auth = Auth::ApiKey { key: k, value: v, add_to: cur_loc };
                                                         match &tgt_v {
                                                             ScopeSettingsTarget::Workspace => {
                                                                 let cur_h = ws_s_v.read(cx).active_workspace.as_ref().map(|w| w.headers.clone()).unwrap_or_default();
@@ -1369,6 +1369,7 @@ impl RenderOnce for ScopeSettingsModal {
                                                                 .child(
                                                                     div()
                                                                         .w(px(70.))
+                                                                        .flex_none()
                                                                         .text_xs()
                                                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                                                         .text_color(t.text_secondary)
@@ -1396,6 +1397,7 @@ impl RenderOnce for ScopeSettingsModal {
                                                                 .child(
                                                                     div()
                                                                         .w(px(70.))
+                                                                        .flex_none()
                                                                         .text_xs()
                                                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                                                         .text_color(t.text_secondary)
@@ -1423,13 +1425,14 @@ impl RenderOnce for ScopeSettingsModal {
                                                                 .child(
                                                                     div()
                                                                         .w(px(70.))
+                                                                        .flex_none()
                                                                         .text_xs()
                                                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                                                         .text_color(t.text_secondary)
                                                                         .child("Add to:"),
                                                                 )
                                                                 .child({
-                                                                    let loc_label = if in_header { "Header" } else { "Query Params" };
+                                                                    let loc_label = if add_to_val.is_header() { "Header" } else { "Query Params" };
                                                                     let ws_loc = ws_s.clone();
                                                                     let tgt_loc = tgt.clone();
                                                                     let k_input = api_key_input.clone();
@@ -1438,6 +1441,7 @@ impl RenderOnce for ScopeSettingsModal {
                                                                     Button::new("btn-scope-auth-apikey-location-dropdown")
                                                                         .ghost()
                                                                         .compact()
+                                                                        .min_w(px(120.))
                                                                         .px(px(8.))
                                                                         .py(px(4.))
                                                                         .h(px(28.))
@@ -1465,36 +1469,36 @@ impl RenderOnce for ScopeSettingsModal {
 
                                                                             menu.item(
                                                                                 PopupMenuItem::new("Header")
-                                                                                    .checked(in_header)
+                                                                                    .checked(add_to_val.is_header())
                                                                                     .on_click(move |_, _, cx| {
                                                                                         let key = k_h.read(cx).value().to_string();
                                                                                         let val = v_h.read(cx).value().to_string();
                                                                                         match &tgt_h {
                                                                                             ScopeSettingsTarget::Workspace => {
                                                                                                 let cur_h = ws_h.read(cx).active_workspace.as_ref().map(|w| w.headers.clone()).unwrap_or_default();
-                                                                                                ws_h.update(cx, |s, cx| s.save_workspace_scope_settings(cur_h, Auth::ApiKey { key, value: val, in_header: true }, cx));
+                                                                                                ws_h.update(cx, |s, cx| s.save_workspace_scope_settings(cur_h, Auth::ApiKey { key, value: val, add_to: ApiKeyLocation::Header }, cx));
                                                                                             }
                                                                                             ScopeSettingsTarget::Folder(fid) => {
                                                                                                 let cur_h = ws_h.read(cx).folders.iter().find(|f| &f.id == fid).map(|f| f.headers.clone()).unwrap_or_default();
-                                                                                                ws_h.update(cx, |s, cx| s.save_folder_scope_settings(fid, cur_h, Auth::ApiKey { key, value: val, in_header: true }, cx));
+                                                                                                ws_h.update(cx, |s, cx| s.save_folder_scope_settings(fid, cur_h, Auth::ApiKey { key, value: val, add_to: ApiKeyLocation::Header }, cx));
                                                                                             }
                                                                                         }
                                                                                     }),
                                                                             )
                                                                             .item(
                                                                                 PopupMenuItem::new("Query Params")
-                                                                                    .checked(!in_header)
+                                                                                    .checked(add_to_val.is_query())
                                                                                     .on_click(move |_, _, cx| {
                                                                                         let key = k_q.read(cx).value().to_string();
                                                                                         let val = v_q.read(cx).value().to_string();
                                                                                         match &tgt_q {
                                                                                             ScopeSettingsTarget::Workspace => {
                                                                                                 let cur_h = ws_q.read(cx).active_workspace.as_ref().map(|w| w.headers.clone()).unwrap_or_default();
-                                                                                                ws_q.update(cx, |s, cx| s.save_workspace_scope_settings(cur_h, Auth::ApiKey { key, value: val, in_header: false }, cx));
+                                                                                                ws_q.update(cx, |s, cx| s.save_workspace_scope_settings(cur_h, Auth::ApiKey { key, value: val, add_to: ApiKeyLocation::Query }, cx));
                                                                                             }
                                                                                             ScopeSettingsTarget::Folder(fid) => {
                                                                                                 let cur_h = ws_q.read(cx).folders.iter().find(|f| &f.id == fid).map(|f| f.headers.clone()).unwrap_or_default();
-                                                                                                ws_q.update(cx, |s, cx| s.save_folder_scope_settings(fid, cur_h, Auth::ApiKey { key, value: val, in_header: false }, cx));
+                                                                                                ws_q.update(cx, |s, cx| s.save_folder_scope_settings(fid, cur_h, Auth::ApiKey { key, value: val, add_to: ApiKeyLocation::Query }, cx));
                                                                                             }
                                                                                         }
                                                                                     }),

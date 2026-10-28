@@ -10,7 +10,7 @@ use crate::state::{
 };
 use gpui::*;
 use gpui_component::input::InputEvent;
-use zest_core::models::{Auth, RequestBody};
+use zest_core::models::{ApiKeyLocation, Auth, RequestBody};
 
 pub struct SubscriptionTargets<'a> {
     pub workspace_state: &'a Entity<WorkspaceDataState>,
@@ -267,16 +267,14 @@ pub fn setup_app_subscriptions(
             let mut needs_refresh = false;
             ws_ak_k.update(cx, |ws, _| {
                 ws.update_active_request(&active_id, |r| {
-                    let (had_template, in_header) = match &r.auth {
-                        Auth::ApiKey {
-                            key,
-                            value,
-                            in_header,
-                        } => (key.contains("{{") || value.contains("{{"), *in_header),
-                        _ => (false, true),
+                    let (had_template, add_to) = match &r.auth {
+                        Auth::ApiKey { key, value, add_to } => {
+                            (key.contains("{{") || value.contains("{{"), *add_to)
+                        }
+                        _ => (false, ApiKeyLocation::Header),
                     };
                     needs_refresh = had_template || k.contains("{{") || v.contains("{{");
-                    r.set_api_key(k, v, in_header);
+                    r.set_api_key(k, v, add_to);
                 });
             });
             ed_ak_k.update(cx, |ed, cx| {
@@ -299,16 +297,14 @@ pub fn setup_app_subscriptions(
             let mut needs_refresh = false;
             ws_ak_v.update(cx, |ws, _| {
                 ws.update_active_request(&active_id, |r| {
-                    let (had_template, in_header) = match &r.auth {
-                        Auth::ApiKey {
-                            key,
-                            value,
-                            in_header,
-                        } => (key.contains("{{") || value.contains("{{"), *in_header),
-                        _ => (false, true),
+                    let (had_template, add_to) = match &r.auth {
+                        Auth::ApiKey { key, value, add_to } => {
+                            (key.contains("{{") || value.contains("{{"), *add_to)
+                        }
+                        _ => (false, ApiKeyLocation::Header),
                     };
                     needs_refresh = had_template || k.contains("{{") || v.contains("{{");
-                    r.set_api_key(k, v, in_header);
+                    r.set_api_key(k, v, add_to);
                 });
             });
             ed_ak_v.update(cx, |ed, cx| {

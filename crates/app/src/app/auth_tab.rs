@@ -10,7 +10,7 @@ use gpui_component::input::InputState;
 use gpui_component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_component::Icon;
 use gpui_kit::assets::IconName;
-use zest_core::models::Auth;
+use zest_core::models::{ApiKeyLocation, Auth};
 
 pub struct AuthTabInputs<'a> {
     pub bearer_token_input: &'a Entity<InputState>,
@@ -58,18 +58,22 @@ pub fn render_auth_tab(
     let is_apikey = matches!(auth, Auth::ApiKey { .. });
 
     div()
-        .p(px(16.))
+        .w_full()
+        .p(px(8.))
         .flex()
         .flex_col()
-        .gap(px(10.))
         .child(
             div()
+                .w_full()
                 .flex()
                 .items_center()
+                .px(px(6.))
+                .py(px(2.))
                 .gap(px(10.))
                 .child(
                     div()
                         .w(px(70.))
+                        .flex_none()
                         .text_xs()
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(t.text_secondary)
@@ -82,6 +86,7 @@ pub fn render_auth_tab(
                     Button::new("btn-auth-type-dropdown")
                         .ghost()
                         .compact()
+                        .min_w(px(120.))
                         .px(px(8.))
                         .py(px(4.))
                         .h(px(28.))
@@ -176,7 +181,7 @@ pub fn render_auth_tab(
                                                 r.set_auth(Auth::ApiKey {
                                                     key: "X-API-Key".to_string(),
                                                     value: "".to_string(),
-                                                    in_header: true,
+                                                    add_to: ApiKeyLocation::Header,
                                                 });
                                             });
                                         });
@@ -196,12 +201,15 @@ pub fn render_auth_tab(
                     let desc = ws_read.get_inherited_auth_description(folder_id);
                     let inherited = ws_read.inherited_auth_source(folder_id);
                     div()
+                        .w_full()
                         .flex()
                         .flex_col()
-                        .gap(px(10.))
+                        .px(px(6.))
+                        .py(px(2.))
+                        .gap(px(4.))
                         .child(
                             div()
-                                .p(px(10.))
+                                .p(px(8.))
                                 .rounded(px(6.))
                                 .bg(t.bg_app)
                                 .border_1()
@@ -217,7 +225,9 @@ pub fn render_auth_tab(
                         })
                 }
                 Auth::None => div()
-                    .pt(px(4.))
+                    .w_full()
+                    .px(px(6.))
+                    .py(px(2.))
                     .text_xs()
                     .italic()
                     .text_color(t.text_muted)
@@ -227,18 +237,22 @@ pub fn render_auth_tab(
                     let ws_b = ws_c.clone();
                     let req_b = req_id_str.clone();
                     div()
+                        .w_full()
                         .flex()
                         .items_center()
+                        .px(px(6.))
+                        .py(px(2.))
                         .gap(px(10.))
                         .child(
                             div()
                                 .w(px(70.))
+                                .flex_none()
                                 .text_xs()
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
                                 .text_color(t.text_secondary)
                                 .child("Token:"),
                         )
-                        .child(div().w_full().max_w(px(400.)).child(render_env_input(
+                        .child(div().flex_1().max_w(px(400.)).child(render_env_input(
                             "auth-bearer-token-input",
                             inputs.bearer_token_input,
                             Some(env_state),
@@ -267,23 +281,27 @@ pub fn render_auth_tab(
                     let p_in = inputs.basic_pass_input.clone();
                     let u_in = inputs.basic_user_input.clone();
                     div()
+                        .w_full()
                         .flex()
                         .flex_col()
-                        .gap(px(10.))
                         .child(
                             div()
+                                .w_full()
                                 .flex()
                                 .items_center()
+                                .px(px(6.))
+                                .py(px(2.))
                                 .gap(px(10.))
                                 .child(
                                     div()
                                         .w(px(70.))
+                                        .flex_none()
                                         .text_xs()
                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                         .text_color(t.text_secondary)
                                         .child("Username:"),
                                 )
-                                .child(div().w_full().max_w(px(400.)).child(render_env_input(
+                                .child(div().flex_1().max_w(px(400.)).child(render_env_input(
                                     "auth-basic-user-input",
                                     inputs.basic_user_input,
                                     Some(env_state),
@@ -305,18 +323,22 @@ pub fn render_auth_tab(
                         )
                         .child(
                             div()
+                                .w_full()
                                 .flex()
                                 .items_center()
+                                .px(px(6.))
+                                .py(px(2.))
                                 .gap(px(10.))
                                 .child(
                                     div()
                                         .w(px(70.))
+                                        .flex_none()
                                         .text_xs()
                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                         .text_color(t.text_secondary)
                                         .child("Password:"),
                                 )
-                                .child(div().w_full().max_w(px(400.)).child(render_env_input(
+                                .child(div().flex_1().max_w(px(400.)).child(render_env_input(
                                     "auth-basic-pass-input",
                                     inputs.basic_pass_input,
                                     Some(env_state),
@@ -337,8 +359,8 @@ pub fn render_auth_tab(
                                 ))),
                         )
                 }
-                Auth::ApiKey { in_header, .. } => {
-                    let in_header_val = *in_header;
+                Auth::ApiKey { add_to, .. } => {
+                    let add_to_val = *add_to;
                     let ed_loc = ed_c.clone();
                     let ws_loc = ws_c.clone();
                     let req_loc = req_id_str.clone();
@@ -350,30 +372,34 @@ pub fn render_auth_tab(
                     let req_v = req_id_str.clone();
                     let v_in = inputs.apikey_val_input.clone();
                     let k_in = inputs.apikey_key_input.clone();
-                    let loc_label = if in_header_val {
+                    let loc_label = if add_to_val.is_header() {
                         "Header"
                     } else {
                         "Query Params"
                     };
 
                     div()
+                        .w_full()
                         .flex()
                         .flex_col()
-                        .gap(px(10.))
                         .child(
                             div()
+                                .w_full()
                                 .flex()
                                 .items_center()
+                                .px(px(6.))
+                                .py(px(2.))
                                 .gap(px(10.))
                                 .child(
                                     div()
                                         .w(px(70.))
+                                        .flex_none()
                                         .text_xs()
                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                         .text_color(t.text_secondary)
                                         .child("Key:"),
                                 )
-                                .child(div().w_full().max_w(px(400.)).child(render_env_input(
+                                .child(div().flex_1().max_w(px(400.)).child(render_env_input(
                                     "auth-apikey-key-input",
                                     inputs.apikey_key_input,
                                     Some(env_state),
@@ -384,7 +410,7 @@ pub fn render_auth_tab(
                                         let val = v_in.read(cx).value().to_string();
                                         ws_k.update(cx, |ws, _| {
                                             ws.update_active_request(&req_k, |r| {
-                                                r.set_api_key(new_key, val, in_header_val);
+                                                r.set_api_key(new_key, val, add_to_val);
                                             });
                                         });
                                         ed_k.update(cx, |ed, cx| {
@@ -395,18 +421,22 @@ pub fn render_auth_tab(
                         )
                         .child(
                             div()
+                                .w_full()
                                 .flex()
                                 .items_center()
+                                .px(px(6.))
+                                .py(px(2.))
                                 .gap(px(10.))
                                 .child(
                                     div()
                                         .w(px(70.))
+                                        .flex_none()
                                         .text_xs()
                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                         .text_color(t.text_secondary)
                                         .child("Value:"),
                                 )
-                                .child(div().w_full().max_w(px(400.)).child(render_env_input(
+                                .child(div().flex_1().max_w(px(400.)).child(render_env_input(
                                     "auth-apikey-val-input",
                                     inputs.apikey_val_input,
                                     Some(env_state),
@@ -417,7 +447,7 @@ pub fn render_auth_tab(
                                         let key = k_in.read(cx).value().to_string();
                                         ws_v.update(cx, |ws, _| {
                                             ws.update_active_request(&req_v, |r| {
-                                                r.set_api_key(key, new_val, in_header_val);
+                                                r.set_api_key(key, new_val, add_to_val);
                                             });
                                         });
                                         ed_v.update(cx, |ed, cx| {
@@ -428,12 +458,16 @@ pub fn render_auth_tab(
                         )
                         .child(
                             div()
+                                .w_full()
                                 .flex()
                                 .items_center()
+                                .px(px(6.))
+                                .py(px(2.))
                                 .gap(px(10.))
                                 .child(
                                     div()
                                         .w(px(70.))
+                                        .flex_none()
                                         .text_xs()
                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                         .text_color(t.text_secondary)
@@ -448,6 +482,7 @@ pub fn render_auth_tab(
                                     Button::new("btn-auth-apikey-location-dropdown")
                                         .ghost()
                                         .compact()
+                                        .min_w(px(120.))
                                         .px(px(8.))
                                         .py(px(4.))
                                         .h(px(28.))
@@ -476,13 +511,17 @@ pub fn render_auth_tab(
 
                                             menu.item(
                                                 PopupMenuItem::new("Header")
-                                                    .checked(in_header_val)
+                                                    .checked(add_to_val.is_header())
                                                     .on_click(move |_, _, cx| {
                                                         let key = k_h.read(cx).value().to_string();
                                                         let val = v_h.read(cx).value().to_string();
                                                         ws_h.update(cx, |ws, _| {
                                                             ws.update_active_request(&req_h, |r| {
-                                                                r.set_api_key(key, val, true);
+                                                                r.set_api_key(
+                                                                    key,
+                                                                    val,
+                                                                    ApiKeyLocation::Header,
+                                                                );
                                                             });
                                                         });
                                                         ed_h.update(cx, |ed, cx| {
@@ -492,13 +531,17 @@ pub fn render_auth_tab(
                                             )
                                             .item(
                                                 PopupMenuItem::new("Query Params")
-                                                    .checked(!in_header_val)
+                                                    .checked(add_to_val.is_query())
                                                     .on_click(move |_, _, cx| {
                                                         let key = k_q.read(cx).value().to_string();
                                                         let val = v_q.read(cx).value().to_string();
                                                         ws_q.update(cx, |ws, _| {
                                                             ws.update_active_request(&req_q, |r| {
-                                                                r.set_api_key(key, val, false);
+                                                                r.set_api_key(
+                                                                    key,
+                                                                    val,
+                                                                    ApiKeyLocation::Query,
+                                                                );
                                                             });
                                                         });
                                                         ed_q.update(cx, |ed, cx| {
@@ -517,12 +560,16 @@ pub fn render_auth_tab(
 /// Read-only mirror of a local auth form row: same label/input layout, disabled input.
 fn disabled_field(label: &str, value: &str, t: &AppTheme) -> Div {
     div()
+        .w_full()
         .flex()
         .items_center()
+        .px(px(6.))
+        .py(px(2.))
         .gap(px(10.))
         .child(
             div()
                 .w(px(70.))
+                .flex_none()
                 .text_xs()
                 .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(t.text_secondary)
@@ -530,7 +577,7 @@ fn disabled_field(label: &str, value: &str, t: &AppTheme) -> Div {
         )
         .child(
             div()
-                .w_full()
+                .flex_1()
                 .max_w(px(400.))
                 .child(render_disabled_input(value, t)),
         )
@@ -542,24 +589,24 @@ fn render_inherited_auth_fields(auth: &Auth, t: &AppTheme) -> Div {
     match auth {
         Auth::Bearer { token } => disabled_field("Token:", &mask_secret(token), t),
         Auth::Basic { username, password } => div()
+            .w_full()
             .flex()
             .flex_col()
-            .gap(px(10.))
             .child(disabled_field("Username:", username, t))
             .child(disabled_field("Password:", &mask_secret(password), t)),
-        Auth::ApiKey {
-            key,
-            value,
-            in_header,
-        } => div()
+        Auth::ApiKey { key, value, add_to } => div()
+            .w_full()
             .flex()
             .flex_col()
-            .gap(px(10.))
             .child(disabled_field("Key:", key, t))
             .child(disabled_field("Value:", &mask_secret(value), t))
             .child(disabled_field(
                 "Add to:",
-                if *in_header { "Header" } else { "Query Params" },
+                if add_to.is_header() {
+                    "Header"
+                } else {
+                    "Query Params"
+                },
                 t,
             )),
         // None adds no fields: the description banner already states no auth applies.
