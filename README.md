@@ -60,7 +60,7 @@ The filesystem is the **only source of truth** for collections, environments, an
 
 ```
 my-workspace/
-  workspace.yaml                 # version, name, default_environment
+  workspace.yaml                 # version, name, headers & auth
   .gitignore                     # auto-managed: contains `.local/` and `*.loc`
   environments/
     local.yaml                   # COMMIT: variables; secret variables store NAME only

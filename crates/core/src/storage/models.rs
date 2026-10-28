@@ -20,8 +20,6 @@ pub struct WorkspaceMeta {
     #[serde(default = "default_version")]
     pub version: u32,
     pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub default_environment: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub headers: Vec<KeyValuePair>,
     #[serde(default, skip_serializing_if = "Auth::is_none")]
@@ -33,7 +31,6 @@ impl Default for WorkspaceMeta {
         Self {
             version: 1,
             name: "My Workspace".to_string(),
-            default_environment: Some("local".to_string()),
             headers: Vec::new(),
             auth: Auth::None,
         }

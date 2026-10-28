@@ -277,7 +277,6 @@ impl WorkspaceStore for FsWorkspaceStore {
         let meta = WorkspaceMeta {
             version: 1,
             name: name.to_string(),
-            default_environment: Some("local".to_string()),
             headers: Vec::new(),
             auth: RequestAuth::None,
         };

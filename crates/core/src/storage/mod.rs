@@ -102,6 +102,13 @@ mod tests {
         let res_ws = serde_yaml::from_str::<WorkspaceMeta>(invalid_ws);
         assert!(res_ws.is_err(), "WorkspaceMeta must reject unknown fields");
 
+        let legacy_ws = "name: WS\ndefault_environment: local\n";
+        let res_legacy = serde_yaml::from_str::<WorkspaceMeta>(legacy_ws);
+        assert!(
+            res_legacy.is_err(),
+            "WorkspaceMeta must reject deprecated default_environment"
+        );
+
         let invalid_folder = "name: Folder\nunknown_folder_key: bar\n";
         let res_folder = serde_yaml::from_str::<FolderFile>(invalid_folder);
         assert!(res_folder.is_err(), "FolderFile must reject unknown fields");

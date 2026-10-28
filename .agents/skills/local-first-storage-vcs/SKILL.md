@@ -26,7 +26,7 @@ my-workspace/
 │       ├── local.yaml             # Private secret values for "local" environment
 │       └── globals.yaml           # Private secret values for global variables
 ├── .gitignore                     # Automatically ensures .local/ and *.loc are ignored
-├── workspace.yaml                 # Workspace metadata, default_environment, workspace headers & auth
+├── workspace.yaml                 # Workspace metadata, workspace headers & auth
 ├── environments/
 │   ├── local.yaml                 # Committed environment variables (secret values stripped to None)
 │   └── globals.yaml               # Committed global variables (optional, created on save)

@@ -129,7 +129,6 @@ fn test_persist_payload_atomic_writes_to_store() {
     let meta = WorkspaceMeta {
         version: 1,
         name: "Renamed WS".to_string(),
-        default_environment: Some("dev".to_string()),
         headers: vec![KeyValuePair {
             key: "Auth".to_string(),
             value: "Bearer xyz".to_string(),
