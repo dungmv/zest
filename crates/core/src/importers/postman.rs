@@ -1,12 +1,14 @@
 use super::models::{
     ImportFormat, ImportResult, ImportedEnvironment, ImportedFolder, ImportedRequest,
 };
+use super::{push_folder_chain, split_folder_segments};
 use crate::models::{
     Auth, EnvironmentVariable, HttpMethod, KeyValuePair, MultipartItem, RequestBody, ScriptConfig,
 };
 use crate::storage::models::{RequestExampleFile, RequestKvItem};
 use anyhow::{anyhow, Result};
 use serde_json::Value;
+use std::collections::HashSet;
 use std::str::FromStr;
 
 pub fn parse_postman(content: &str) -> Result<ImportResult> {
@@ -60,6 +62,7 @@ pub fn parse_postman(content: &str) -> Result<ImportResult> {
     let default_auth = root.get("auth");
 
     let mut imported_folders = Vec::new();
+    let mut seen_folder_paths: HashSet<Vec<String>> = HashSet::new();
     let mut imported_requests = Vec::new();
     let mut warnings = Vec::new();
 
@@ -69,6 +72,7 @@ pub fn parse_postman(content: &str) -> Result<ImportResult> {
             &[],
             default_auth,
             &mut imported_folders,
+            &mut seen_folder_paths,
             &mut imported_requests,
             &mut warnings,
         );
@@ -92,6 +96,7 @@ fn parse_items(
     parent_path: &[String],
     inherited_auth: Option<&Value>,
     folders: &mut Vec<ImportedFolder>,
+    seen_folder_paths: &mut HashSet<Vec<String>>,
     requests: &mut Vec<ImportedRequest>,
     warnings: &mut Vec<String>,
 ) {
@@ -106,23 +111,30 @@ fn parse_items(
 
         // Check if item is a folder (contains "item" array)
         if let Some(sub_items) = item.get("item").and_then(|i| i.as_array()) {
-            let mut current_path = parent_path.to_vec();
-            current_path.push(name.clone());
+            let desc = item
+                .get("description")
+                .and_then(|d| d.as_str())
+                .map(String::from);
 
-            folders.push(ImportedFolder {
-                path: current_path.clone(),
-                name: name.clone(),
-                description: item
-                    .get("description")
-                    .and_then(|d| d.as_str())
-                    .map(String::from),
-            });
+            let segments = split_folder_segments(&name);
+            let current_path = if segments.is_empty() {
+                push_folder_chain(
+                    parent_path,
+                    std::slice::from_ref(&name),
+                    desc,
+                    folders,
+                    seen_folder_paths,
+                )
+            } else {
+                push_folder_chain(parent_path, &segments, desc, folders, seen_folder_paths)
+            };
 
             parse_items(
                 sub_items,
                 &current_path,
                 item_auth,
                 folders,
+                seen_folder_paths,
                 requests,
                 warnings,
             );

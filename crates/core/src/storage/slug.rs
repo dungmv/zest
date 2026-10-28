@@ -1,20 +1,20 @@
 use std::path::{Path, PathBuf};
 
 /// Generate a URL/filesystem slug from a display name:
+/// - Transliterates Unicode to ASCII (diacritics, Vietnamese, accents, etc.)
 /// - Lowercase
 /// - Replaces non-alphanumeric chars with '-'
 /// - Collapses multiple '-' into one
 /// - Trims leading and trailing '-'
 /// - Defaults to "request" if empty
 pub fn slugify(name: &str) -> String {
-    let mut slug = String::with_capacity(name.len());
+    let ascii_text = deunicode::deunicode(name);
+    let mut slug = String::with_capacity(ascii_text.len());
     let mut last_dash = true; // prevent leading dash
 
-    for ch in name.chars() {
-        if ch.is_alphanumeric() {
-            for lower in ch.to_lowercase() {
-                slug.push(lower);
-            }
+    for ch in ascii_text.chars() {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch.to_ascii_lowercase());
             last_dash = false;
         } else if !last_dash {
             slug.push('-');
@@ -94,6 +94,20 @@ mod tests {
         assert_eq!(slugify("   --hello---world-- "), "hello-world");
         assert_eq!(slugify(""), "request");
         assert_eq!(slugify("!!!"), "request");
+
+        // Vietnamese with diacritics
+        assert_eq!(slugify("Thông quan"), "thong-quan");
+        assert_eq!(slugify("Đăng nhập"), "dang-nhap");
+        assert_eq!(slugify("ĐƯỜNG"), "duong");
+        assert_eq!(slugify("Tìm kiếm người dùng"), "tim-kiem-nguoi-dung");
+        assert_eq!(slugify("merchant/Thông quan"), "merchant-thong-quan");
+
+        // European accents and special chars
+        assert_eq!(slugify("Café Müller"), "cafe-muller");
+        assert_eq!(slugify("Straße"), "strasse");
+
+        // CJK / Other scripts
+        assert_eq!(slugify("日本語"), "ri-ben-yu");
     }
 
     #[test]

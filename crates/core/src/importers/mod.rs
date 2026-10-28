@@ -11,7 +11,56 @@ use crate::storage::models::{EnvVarFile, EnvironmentFile, RequestFile};
 use crate::storage::slug::slugify;
 use crate::storage::WorkspaceStore;
 use anyhow::{anyhow, Result};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+
+/// Split a folder name or path by '/' into non-empty, trimmed segments.
+///
+/// Leading, trailing, and consecutive slashes are ignored.
+/// Example: `"merchant/Thông quan"` -> `["merchant", "Thông quan"]`
+pub fn split_folder_segments(name: &str) -> Vec<String> {
+    name.split('/')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .collect()
+}
+
+/// Push a hierarchy of folders into `folders`, deduplicating by full folder path.
+///
+/// Given a parent prefix (e.g. `["v1"]`) and segments (e.g. `["merchant", "Thông quan"]`),
+/// creates each intermediate folder step if it doesn't already exist in `seen`:
+/// - `["v1", "merchant"]` with name `"merchant"`
+/// - `["v1", "merchant", "Thông quan"]` with name `"Thông quan"` and `description` (only on leaf)
+///
+/// Returns the full leaf path `Vec<String>`.
+pub fn push_folder_chain(
+    parent_prefix: &[String],
+    segments: &[String],
+    description: Option<String>,
+    folders: &mut Vec<ImportedFolder>,
+    seen: &mut HashSet<Vec<String>>,
+) -> Vec<String> {
+    if segments.is_empty() {
+        return parent_prefix.to_vec();
+    }
+
+    let mut current = parent_prefix.to_vec();
+    let num_segments = segments.len();
+
+    for (i, seg) in segments.iter().enumerate() {
+        current.push(seg.clone());
+        if seen.insert(current.clone()) {
+            let is_leaf = i == num_segments - 1;
+            folders.push(ImportedFolder {
+                path: current.clone(),
+                name: seg.clone(),
+                description: if is_leaf { description.clone() } else { None },
+            });
+        }
+    }
+
+    current
+}
 
 pub fn parse_content(content: &str, format: ImportFormat) -> Result<ImportResult> {
     match format {
@@ -414,5 +463,189 @@ paths:
 
         let tree = store.scan_tree().unwrap();
         assert!(!tree.folders.is_empty());
+    }
+
+    #[test]
+    fn test_split_folder_segments() {
+        assert_eq!(split_folder_segments("Auth"), vec!["Auth"]);
+        assert_eq!(
+            split_folder_segments("merchant/Thông quan"),
+            vec!["merchant", "Thông quan"]
+        );
+        assert_eq!(
+            split_folder_segments("  v1  /  users  /  details  "),
+            vec!["v1", "users", "details"]
+        );
+        assert_eq!(split_folder_segments("//a///b//"), vec!["a", "b"]);
+        assert!(split_folder_segments("///").is_empty());
+        assert!(split_folder_segments("").is_empty());
+        assert!(split_folder_segments("   ").is_empty());
+    }
+
+    #[test]
+    fn test_push_folder_chain_deduplication() {
+        let mut folders = Vec::new();
+        let mut seen = HashSet::new();
+
+        let chain1 = push_folder_chain(
+            &[],
+            &["merchant".to_string(), "Thông quan".to_string()],
+            Some("Mô tả thông quan".to_string()),
+            &mut folders,
+            &mut seen,
+        );
+        assert_eq!(chain1, vec!["merchant", "Thông quan"]);
+        assert_eq!(folders.len(), 2);
+        assert_eq!(folders[0].name, "merchant");
+        assert_eq!(folders[0].description, None);
+        assert_eq!(folders[1].name, "Thông quan");
+        assert_eq!(folders[1].description.as_deref(), Some("Mô tả thông quan"));
+
+        // Second push with shared parent
+        let chain2 = push_folder_chain(
+            &[],
+            &["merchant".to_string(), "Kho hàng".to_string()],
+            None,
+            &mut folders,
+            &mut seen,
+        );
+        assert_eq!(chain2, vec!["merchant", "Kho hàng"]);
+        // Only the new child folder should be added
+        assert_eq!(folders.len(), 3);
+        assert_eq!(folders[2].name, "Kho hàng");
+    }
+
+    #[test]
+    fn test_openapi_nested_folder_and_vietnamese_slug() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let store = FsWorkspaceStore::new(temp_dir.path());
+        store.init_workspace("Test OpenAPI Nested").unwrap();
+
+        let json_spec = r#"{
+            "openapi": "3.1.0",
+            "info": { "title": "Merchant API" },
+            "paths": {
+                "/customs/declaration": {
+                    "post": {
+                        "summary": "Tạo tờ khai",
+                        "tags": ["merchant/Thông quan"]
+                    }
+                }
+            }
+        }"#;
+
+        let result = parse_content(json_spec, ImportFormat::OpenApi3).unwrap();
+        assert_eq!(result.folders.len(), 2);
+        assert_eq!(result.folders[0].path, vec!["merchant"]);
+        assert_eq!(result.folders[0].name, "merchant");
+        assert_eq!(result.folders[1].path, vec!["merchant", "Thông quan"]);
+        assert_eq!(result.folders[1].name, "Thông quan");
+
+        let options = ImportOptions {
+            target_folder_rel: None,
+            create_enclosing_folder: false,
+            enclosing_folder_name: None,
+            import_environments: false,
+        };
+
+        let summary = apply_import_to_workspace(&store, &result, &options).unwrap();
+        assert_eq!(summary.total_requests, 1);
+        assert_eq!(summary.total_folders, 2);
+
+        // Check filesystem paths
+        let collections_dir = temp_dir.path().join("collections");
+        let parent_dir = collections_dir.join("merchant");
+        let child_dir = parent_dir.join("thong-quan");
+
+        assert!(
+            parent_dir.exists(),
+            "Parent folder 'merchant' must exist on disk"
+        );
+        assert!(
+            child_dir.exists(),
+            "Child folder 'thong-quan' must exist on disk with transliterated slug"
+        );
+
+        // Verify folder display name in _folder.yaml
+        let folder_yaml = std::fs::read_to_string(child_dir.join("_folder.yaml")).unwrap();
+        assert!(
+            folder_yaml.contains("name: Thông quan"),
+            "Folder display name must be preserved with diacritics"
+        );
+
+        // Verify request file in child folder
+        let req_file = child_dir.join("tao-to-khai.yaml");
+        assert!(
+            req_file.exists(),
+            "Request file 'tao-to-khai.yaml' must exist in child folder"
+        );
+    }
+
+    #[test]
+    fn test_postman_nested_folder_and_vietnamese_slug() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let store = FsWorkspaceStore::new(temp_dir.path());
+        store.init_workspace("Test Postman Nested").unwrap();
+
+        let postman_json = r#"{
+            "info": {
+                "name": "Postman Nested API",
+                "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+            },
+            "item": [
+                {
+                    "name": "merchant/Thông quan",
+                    "item": [
+                        {
+                            "name": "Kiểm tra / Xác nhận",
+                            "request": {
+                                "method": "GET",
+                                "url": "https://example.com/api/check"
+                            }
+                        }
+                    ]
+                }
+            ]
+        }"#;
+
+        let result = parse_content(postman_json, ImportFormat::PostmanCollection).unwrap();
+        assert_eq!(result.folders.len(), 2);
+        assert_eq!(result.folders[0].path, vec!["merchant"]);
+        assert_eq!(result.folders[1].path, vec!["merchant", "Thông quan"]);
+        assert_eq!(
+            result.requests[0].folder_path,
+            vec!["merchant", "Thông quan"]
+        );
+        // Request name is NOT split:
+        assert_eq!(result.requests[0].name, "Kiểm tra / Xác nhận");
+
+        let options = ImportOptions {
+            target_folder_rel: None,
+            create_enclosing_folder: false,
+            enclosing_folder_name: None,
+            import_environments: false,
+        };
+
+        let summary = apply_import_to_workspace(&store, &result, &options).unwrap();
+        assert_eq!(summary.total_requests, 1);
+        assert_eq!(summary.total_folders, 2);
+
+        let child_dir = temp_dir
+            .path()
+            .join("collections")
+            .join("merchant")
+            .join("thong-quan");
+        assert!(child_dir.exists());
+
+        let folder_yaml = std::fs::read_to_string(child_dir.join("_folder.yaml")).unwrap();
+        assert!(folder_yaml.contains("name: Thông quan"));
+
+        // Request name 'Kiểm tra / Xác nhận' slugified into 'kiem-tra-xac-nhan.yaml'
+        let req_file = child_dir.join("kiem-tra-xac-nhan.yaml");
+        assert!(
+            req_file.exists(),
+            "Request file must exist at {:?}",
+            req_file
+        );
     }
 }

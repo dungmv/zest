@@ -1,6 +1,5 @@
-use super::models::{
-    ImportFormat, ImportResult, ImportedEnvironment, ImportedFolder, ImportedRequest,
-};
+use super::models::{ImportFormat, ImportResult, ImportedEnvironment, ImportedRequest};
+use super::{push_folder_chain, split_folder_segments};
 use crate::models::{
     Auth, EnvironmentVariable, HttpMethod, KeyValuePair, MultipartItem, RequestBody,
 };
@@ -82,7 +81,7 @@ pub fn parse_openapi(content: &str) -> Result<ImportResult> {
     };
 
     let mut imported_requests = Vec::new();
-    let mut folder_names_set = HashSet::new();
+    let mut seen_folder_paths: HashSet<Vec<String>> = HashSet::new();
     let mut imported_folders = Vec::new();
     let mut warnings = Vec::new();
 
@@ -140,16 +139,15 @@ pub fn parse_openapi(content: &str) -> Result<ImportResult> {
             let mut folder_path = Vec::new();
             if let Some(tags) = op_obj.get("tags").and_then(|t| t.as_array()) {
                 if let Some(first_tag) = tags.first().and_then(|t| t.as_str()) {
-                    let tag_trimmed = first_tag.trim();
-                    if !tag_trimmed.is_empty() {
-                        folder_path.push(tag_trimmed.to_string());
-                        if folder_names_set.insert(tag_trimmed.to_string()) {
-                            imported_folders.push(ImportedFolder {
-                                path: vec![tag_trimmed.to_string()],
-                                name: tag_trimmed.to_string(),
-                                description: None,
-                            });
-                        }
+                    let segments = split_folder_segments(first_tag);
+                    if !segments.is_empty() {
+                        folder_path = push_folder_chain(
+                            &[],
+                            &segments,
+                            None,
+                            &mut imported_folders,
+                            &mut seen_folder_paths,
+                        );
                     }
                 }
             }
