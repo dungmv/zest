@@ -269,34 +269,27 @@ pub fn get_variable_kind_and_color(
 }
 
 /// Builds a compact hover tooltip that shows only the resolved value of a variable.
-pub fn variable_value_tooltip(val: &str, scope: &str, is_res: bool) -> Div {
-    let t = crate::theme::theme();
+pub fn variable_value_tooltip(
+    val: &str,
+    scope: &str,
+    is_res: bool,
+) -> gpui_component::tooltip::Tooltip {
     let (_kind, color, _bg_tint) = get_variable_kind_and_color(scope, is_res);
 
-    div()
-        .flex()
-        .items_center()
-        .max_w(px(480.))
-        .px(px(6.))
-        .py(px(3.))
-        .rounded(px(6.))
-        .bg(t.bg_card)
-        .border_1()
-        .border_color(color)
-        .shadow_2xl()
-        .occlude()
-        .text_xs()
-        .font_family(".SystemMonoFont")
-        .text_color(if is_res { t.text_primary } else { color })
-        .child(div().truncate().child(if is_res {
-            if val.is_empty() {
-                "\"\"".to_string()
-            } else {
-                val.to_string()
-            }
+    if is_res {
+        let text = if val.is_empty() {
+            "\"\"".to_string()
         } else {
-            "Variable not found".to_string()
-        }))
+            val.to_string()
+        };
+        gpui_component::tooltip::Tooltip::new(text)
+            .font_family(".SystemMonoFont")
+            .text_xs()
+    } else {
+        gpui_component::tooltip::Tooltip::new("Variable not found")
+            .text_color(color)
+            .text_xs()
+    }
 }
 
 /// Builds `InputContent` with inline tokens for all variable spans `{{var}}` found in `text`.

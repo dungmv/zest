@@ -78,17 +78,8 @@ where
     }
     let selected_index = auto_state.read(cx).selected_index;
 
-    let hover_token_state = window.use_keyed_state(
-        SharedString::from(format!("hover-env-{}", input_id)),
-        cx,
-        |_window, _cx| None::<(String, gpui::Bounds<gpui::Pixels>)>,
-    );
-    let hovered_token = hover_token_state.read(cx).clone();
-
     let env_for_token = env_state.cloned();
     let modal_for_click = modal_state.cloned();
-    let env_for_hover = env_state.cloned();
-    let h_token = hover_token_state.clone();
     let inp_id_for_tok = input_id.clone();
 
     div()
@@ -163,12 +154,11 @@ where
                         .font_family(".SystemMonoFont")
                         .token(move |token_ctx, _window, cx| {
                             let var_name = token_ctx.token().id().to_string();
-                            let (scope, is_res) = if let Some(env_ent) = &env_for_token {
+                            let (val, scope, is_res) = if let Some(env_ent) = &env_for_token {
                                 let env = env_ent.read(cx);
-                                let (_val, sc, res) = get_variable_details(env, &var_name);
-                                (sc, res)
+                                get_variable_details(env, &var_name)
                             } else {
-                                ("Missing".to_string(), false)
+                                ("".to_string(), "Missing".to_string(), false)
                             };
                             let (_kind, color, bg_tint) =
                                 get_variable_kind_and_color(&scope, is_res);
@@ -178,6 +168,9 @@ where
                                     "{}-tok-{}",
                                     inp_id_for_tok, var_name
                                 )))
+                                .tooltip(move |window, cx| {
+                                    variable_value_tooltip(&val, &scope, is_res).build(window, cx)
+                                })
                                 .flex()
                                 .items_center()
                                 .px(px(5.))
@@ -190,19 +183,6 @@ where
                                 .cursor_pointer()
                                 .child(var_name)
                         })
-                        .on_token_hover(move |event, _window, cx| {
-                            let is_h = event.is_hovered();
-                            let name = event.token().id().to_string();
-                            let bounds = event.bounds();
-                            h_token.update(cx, |h, cx| {
-                                if is_h {
-                                    *h = Some((name, bounds));
-                                } else {
-                                    *h = None;
-                                }
-                                cx.notify();
-                            });
-                        })
                         .on_token_click(move |_, _window, cx| {
                             if let Some(modal) = &modal_for_click {
                                 modal.update(cx, |st, cx| {
@@ -212,25 +192,6 @@ where
                         }),
                 ),
         )
-        .when_some(hovered_token, |this, (var_name, _bounds)| {
-            let (val, scope, is_res) = if let Some(env_ent) = &env_for_hover {
-                let env = env_ent.read(cx);
-                get_variable_details(env, &var_name)
-            } else {
-                ("".to_string(), "".to_string(), false)
-            };
-
-            this.child(
-                deferred(
-                    div()
-                        .absolute()
-                        .top(px(34.))
-                        .left(px(0.))
-                        .child(variable_value_tooltip(&val, &scope, is_res)),
-                )
-                .with_priority(90),
-            )
-        })
         .when(show_autocomplete, |this| {
             let (start_idx, end_idx) = unclosed
                 .as_ref()

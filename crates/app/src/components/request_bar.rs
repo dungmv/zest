@@ -19,7 +19,6 @@ use gpui_component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_component::scroll::ScrollableElement as _;
 use gpui_component::Icon;
 use gpui_kit::assets::IconName;
-use zest_core::interpolation::scan_variables;
 use zest_core::models::HttpMethod;
 
 #[allow(clippy::type_complexity)]
@@ -75,37 +74,19 @@ impl RenderOnce for RequestBar {
         let url_input_clone = self.url_input.clone();
         let on_send = self.on_send.clone();
 
-        // Scan variables in URL and build completions only if URL contains {{
-        let (var_map, completion_candidates, unclosed) = if url.contains("{{") {
+        // Build completions only if URL contains {{
+        let (completion_candidates, unclosed) = if url.contains("{{") {
             let ws = self.env_state.read(cx);
-            let effective_env = ws.effective_environment();
-            let var_spans = scan_variables(&url, Some(&effective_env));
-
-            let map: std::collections::HashMap<String, (String, String, bool)> = var_spans
-                .iter()
-                .map(|s| {
-                    let (val, scope, is_res) = get_variable_details(ws, &s.name);
-                    (s.name.clone(), (val, scope, is_res))
-                })
-                .collect();
-
             let unclosed = detect_unclosed_env_var(&url);
             let candidates = unclosed
                 .as_ref()
                 .map(|(_, _, q)| get_env_completions(ws, q))
                 .unwrap_or_default();
 
-            (map, candidates, unclosed)
+            (candidates, unclosed)
         } else {
-            (std::collections::HashMap::new(), Vec::new(), None)
+            (Vec::new(), None)
         };
-
-        let hover_token_state = window.use_keyed_state(
-            gpui::SharedString::from("url-inline-token-hover"),
-            cx,
-            |_window, _cx| None::<(String, gpui::Bounds<gpui::Pixels>)>,
-        );
-        let hovered_token = hover_token_state.read(cx).clone();
 
         let auto_state = window.use_keyed_state(
             gpui::SharedString::from("auto-nav-url-bar"),
@@ -288,7 +269,6 @@ impl RenderOnce for RequestBar {
                             .child({
                                 let ws_env = ws_clone.clone();
                                 let modal_click = modal_clone.clone();
-                                let h_token = hover_token_state.clone();
 
                                 Input::new(&self.url_input)
                                     .id("url-input-field")
@@ -302,7 +282,7 @@ impl RenderOnce for RequestBar {
                                     .token(move |token_ctx, _window, cx| {
                                         let var_name = token_ctx.token().id().to_string();
                                         let ws = ws_env.read(cx);
-                                        let (_val, scope, is_res) =
+                                        let (val, scope, is_res) =
                                             get_variable_details(ws, &var_name);
                                         let (_kind, color, bg_tint) =
                                             get_variable_kind_and_color(&scope, is_res);
@@ -312,6 +292,10 @@ impl RenderOnce for RequestBar {
                                                 "inline-token-{}",
                                                 var_name
                                             )))
+                                            .tooltip(move |window, cx| {
+                                                variable_value_tooltip(&val, &scope, is_res)
+                                                    .build(window, cx)
+                                            })
                                             .flex()
                                             .items_center()
                                             .px(px(6.))
@@ -323,19 +307,6 @@ impl RenderOnce for RequestBar {
                                             .text_color(color)
                                             .cursor_pointer()
                                             .child(var_name)
-                                    })
-                                    .on_token_hover(move |event, _window, cx| {
-                                        let is_h = event.is_hovered();
-                                        let name = event.token().id().to_string();
-                                        let bounds = event.bounds();
-                                        h_token.update(cx, |h, cx| {
-                                            if is_h {
-                                                *h = Some((name, bounds));
-                                            } else {
-                                                *h = None;
-                                            }
-                                            cx.notify();
-                                        });
                                     })
                                     .on_token_click(move |_, _window, cx| {
                                         modal_click.update(cx, |state, cx| {
@@ -394,24 +365,6 @@ impl RenderOnce for RequestBar {
                             )
                     }),
             )
-            // Tooltip card shown ON HOVER over inline variable token
-            .when_some(hovered_token, |this, (var_name, _bounds)| {
-                let (val, scope, is_res) = var_map
-                    .get(&var_name)
-                    .cloned()
-                    .unwrap_or_else(|| ("".to_string(), "".to_string(), false));
-
-                this.child(
-                    deferred(
-                        div()
-                            .absolute()
-                            .top(px(42.))
-                            .left(px(80.))
-                            .child(variable_value_tooltip(&val, &scope, is_res)),
-                    )
-                    .with_priority(90),
-                )
-            })
             // Autocomplete Dropdown popup when user types {{
             .when(show_autocomplete, |this| {
                 let (start_idx, end_idx) = unclosed
