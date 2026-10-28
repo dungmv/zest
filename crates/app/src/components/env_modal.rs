@@ -208,7 +208,6 @@ impl RenderOnce for EnvironmentModal {
 
         let envs = ws.environments.clone();
         let global_env = ws.global_environment.clone();
-        let active_env_id = ws.active_environment_id.clone();
         let selected_id = modal
             .selected_env_modal_id
             .clone()
@@ -220,21 +219,18 @@ impl RenderOnce for EnvironmentModal {
         let rename_env_input = sidebar.rename_env_input().cloned();
 
         let is_global_selected = selected_id == "globals";
-        let active_custom_env = envs.iter().find(|e| e.id == selected_id).cloned();
+        let selected_custom_env = envs.iter().find(|e| e.id == selected_id).cloned();
 
         let filtered_envs: Vec<Environment> = envs.clone();
 
         // Target variables to display in the right pane
         let target_variables: Vec<EnvironmentVariable> = if is_global_selected {
             global_env.variables.clone()
-        } else if let Some(custom) = &active_custom_env {
+        } else if let Some(custom) = &selected_custom_env {
             custom.variables.clone()
         } else {
             Vec::new()
         };
-
-        let is_target_active = !is_global_selected
-            && active_custom_env.as_ref().map(|e| e.id.as_str()) == active_env_id.as_deref();
 
         div()
             .id("env-modal-overlay")
@@ -466,7 +462,6 @@ impl RenderOnce for EnvironmentModal {
                                             })
                                             .children(filtered_envs.into_iter().map(|env| {
                                                 let is_sel = selected_id == env.id;
-                                                let is_act = active_env_id.as_deref() == Some(&env.id);
                                                 let is_renaming = renaming_env_id.as_deref() == Some(&env.id);
                                                 let env_id = env.id.clone();
                                                 let env_name = env.name.clone();
@@ -563,12 +558,6 @@ impl RenderOnce for EnvironmentModal {
                                                             .items_center()
                                                             .gap(px(6.))
                                                             .overflow_hidden()
-                                                            .child(
-                                                                div()
-                                                                    .text_xs()
-                                                                    .text_color(if is_act { t.status_2xx } else { t.text_muted })
-                                                                    .child(if is_act { "●" } else { "○" }),
-                                                            )
                                                             .child(if let (true, Some(inp)) = (is_renaming, rename_env_input.as_ref()) {
                                                                 let sb_esc = sidebar_clone.clone();
                                                                 div()
@@ -693,7 +682,7 @@ impl RenderOnce for EnvironmentModal {
                                                         )
                                                     })
                                                     .when(!is_global_selected, |this| {
-                                                        if let Some(custom) = &active_custom_env {
+                                                        if let Some(custom) = &selected_custom_env {
                                                             this.child(
                                                                 div()
                                                                     .flex()
@@ -705,20 +694,7 @@ impl RenderOnce for EnvironmentModal {
                                                                             .font_weight(gpui::FontWeight::BOLD)
                                                                             .text_color(t.text_primary)
                                                                             .child(custom.name.clone()),
-                                                                    )
-                                                                    .when(is_target_active, |this| {
-                                                                        this.child(
-                                                                            div()
-                                                                                .px(px(6.))
-                                                                                .py(px(2.))
-                                                                                .rounded(px(4.))
-                                                                                .bg(gpui::Hsla { a: 0.15, ..t.status_2xx })
-                                                                                .text_color(t.status_2xx)
-                                                                                .text_xs()
-                                                                                .font_weight(gpui::FontWeight::MEDIUM)
-                                                                                .child("● Active"),
-                                                                        )
-                                                                    }),
+                                                                    ),
                                                             )
                                                         } else {
                                                             this.child(div().text_sm().child("Select an environment"))

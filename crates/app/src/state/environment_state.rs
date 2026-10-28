@@ -72,6 +72,7 @@ impl EnvironmentState {
             }
         }
 
+        envs.sort_by_key(|a| a.name.to_lowercase());
         self.environments = envs;
 
         let global_file = self.store.load_global_environment().unwrap_or_default();
@@ -461,5 +462,31 @@ impl EnvironmentState {
             }
             self.reload_environments();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+    use zest_core::storage::FsWorkspaceStore;
+
+    #[test]
+    fn test_reload_environments_sorted_alphabetically() {
+        let temp = tempdir().expect("create temp dir");
+        let store: Arc<dyn WorkspaceStore> = Arc::new(FsWorkspaceStore::new(temp.path()));
+        let _ = store.init_workspace("TestWS");
+
+        let _ = store.save_environment("production", &EnvironmentFile::default());
+        let _ = store.save_environment("alpha", &EnvironmentFile::default());
+        let _ = store.save_environment("Development", &EnvironmentFile::default());
+        let _ = store.save_environment("beta", &EnvironmentFile::default());
+
+        let state = EnvironmentState::new(store, "TestWS".to_string(), None);
+        let names: Vec<&str> = state.environments.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["alpha", "beta", "Development", "local", "production"]
+        );
     }
 }
