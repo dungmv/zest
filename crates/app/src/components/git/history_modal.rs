@@ -66,7 +66,7 @@ pub fn render_history_view(
                             div()
                                 .id(format!("commit-item-{}", item.hash))
                                 .px(px(12.))
-                                .py(px(8.))
+                                .py(px(7.))
                                 .border_b_1()
                                 .border_color(t.border)
                                 .cursor_pointer()
@@ -79,46 +79,59 @@ pub fn render_history_view(
                                 })
                                 .flex()
                                 .flex_col()
-                                .gap(px(3.))
+                                .gap(px(4.))
+                                // Row 1: Commit Message (single line, truncate)
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                        .text_color(t.text_primary)
+                                        .truncate()
+                                        .child(item.message),
+                                )
+                                // Row 2: Metadata (Username, hash on left; time on right)
                                 .child(
                                     div()
                                         .flex()
                                         .items_center()
                                         .justify_between()
+                                        .gap(px(8.))
                                         .child(
                                             div()
-                                                .px(px(4.))
-                                                .py(px(1.))
-                                                .rounded(px(3.))
-                                                .bg(t.bg_card)
-                                                .border_1()
-                                                .border_color(t.border)
-                                                .text_xs()
-                                                .font_family(".SystemMonoFont")
-                                                .text_color(t.primary)
-                                                .child(item.short_hash),
+                                                .flex()
+                                                .items_center()
+                                                .gap(px(6.))
+                                                .min_w(px(0.))
+                                                .child(
+                                                    div()
+                                                        .text_xs()
+                                                        .text_color(t.text_secondary)
+                                                        .truncate()
+                                                        .child(item.author_name),
+                                                )
+                                                .child(
+                                                    div()
+                                                        .px(px(4.))
+                                                        .py(px(0.5))
+                                                        .rounded(px(3.))
+                                                        .bg(t.bg_card)
+                                                        .border_1()
+                                                        .border_color(t.border)
+                                                        .text_xs()
+                                                        .font_family(".SystemMonoFont")
+                                                        .text_color(t.primary)
+                                                        .flex_shrink_0()
+                                                        .child(item.short_hash),
+                                                ),
                                         )
                                         .child(
                                             div()
                                                 .text_xs()
                                                 .text_color(t.text_muted)
+                                                .flex_shrink_0()
                                                 .child(item.relative_date),
                                         ),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .font_weight(gpui::FontWeight::MEDIUM)
-                                            .text_color(t.text_primary)
-                                            .line_clamp(2)
-                                            .child(item.message),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .text_color(t.text_muted)
-                                            .child(format!("👤 {}", item.author_name)),
-                                    )
+                                )
                         })),
                 ),
         )
@@ -419,12 +432,6 @@ impl RenderOnce for GitHistoryModal {
                                                 .font_family(".SystemMonoFont")
                                                 .text_color(t.text_secondary)
                                                 .child(branch_name),
-                                        )
-                                        .child(
-                                            div()
-                                                .text_xs()
-                                                .text_color(t.text_muted)
-                                                .child(format!("({} commits)", history.len())),
                                         )
                                     }),
                             )

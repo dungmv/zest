@@ -169,10 +169,12 @@ pub fn render_sidebar_footer(
                             }),
                     );
 
-                    // 3. Branch submenu: named after the current branch
+                    // 3. Branch submenu: named after the current branch (only local branches)
                     m = m.submenu(current_b.clone(), window, cx, move |sub, _w, _cx| {
                         let mut s = sub;
-                        if branches_list.is_empty() {
+                        let local_branches: Vec<_> =
+                            branches_list.iter().filter(|b| !b.is_remote).collect();
+                        if local_branches.is_empty() {
                             s = s.item(
                                 PopupMenuItem::new(if current_b.is_empty() {
                                     "No branches".to_string()
@@ -182,7 +184,7 @@ pub fn render_sidebar_footer(
                                 .checked(true),
                             );
                         } else {
-                            for b in &branches_list {
+                            for b in local_branches {
                                 let b_name = b.name.clone();
                                 let is_curr = b.is_current || b.name == current_b;
                                 let svc_b = svc_checkout_parent.clone();

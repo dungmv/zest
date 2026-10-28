@@ -713,7 +713,7 @@ pub fn git_branches(repo_dir: &Path) -> Result<Vec<GitBranchInfo>> {
         &[
             "branch",
             "-a",
-            "--format=%(HEAD)|%(refname:short)|%(upstream:short)",
+            "--format=%(HEAD)|%(refname)|%(refname:short)|%(upstream:short)",
         ],
     )?;
 
@@ -723,14 +723,22 @@ pub fn git_branches(repo_dir: &Path) -> Result<Vec<GitBranchInfo>> {
             continue;
         }
         let parts: Vec<&str> = line.split('|').collect();
-        if parts.len() >= 2 {
+        if parts.len() >= 3 {
             let is_current = parts[0].trim() == "*";
-            let name = parts[1].trim().to_string();
+            let refname = parts[1].trim();
+            let name = parts[2].trim().to_string();
             let upstream = parts
-                .get(2)
+                .get(3)
                 .map(|u| u.trim().to_string())
                 .filter(|u| !u.is_empty());
-            let is_remote = name.starts_with("origin/") || name.starts_with("remotes/");
+
+            // Skip symbolic remote HEAD refs like "refs/remotes/origin/HEAD",
+            // which Git shortens to just the remote name (e.g. "origin").
+            if refname.starts_with("refs/remotes/") && refname.ends_with("/HEAD") {
+                continue;
+            }
+
+            let is_remote = refname.starts_with("refs/remotes/");
 
             branches.push(GitBranchInfo {
                 name,
@@ -898,6 +906,10 @@ mod tests {
         let branches = git_branches(repo_dir).unwrap();
         assert!(!branches.is_empty());
         assert!(branches.iter().any(|b| b.is_current));
+        // Ensure remote HEAD symbolic refs like "origin" are filtered out
+        assert!(!branches
+            .iter()
+            .any(|b| b.name == "origin" || b.name.ends_with("/HEAD")));
     }
 
     #[test]
