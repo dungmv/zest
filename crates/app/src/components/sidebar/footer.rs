@@ -8,7 +8,8 @@ use gpui::{
 };
 use gpui_component::button::{Button, ButtonVariants as _};
 use gpui_component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_component::Icon;
+use gpui_component::spinner::Spinner;
+use gpui_component::{Icon, Sizable};
 use gpui_kit::assets::IconName;
 use zest_core::git::GitStatusResult;
 
@@ -16,6 +17,7 @@ pub fn render_sidebar_footer(
     git_branch: &str,
     git_status: Option<&GitStatusResult>,
     is_syncing: bool,
+    sync_message: Option<&str>,
     git: &Entity<GitState>,
     toast: &Entity<ToastState>,
 ) -> AnyElement {
@@ -27,6 +29,7 @@ pub fn render_sidebar_footer(
     let git_footer = git.clone();
     let git_service = GitService::new(git.clone(), toast.clone());
     let current_branch_name = git_branch.to_string();
+    let sync_label = sync_message.unwrap_or("syncing...").to_lowercase();
 
     div()
         .id("sidebar-footer-bar")
@@ -39,6 +42,7 @@ pub fn render_sidebar_footer(
         .flex()
         .items_center()
         .justify_between()
+        .gap(px(6.))
         .text_xs()
         // Branch chip & dropdown menu
         .child(if is_repo {
@@ -87,13 +91,6 @@ pub fn render_sidebar_footer(
                                 .flex()
                                 .items_center()
                                 .gap(px(4.))
-                                .when(is_syncing, |s| {
-                                    s.child(
-                                        Icon::new(IconName::RefreshCw)
-                                            .size(px(12.))
-                                            .text_color(t.primary),
-                                    )
-                                })
                                 .when(ahead > 0, |s| {
                                     s.child(
                                         div()
@@ -286,6 +283,24 @@ pub fn render_sidebar_footer(
                     "No Git"
                 }))
                 .into_any_element()
+        })
+        .when(is_syncing, |bar| {
+            bar.child(
+                div()
+                    .id("sidebar-footer-sync-indicator")
+                    .flex()
+                    .items_center()
+                    .gap(px(4.))
+                    .flex_shrink_0()
+                    .text_xs()
+                    .child(
+                        Spinner::new()
+                            .icon(IconName::RefreshCw)
+                            .with_size(px(12.))
+                            .color(t.primary),
+                    )
+                    .child(div().text_xs().text_color(t.text_muted).child(sync_label)),
+            )
         })
         .into_any_element()
 }

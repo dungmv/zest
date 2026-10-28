@@ -39,6 +39,7 @@ pub struct GitState {
     pub error: Option<String>,
     pub loading: bool,
     pub is_syncing: bool,
+    pub sync_message: Option<String>,
     pub status_version: usize,
 }
 
@@ -64,6 +65,7 @@ impl Default for GitState {
             error: None,
             loading: false,
             is_syncing: false,
+            sync_message: None,
             status_version: 0,
         }
     }

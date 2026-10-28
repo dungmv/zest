@@ -31,7 +31,9 @@ mod tests {
         git.loading = true;
         assert!(git.loading);
         git.is_syncing = true;
+        git.sync_message = Some("pushing...".to_string());
         assert!(git.is_syncing);
+        assert_eq!(git.sync_message.as_deref(), Some("pushing..."));
 
         // Test error recording
         git.error = Some("Git authentication failed".to_string());

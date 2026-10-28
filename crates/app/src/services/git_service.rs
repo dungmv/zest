@@ -47,6 +47,8 @@ impl GitService {
             cx.update(|cx| {
                 git.update(cx, |git, cx| {
                     git.loading = false;
+                    git.is_syncing = false;
+                    git.sync_message = None;
                     match res {
                         Ok(()) => {
                             git.error = None;
@@ -71,6 +73,7 @@ impl GitService {
         &self,
         cx: &mut App,
         error_title: &'static str,
+        op_label: &'static str,
         op: impl FnOnce() -> Result<String, String> + Send + 'static,
         on_success: impl FnOnce(&mut GitState, &mut Context<GitState>, String) + Send + 'static,
     ) {
@@ -79,6 +82,7 @@ impl GitService {
         }
         self.git.update(cx, |git, cx| {
             git.is_syncing = true;
+            git.sync_message = Some(op_label.to_string());
             git.error = None;
             cx.notify();
         });
@@ -90,6 +94,7 @@ impl GitService {
             cx.update(|cx| {
                 git.update(cx, |git, cx| {
                     git.is_syncing = false;
+                    git.sync_message = None;
                     match res {
                         Ok(msg) => {
                             git.error = None;
@@ -241,6 +246,10 @@ impl GitService {
         let and_push = self.git.read(cx).commit_and_push;
         self.git.update(cx, |git, cx| {
             git.loading = true;
+            if and_push {
+                git.is_syncing = true;
+                git.sync_message = Some("pushing...".to_string());
+            }
             git.error = None;
             cx.notify();
         });
@@ -274,6 +283,8 @@ impl GitService {
             cx.update(|cx| {
                 git.update(cx, |git, cx| {
                     git.loading = false;
+                    git.is_syncing = false;
+                    git.sync_message = None;
                     match res {
                         Ok(_) => {
                             git.error = None;
@@ -284,28 +295,10 @@ impl GitService {
                             git.close_modal(cx);
                             git.refresh_all(cx);
                             cx.notify();
-                            if let Some(push_res) = push_res {
-                                match push_res {
-                                    Ok(msg) => {
-                                        let trimmed = msg.trim();
-                                        toast.update(cx, |ts, cx| {
-                                            ts.push_success(
-                                                "Git Commit",
-                                                if trimmed.is_empty() {
-                                                    "Committed and pushed to remote.".to_string()
-                                                } else {
-                                                    trimmed.to_string()
-                                                },
-                                                cx,
-                                            );
-                                        });
-                                    }
-                                    Err(e) => {
-                                        toast.update(cx, |ts, cx| {
-                                            ts.push_error("Git Push Failed", e.to_string(), cx);
-                                        });
-                                    }
-                                }
+                            if let Some(Err(e)) = push_res {
+                                toast.update(cx, |ts, cx| {
+                                    ts.push_error("Git Push Failed", e.to_string(), cx);
+                                });
                             }
                         }
                         Err(e) => {
@@ -327,6 +320,8 @@ impl GitService {
         let b = branch.to_string();
         self.git.update(cx, |git, cx| {
             git.loading = true;
+            git.is_syncing = true;
+            git.sync_message = Some("checking out...".to_string());
             git.error = None;
             cx.notify();
         });
@@ -342,19 +337,14 @@ impl GitService {
             cx.update(|cx| {
                 git.update(cx, |git, cx| {
                     git.loading = false;
+                    git.is_syncing = false;
+                    git.sync_message = None;
                     match res {
                         Ok(()) => {
-                            git.branch = Some(b.clone());
+                            git.branch = Some(b);
                             git.error = None;
                             git.refresh_all(cx);
                             cx.notify();
-                            toast.update(cx, |ts, cx| {
-                                ts.push_success(
-                                    "Git Checkout",
-                                    format!("Switched to branch '{}'", b),
-                                    cx,
-                                );
-                            });
                         }
                         Err(e) => {
                             let err_str = e.to_string();
@@ -373,75 +363,39 @@ impl GitService {
 
     pub fn fetch(&self, cx: &mut App) {
         let ws_path = self.git.read(cx).repo_path.clone();
-        let toast = self.toast.clone();
         self.run_sync_op(
             cx,
             "Git Fetch Failed",
+            "fetching...",
             move || zest_core::git::git_fetch(&ws_path).map_err(|e| e.to_string()),
-            move |git, cx, msg| {
+            move |git, cx, _msg| {
                 git.refresh_all(cx);
-                let trimmed = msg.trim();
-                toast.update(cx, |ts, cx| {
-                    ts.push_success(
-                        "Git Fetch",
-                        if trimmed.is_empty() {
-                            "Fetched latest references.".to_string()
-                        } else {
-                            trimmed.to_string()
-                        },
-                        cx,
-                    );
-                });
             },
         );
     }
 
     pub fn pull(&self, cx: &mut App) {
         let ws_path = self.git.read(cx).repo_path.clone();
-        let toast = self.toast.clone();
         self.run_sync_op(
             cx,
             "Git Pull Failed",
+            "pulling...",
             move || zest_core::git::git_pull(&ws_path).map_err(|e| e.to_string()),
-            move |git, cx, msg| {
+            move |git, cx, _msg| {
                 git.refresh_all(cx);
-                let trimmed = msg.trim();
-                toast.update(cx, |ts, cx| {
-                    if trimmed.contains("Already up to date") {
-                        ts.push_info("Git Sync", "Already up to date.", cx);
-                    } else {
-                        ts.push_success(
-                            "Git Pull",
-                            format!("Successfully pulled: {}", trimmed),
-                            cx,
-                        );
-                    }
-                });
             },
         );
     }
 
     pub fn push(&self, cx: &mut App) {
         let ws_path = self.git.read(cx).repo_path.clone();
-        let toast = self.toast.clone();
         self.run_sync_op(
             cx,
             "Git Push Failed",
+            "pushing...",
             move || zest_core::git::git_push(&ws_path).map_err(|e| e.to_string()),
-            move |git, cx, msg| {
+            move |git, cx, _msg| {
                 git.refresh_status(cx);
-                let trimmed = msg.trim();
-                toast.update(cx, |ts, cx| {
-                    ts.push_success(
-                        "Git Push",
-                        if trimmed.is_empty() {
-                            "Pushed commits to remote.".to_string()
-                        } else {
-                            trimmed.to_string()
-                        },
-                        cx,
-                    );
-                });
             },
         );
     }

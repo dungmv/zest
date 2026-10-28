@@ -234,6 +234,7 @@ impl RenderOnce for SidebarTree {
                 git_branch,
                 git.status.as_ref(),
                 git.is_syncing,
+                git.sync_message.as_deref(),
                 &self.git_state,
                 &self.toast_state,
             );
