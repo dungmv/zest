@@ -17,6 +17,8 @@ use gpui_component::button::{Button, ButtonVariants as _};
 use gpui_component::input::{Input, InputState};
 use gpui_component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_component::scroll::ScrollableElement as _;
+use gpui_component::Icon;
+use gpui_kit::assets::IconName;
 use zest_core::interpolation::scan_variables;
 use zest_core::models::HttpMethod;
 
@@ -146,7 +148,6 @@ impl RenderOnce for RequestBar {
             .py(px(4.))
             .flex()
             .items_center()
-            .gap(px(8.))
             .bg(t.bg_editor)
             .border_b_1()
             .border_color(t.border)
@@ -342,7 +343,56 @@ impl RenderOnce for RequestBar {
                                         });
                                     })
                             }),
-                    ),
+                    )
+                    // Subtle vertical separator
+                    .child(div().w(px(1.)).h(px(16.)).bg(t.border))
+                    // Send / Cancel Action Button
+                    .child({
+                        let ed_s = ed_clone.clone();
+                        let on_send_cb = on_send.clone();
+
+                        Button::new("btn-send-or-cancel")
+                            .ghost()
+                            .compact()
+                            .px(px(6.))
+                            .py(px(3.))
+                            .rounded(px(4.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .tooltip(if is_sending {
+                                "Cancel request".to_string()
+                            } else if cfg!(target_os = "macos") {
+                                "Send (⌘Enter)".to_string()
+                            } else {
+                                "Send (Ctrl+Enter)".to_string()
+                            })
+                            .on_click(move |_, window, cx| {
+                                if is_sending {
+                                    ed_s.update(cx, |state, cx| {
+                                        if let Some(tx) = state.cancel_tx.take() {
+                                            let _ = tx.send(());
+                                        }
+                                        state.stop_sending(cx);
+                                    });
+                                } else {
+                                    on_send_cb(window, cx);
+                                }
+                            })
+                            .child(
+                                Icon::new(if is_sending {
+                                    IconName::Close
+                                } else {
+                                    IconName::SendHorizontal
+                                })
+                                .size(px(14.))
+                                .text_color(if is_sending {
+                                    t.status_5xx
+                                } else {
+                                    t.text_secondary
+                                }),
+                            )
+                    }),
             )
             // Tooltip card shown ON HOVER over inline variable token
             .when_some(hovered_token, |this, (var_name, _bounds)| {
@@ -476,46 +526,6 @@ impl RenderOnce for RequestBar {
                     )
                     .with_priority(100),
                 )
-            })
-            // Send / Cancel Button
-            .child({
-                let ed_s = ed_clone.clone();
-                let on_send_cb = on_send.clone();
-
-                div()
-                    .id("btn-send-or-cancel")
-                    .px(px(16.))
-                    .h(px(34.))
-                    .rounded(px(6.))
-                    .bg(if is_sending { t.status_5xx } else { t.primary })
-                    .hover(|s| {
-                        if is_sending {
-                            s.bg(t.status_5xx)
-                        } else {
-                            s.bg(t.primary_hover)
-                        }
-                    })
-                    .cursor_pointer()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .gap(px(6.))
-                    .text_xs()
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(t.primary_foreground)
-                    .on_click(move |_, window, cx| {
-                        if is_sending {
-                            ed_s.update(cx, |state, cx| {
-                                if let Some(tx) = state.cancel_tx.take() {
-                                    let _ = tx.send(());
-                                }
-                                state.stop_sending(cx);
-                            });
-                        } else {
-                            on_send_cb(window, cx);
-                        }
-                    })
-                    .child(if is_sending { "Cancel" } else { "Send" })
             })
     }
 }
