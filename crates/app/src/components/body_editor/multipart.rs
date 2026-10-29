@@ -829,18 +829,22 @@ pub fn render_multipart_editor(
                         // Delete row
                         .child(
                             div()
-                                .id(format!("del-mp-row-{}", idx))
-                                .w(px(24.))
-                                .h(px(24.))
-                                .flex_shrink_0()
+                                .id(gpui_kit::SharedString::from(format!("del-mp-row-{}", idx)))
+                                .size(px(24.))
                                 .rounded(px(4.))
                                 .flex()
                                 .items_center()
                                 .justify_center()
                                 .cursor_pointer()
-                                .hover(|s| s.bg(t.bg_hover).text_color(t.status_5xx))
                                 .text_color(t.text_muted)
-                                .on_click(move |_, _, cx| {
+                                .hover(move |s| {
+                                    s.text_color(t.json_null).bg(t.json_null.opacity(0.12))
+                                })
+                                .tooltip(move |window, cx| {
+                                    gpui_kit::component::tooltip::Tooltip::new("Delete field")
+                                        .build(window, cx)
+                                })
+                                .on_click(move |_, _, cx: &mut App| {
                                     let current_idx = {
                                         let st = ts_del.read(cx);
                                         st.rows.iter().position(|r| r.key_input == key_in_del)
@@ -863,7 +867,7 @@ pub fn render_multipart_editor(
                                         });
                                     }
                                 })
-                                .child(Icon::new(IconName::Trash).small()),
+                                .child(Icon::new(IconName::Trash).size(px(14.))),
                         )
                 }))
         })

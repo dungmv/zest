@@ -11,6 +11,7 @@ use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::spinner::Spinner;
 use gpui_kit::component::tab::{Tab, TabBar};
 use gpui_kit::component::text::TextView;
+use gpui_kit::component::Selectable as _;
 use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -191,24 +192,16 @@ impl RenderOnce for ResponseInspector {
                                 let rs = resp_state_clone.clone();
                                 let req_id = active_id.clone().unwrap_or_default();
                                 this.child(
-                                    div()
-                                        .id("btn-return-live")
-                                        .cursor_pointer()
-                                        .px(px(6.))
-                                        .py(px(2.))
-                                        .rounded(px(4.))
-                                        .bg(t.bg_card)
-                                        .border_1()
-                                        .border_color(t.border)
-                                        .text_xs()
-                                        .text_color(t.primary)
-                                        .hover(|s| s.bg(t.bg_hover))
-                                        .on_click(move |_, _, cx| {
+                                    Button::new("btn-return-live")
+                                        .ghost()
+                                        .xsmall()
+                                        .icon(IconName::ArrowLeft)
+                                        .label("Live")
+                                        .on_click(move |_, _, cx: &mut App| {
                                             rs.update(cx, |state, cx| {
                                                 state.restore_live_response(&req_id, cx);
                                             });
-                                        })
-                                        .child(div().flex().items_center().gap(px(4.)).child(Icon::new(IconName::ArrowLeft).size(px(14.))).child("Live")),
+                                        }),
                                 )
                             }),
                     ),
@@ -455,29 +448,18 @@ impl RenderOnce for ResponseInspector {
                                                 ),
                                         )
                                         .child(
-                                            div()
-                                                .id("btn-cancel-in-response-view")
-                                                .cursor_pointer()
-                                                .mt(px(4.))
-                                                .px(px(12.))
-                                                .py(px(5.))
-                                                .rounded(px(4.))
-                                                .bg(t.bg_card)
-                                                .border_1()
-                                                .border_color(t.border)
-                                                .text_xs()
-                                                .font_weight(gpui_kit::FontWeight::MEDIUM)
-                                                .text_color(t.status_5xx)
-                                                .hover(|s| s.bg(t.bg_hover))
-                                                .on_click(move |_, _, cx| {
+                                            Button::new("btn-cancel-in-response-view")
+                                                .danger()
+                                                .small()
+                                                .label("Cancel Request")
+                                                .on_click(move |_, _, cx: &mut App| {
                                                     ed_s_cancel.update(cx, |state, cx| {
                                                         if let Some(tx) = state.cancel_tx.take() {
                                                             let _ = tx.send(());
                                                         }
                                                         state.stop_sending(cx);
                                                     });
-                                                })
-                                                .child("Cancel Request"),
+                                                }),
                                         )
                                         .into_any_element()
                                 } else if current_resp.is_none() {
@@ -630,25 +612,12 @@ impl RenderOnce for ResponseInspector {
                                                         let ws_s = ws_s.clone();
                                                         let c_resp = c_resp.clone();
                                                         this.child(
-                                                            div()
-                                                                .id("btn-save-example")
-                                                                .tooltip(move |window, cx| {
-                                                                    gpui_kit::component::tooltip::Tooltip::new("Save as Example").build(window, cx)
-                                                                })
-                                                                .cursor_pointer()
-                                                                .px(px(6.))
-                                                                .py(px(2.))
-                                                                .rounded(px(4.))
-                                                                .bg(t.bg_card)
-                                                                .border_1()
-                                                                .border_color(t.border)
-                                                                .hover(|s| s.bg(t.bg_hover).text_color(t.text_primary))
-                                                                .text_xs()
-                                                                .text_color(t.text_secondary)
-                                                                .flex()
-                                                                .items_center()
-                                                                .justify_center()
-                                                                .on_click(move |_, _, cx| {
+                                                            Button::new("btn-save-example")
+                                                                .ghost()
+                                                                .xsmall()
+                                                                .icon(IconName::Save)
+                                                                .tooltip("Save as Example")
+                                                                .on_click(move |_, _, cx: &mut App| {
                                                                     ws_s.update(cx, |ws, cx| {
                                                                         if let Some(mut req) = ws.get_request_file(&req_id) {
                                                                             let base_name = format!("{} {}", c_resp.status_code, c_resp.status_text);
@@ -668,66 +637,45 @@ impl RenderOnce for ResponseInspector {
                                                                             ws.save_request_file(&req_id, &req, cx);
                                                                         }
                                                                     });
-                                                                })
-                                                                .child(Icon::new(IconName::Save).size(px(14.))),
+                                                                }),
                                                         )
                                                     })
                                                     // Toggle Wrap Line Button
                                                     .child({
                                                         let rs_w = rs_wrap.clone();
                                                         let r_ed = resp_ed.clone();
-                                                        div()
-                                                            .id("btn-toggle-wrap")
-                                                            .tooltip(move |window, cx| {
-                                                                    let tip = if wrap_lines { "Line Wrap: Enabled" } else { "Line Wrap: Disabled" };
-                                                                gpui_kit::component::tooltip::Tooltip::new(tip).build(window, cx)
-                                                            })
-                                                            .px(px(6.))
-                                                            .py(px(2.))
-                                                            .rounded(px(4.))
-                                                            .border_1()
-                                                            .border_color(t.border)
-                                                            .bg(if wrap_lines { t.bg_selected } else { t.bg_card })
-                                                            .hover(|s| s.bg(t.bg_hover).text_color(if wrap_lines { t.primary } else { t.text_primary }))
-                                                            .text_xs()
-                                                            .text_color(if wrap_lines { t.primary } else { t.text_secondary })
-                                                            .cursor_pointer()
-                                                            .flex()
-                                                            .items_center()
-                                                            .justify_center()
-                                                            .on_click(move |_, window, cx| {
-                                                                rs_w.update(cx, |state, cx| {
-                                                                    state.toggle_wrap_lines(cx);
-                                                                });
-                                                                let new_wrap = rs_w.read(cx).wrap_lines;
-                                                                r_ed.update(cx, |ed, cx| {
-                                                                    ed.set_soft_wrap(new_wrap, window, cx);
-                                                                });
-                                                            })
-                                                            .child(Icon::new(IconName::TextWrap).size(px(14.)))
+                                                        let wrap_tip = if wrap_lines { "Line Wrap: Enabled" } else { "Line Wrap: Disabled" };
+
+                                                        let btn = Button::new("btn-toggle-wrap")
+                                                            .xsmall()
+                                                            .icon(IconName::TextWrap)
+                                                            .tooltip(wrap_tip);
+
+                                                        let btn = if wrap_lines {
+                                                            btn.primary()
+                                                        } else {
+                                                            btn.ghost()
+                                                        };
+
+                                                        btn.on_click(move |_, window, cx: &mut App| {
+                                                            rs_w.update(cx, |state, cx| {
+                                                                state.toggle_wrap_lines(cx);
+                                                            });
+                                                            let new_wrap = rs_w.read(cx).wrap_lines;
+                                                            r_ed.update(cx, |ed, cx| {
+                                                                ed.set_soft_wrap(new_wrap, window, cx);
+                                                            });
+                                                        })
                                                     })
                                                     // Copy Button
                                                     .child({
                                                         let rs_c = rs_copy.clone();
-                                                        div()
-                                                            .id("btn-copy-response")
-                                                            .tooltip(move |window, cx| {
-                                                                gpui_kit::component::tooltip::Tooltip::new("Copy Response").build(window, cx)
-                                                            })
-                                                            .px(px(6.))
-                                                            .py(px(2.))
-                                                            .rounded(px(4.))
-                                                            .bg(t.bg_card)
-                                                            .border_1()
-                                                            .border_color(t.border)
-                                                            .hover(|s| s.bg(t.bg_hover).text_color(t.text_primary))
-                                                            .text_xs()
-                                                            .text_color(t.text_secondary)
-                                                            .cursor_pointer()
-                                                            .flex()
-                                                            .items_center()
-                                                            .justify_center()
-                                                            .on_click(move |_, _, cx| {
+                                                        Button::new("btn-copy-response")
+                                                            .ghost()
+                                                            .xsmall()
+                                                            .icon(IconName::Copy)
+                                                            .tooltip("Copy Response")
+                                                            .on_click(move |_, _, cx: &mut App| {
                                                                 let copy_text = rs_c.read(cx).formatted_body.as_ref()
                                                                     .map(|f| f.display_text.to_string())
                                                                     .or_else(|| {
@@ -737,30 +685,16 @@ impl RenderOnce for ResponseInspector {
                                                                     .unwrap_or_default();
                                                                 cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(copy_text));
                                                             })
-                                                            .child(Icon::new(IconName::Copy).size(px(14.)))
                                                     })
                                                     // Save to File (Download) Button
                                                     .child({
                                                         let rs_s = rs_save.clone();
-                                                        div()
-                                                            .id("btn-save-response")
-                                                            .tooltip(move |window, cx| {
-                                                                gpui_kit::component::tooltip::Tooltip::new("Save to File").build(window, cx)
-                                                            })
-                                                            .px(px(6.))
-                                                            .py(px(2.))
-                                                            .rounded(px(4.))
-                                                            .bg(t.bg_card)
-                                                            .border_1()
-                                                            .border_color(t.border)
-                                                            .hover(|s| s.bg(t.bg_hover).text_color(t.text_primary))
-                                                            .text_xs()
-                                                            .text_color(t.text_secondary)
-                                                            .cursor_pointer()
-                                                            .flex()
-                                                            .items_center()
-                                                            .justify_center()
-                                                            .on_click(move |_, _, cx| {
+                                                        Button::new("btn-save-response")
+                                                            .ghost()
+                                                            .xsmall()
+                                                            .icon(IconName::Download)
+                                                            .tooltip("Save to File")
+                                                            .on_click(move |_, _, cx: &mut App| {
                                                                 let save_bytes = rs_s.read(cx).current_response.as_ref().map(|r| r.body.clone());
                                                                 if let Some(bytes) = save_bytes {
                                                                     cx.spawn(async move |cx| {
@@ -780,7 +714,6 @@ impl RenderOnce for ResponseInspector {
                                                                     .detach();
                                                                 }
                                                             })
-                                                            .child(Icon::new(IconName::Download).size(px(14.)))
                                                     }),
                                             ),
                                     )

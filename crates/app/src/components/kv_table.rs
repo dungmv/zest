@@ -473,15 +473,20 @@ impl RenderOnce for KvTable {
                                 let key_in_del = key_input.clone();
                                 div()
                                     .id(gpui_kit::SharedString::from(format!("{}-del", row_prefix)))
-                                    .w(px(24.))
-                                    .h(px(24.))
+                                    .size(px(24.))
                                     .rounded(px(4.))
                                     .flex()
                                     .items_center()
                                     .justify_center()
                                     .cursor_pointer()
-                                    .hover(|s| s.bg(t.bg_hover).text_color(t.status_5xx))
                                     .text_color(t.text_muted)
+                                    .hover(move |s| {
+                                        s.text_color(t.json_null).bg(t.json_null.opacity(0.12))
+                                    })
+                                    .tooltip(move |window, cx| {
+                                        gpui_kit::component::tooltip::Tooltip::new("Delete row")
+                                            .build(window, cx)
+                                    })
                                     .on_click(move |_, window, cx| {
                                         let pos = {
                                             let st = ts_del.read(cx);
@@ -496,7 +501,7 @@ impl RenderOnce for KvTable {
                                             on_remove(pos, window, cx);
                                         }
                                     })
-                                    .child(Icon::new(IconName::Trash).small())
+                                    .child(Icon::new(IconName::Trash).size(px(14.)))
                             })
                     }))
             })
@@ -504,29 +509,13 @@ impl RenderOnce for KvTable {
             .when(self.show_add_button, |this| {
                 this.child(
                     div().pt(px(6.)).flex().items_center().gap(px(8.)).child(
-                        div()
-                            .id(gpui_kit::SharedString::from(format!(
-                                "{}-btn-add",
-                                id_prefix
-                            )))
-                            .px(px(10.))
-                            .py(px(4.))
-                            .rounded(px(4.))
-                            .bg(t.bg_card)
-                            .border_1()
-                            .border_color(t.border)
-                            .cursor_pointer()
-                            .hover(|s| s.bg(t.bg_hover).text_color(t.text_primary))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_xs()
-                            .font_weight(gpui_kit::FontWeight::MEDIUM)
-                            .text_color(t.text_secondary)
+                        Button::new(format!("{}-btn-add", id_prefix))
+                            .small()
+                            .icon(IconName::Plus)
+                            .label("Add Row")
                             .on_click(move |_, window, cx| {
                                 on_add_cb(window, cx);
-                            })
-                            .child("+ Add Row"),
+                            }),
                     ),
                 )
             })

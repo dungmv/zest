@@ -113,6 +113,19 @@ Trong khi đó, `gpui-kit` (phiên bản `0.8.1`, tích hợp sẵn `gpui-compon
   - Thay thế `render_empty_state` bằng `Empty::new().header(...).content(...)` chứa code snippet mẫu.
 - **`crates/app/src/components/git/diff_view.rs`**:
   - Thay thế các empty div hiển thị khi chưa chọn file hoặc file không có thay đổi bằng `Empty::new().header(...)`.
+- **`crates/app/src/components/body_editor/mod.rs`**:
+  - Thay thế khối div empty state khi `RequestBody::None` bằng `Empty::new().header(...)` với icon `FileText`.
+
+### Nhiệm vụ 7: Migrate Action Buttons (Button)
+- **`crates/app/src/components/kv_table.rs`**:
+  - Thay thế nút `+ Add Row` bằng `Button::new(...).small().icon(IconName::Plus).label("Add Row")`.
+  - Nút xóa hàng giữ nguyên kích thước chuẩn `sm` (24x24px, icon 14px), style là ghost với nền trong suốt và màu chữ/icon `t.text_muted`. Khi hover chuyển sang màu đỏ nhạt mềm dịu (`t.json_null` - coral/rose red, tránh màu đỏ rực) kèm hiệu ứng nền `t.json_null.opacity(0.12)` và `Tooltip::new("Delete row")`.
+- **`crates/app/src/components/body_editor/mod.rs`**:
+  - Chuyển `btn-format-json-body`, `btn-format-xml-body`, `btn-add-multipart-part`, `btn-add-form-row` sang `Button::new(...).ghost().xsmall()`.
+- **`crates/app/src/components/body_editor/multipart.rs`**:
+  - Nút xóa hàng multipart đồng bộ với KV Table: kích thước chuẩn `sm` (24x24px, icon 14px), style ghost bình thường màu `t.text_muted`, hover chuyển sang đỏ mềm dịu `t.json_null` với tooltip "Delete field".
+- **`crates/app/src/components/response_inspector.rs`**:
+  - Nút Line Wrap (`btn-toggle-wrap`): Khi disable hiển thị dưới dạng ghost button tiêu chuẩn (`btn.ghost()`); khi enable hiển thị nổi bật với màu primary (`btn.primary()`). Hiển thị rõ ràng 100% trên cả Dark và Light mode.
 
 ---
 

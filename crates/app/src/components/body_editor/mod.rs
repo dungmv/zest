@@ -16,9 +16,13 @@ use crate::state::{
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::empty::{
+    Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyMediaVariant, EmptyTitle,
+};
 use gpui_kit::component::input::{Editor, EditorState as CodeEditorState, Textarea, TextareaState};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::Icon;
+use gpui_kit::component::Sizable as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, App, Entity, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
@@ -444,176 +448,122 @@ impl RenderOnce for BodyEditor {
                             let ed_c = ed_entity.clone();
                             let j_text = self.json_editor.clone();
                             let toast_opt = self.toast_state.clone();
-                            div()
-                                .flex()
-                                .items_center()
-                                .child(
-                                    div()
-                                        .id("btn-format-json-body")
-                                        .px(px(8.))
-                                        .py(px(3.))
-                                        .rounded(px(4.))
-                                        .bg(t.bg_input)
-                                        .border_1()
-                                        .border_color(t.border)
-                                        .cursor_pointer()
-                                        .hover(|s| s.bg(t.bg_hover))
-                                        .text_xs()
-                                        .font_weight(gpui_kit::FontWeight::MEDIUM)
-                                        .text_color(t.text_secondary)
-                                        .on_click(move |_, window, cx| {
-                                            let raw = j_text.read(cx).value().to_string();
-                                            match serde_json::from_str::<serde_json::Value>(&raw) {
-                                                Ok(val) => {
-                                                    if let Ok(pretty) =
-                                                        serde_json::to_string_pretty(&val)
-                                                    {
-                                                        j_text.update(cx, |txt, cx| {
-                                                            txt.set_value(
-                                                                pretty.clone(),
-                                                                window,
-                                                                cx,
-                                                            );
-                                                        });
-                                                        ed_c.update(cx, |state, cx| {
-                                                            state.mark_dirty(cx);
-                                                        });
-                                                    }
-                                                }
-                                                Err(e) => {
-                                                    if let Some(ts) = &toast_opt {
-                                                        ts.update(cx, |toast, cx| {
-                                                            toast.push_error(
-                                                                "JSON Format Error",
-                                                                e.to_string(),
-                                                                cx,
-                                                            );
-                                                        });
-                                                    }
-                                                }
+                            Button::new("btn-format-json-body")
+                                .ghost()
+                                .xsmall()
+                                .label("Format JSON")
+                                .on_click(move |_, window, cx: &mut App| {
+                                    let raw = j_text.read(cx).value().to_string();
+                                    match serde_json::from_str::<serde_json::Value>(&raw) {
+                                        Ok(val) => {
+                                            if let Ok(pretty) =
+                                                serde_json::to_string_pretty(&val)
+                                            {
+                                                j_text.update(cx, |txt, cx| {
+                                                    txt.set_value(
+                                                        pretty.clone(),
+                                                        window,
+                                                        cx,
+                                                    );
+                                                });
+                                                ed_c.update(cx, |state, cx| {
+                                                    state.mark_dirty(cx);
+                                                });
                                             }
-                                        })
-                                        .child("Format JSON"),
-                                )
+                                        }
+                                        Err(e) => {
+                                            if let Some(ts) = &toast_opt {
+                                                ts.update(cx, |toast, cx| {
+                                                    toast.push_error(
+                                                        "JSON Format Error",
+                                                        e.to_string(),
+                                                        cx,
+                                                    );
+                                                });
+                                            }
+                                        }
+                                    }
+                                })
+                                .into_any_element()
                         } else if is_xml {
                             let ed_c = ed_entity.clone();
                             let xml_tx = self.xml_editor.clone();
                             let toast_opt = self.toast_state.clone();
-                            div()
-                                .flex()
-                                .items_center()
-                                .child(
-                                    div()
-                                        .id("btn-format-xml-body")
-                                        .px(px(8.))
-                                        .py(px(3.))
-                                        .rounded(px(4.))
-                                        .bg(t.bg_input)
-                                        .border_1()
-                                        .border_color(t.border)
-                                        .cursor_pointer()
-                                        .hover(|s| s.bg(t.bg_hover))
-                                        .text_xs()
-                                        .font_weight(gpui_kit::FontWeight::MEDIUM)
-                                        .text_color(t.text_secondary)
-                                        .on_click(move |_, window, cx| {
-                                            let raw = xml_tx.read(cx).value().to_string();
-                                            match format_xml(&raw) {
-                                                Ok(pretty) => {
-                                                    xml_tx.update(cx, |txt, cx| {
-                                                        txt.set_value(pretty.clone(), window, cx);
-                                                    });
-                                                    ed_c.update(cx, |state, cx| {
-                                                        state.mark_dirty(cx);
-                                                    });
-                                                }
-                                                Err(e) => {
-                                                    if let Some(ts) = &toast_opt {
-                                                        ts.update(cx, |toast, cx| {
-                                                            toast.push_error(
-                                                                "XML Format Error",
-                                                                e,
-                                                                cx,
-                                                            );
-                                                        });
-                                                    }
-                                                }
+                            Button::new("btn-format-xml-body")
+                                .ghost()
+                                .xsmall()
+                                .label("Format XML")
+                                .on_click(move |_, window, cx| {
+                                    let raw = xml_tx.read(cx).value().to_string();
+                                    match format_xml(&raw) {
+                                        Ok(pretty) => {
+                                            xml_tx.update(cx, |txt, cx| {
+                                                txt.set_value(pretty.clone(), window, cx);
+                                            });
+                                            ed_c.update(cx, |state, cx| {
+                                                state.mark_dirty(cx);
+                                            });
+                                        }
+                                        Err(e) => {
+                                            if let Some(ts) = &toast_opt {
+                                                ts.update(cx, |toast, cx| {
+                                                    toast.push_error(
+                                                        "XML Format Error",
+                                                        e,
+                                                        cx,
+                                                    );
+                                                });
                                             }
-                                        })
-                                        .child("Format XML"),
-                                )
+                                        }
+                                    }
+                                })
+                                .into_any_element()
                         } else if is_multipart {
                             let ed_c = ed_entity.clone();
                             let ws_add = self.workspace_state.clone();
                             let id_add = req_id_str.clone();
-                            div()
-                                .flex()
-                                .items_center()
-                                .child(
-                                    div()
-                                        .id("btn-add-multipart-part")
-                                        .px(px(8.))
-                                        .py(px(3.))
-                                        .rounded(px(4.))
-                                        .bg(t.bg_input)
-                                        .border_1()
-                                        .border_color(t.border)
-                                        .cursor_pointer()
-                                        .hover(|s| s.bg(t.bg_hover))
-                                        .text_xs()
-                                        .font_weight(gpui_kit::FontWeight::MEDIUM)
-                                        .text_color(t.text_secondary)
-                                        .on_click(move |_, _, cx| {
-                                            if let Some(ws) = &ws_add {
-                                                ws.update(cx, |ws, _| {
-                                                    ws.update_active_request(&id_add, |r| {
-                                                        r.add_multipart_item();
-                                                    });
-                                                });
-                                            }
-                                            ed_c.update(cx, |state, cx| {
-                                                state.mark_dirty(cx);
+                            Button::new("btn-add-multipart-part")
+                                .ghost()
+                                .xsmall()
+                                .icon(IconName::Plus)
+                                .label("Add Part")
+                                .on_click(move |_, _, cx| {
+                                    if let Some(ws) = &ws_add {
+                                        ws.update(cx, |ws, _| {
+                                            ws.update_active_request(&id_add, |r| {
+                                                r.add_multipart_item();
                                             });
-                                        })
-                                        .child("Add Part"),
-                                )
+                                        });
+                                    }
+                                    ed_c.update(cx, |state, cx| {
+                                        state.mark_dirty(cx);
+                                    });
+                                })
+                                .into_any_element()
                         } else if is_form {
                             let ed_c = ed_entity.clone();
                             let ws_add = self.workspace_state.clone();
                             let id_add = req_id_str.clone();
-                            div()
-                                .flex()
-                                .items_center()
-                                .child(
-                                    div()
-                                        .id("btn-add-form-row")
-                                        .px(px(8.))
-                                        .py(px(3.))
-                                        .rounded(px(4.))
-                                        .bg(t.bg_input)
-                                        .border_1()
-                                        .border_color(t.border)
-                                        .cursor_pointer()
-                                        .hover(|s| s.bg(t.bg_hover))
-                                        .text_xs()
-                                        .font_weight(gpui_kit::FontWeight::MEDIUM)
-                                        .text_color(t.text_secondary)
-                                        .on_click(move |_, _, cx| {
-                                            if let Some(ws) = &ws_add {
-                                                ws.update(cx, |ws, _| {
-                                                    ws.update_active_request(&id_add, |r| {
-                                                        r.add_form_param();
-                                                    });
-                                                });
-                                            }
-                                            ed_c.update(cx, |state, cx| {
-                                                state.mark_dirty(cx);
+                            Button::new("btn-add-form-row")
+                                .ghost()
+                                .xsmall()
+                                .icon(IconName::Plus)
+                                .label("Add Row")
+                                .on_click(move |_, _, cx| {
+                                    if let Some(ws) = &ws_add {
+                                        ws.update(cx, |ws, _| {
+                                            ws.update_active_request(&id_add, |r| {
+                                                r.add_form_param();
                                             });
-                                        })
-                                        .child("Add Row"),
-                                )
+                                        });
+                                    }
+                                    ed_c.update(cx, |state, cx| {
+                                        state.mark_dirty(cx);
+                                    });
+                                })
+                                .into_any_element()
                         } else {
-                            div()
+                            div().into_any_element()
                         }
                     }),
             )
@@ -624,31 +574,22 @@ impl RenderOnce for BodyEditor {
                     .w_full()
                     .overflow_hidden()
                     .child(match body_ref {
-                        None | Some(RequestBody::None) => div()
-                            .size_full()
-                            .flex()
-                            .flex_col()
-                            .items_center()
-                            .justify_center()
-                            .gap(px(8.))
-                            .child(
-                                Icon::new(IconName::FileText)
-                                    .size(px(28.))
-                                    .text_color(t.text_muted),
-                            )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .font_weight(gpui_kit::FontWeight::MEDIUM)
-                                    .text_color(t.text_secondary)
-                                    .child("This request has no body payload"),
-                            )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(t.text_muted)
-                                    .child(
-                                        "Select a format above (e.g. JSON, Form) to add request body data.",
+                        None | Some(RequestBody::None) => Empty::new()
+                            .header(
+                                EmptyHeader::new()
+                                    .media(
+                                        EmptyMedia::new()
+                                            .with_variant(EmptyMediaVariant::Icon)
+                                            .child(Icon::new(IconName::FileText).size(px(24.))),
+                                    )
+                                    .title(
+                                        EmptyTitle::new()
+                                            .child("This request has no body payload"),
+                                    )
+                                    .description(
+                                        EmptyDescription::new().child(
+                                            "Select a format above (e.g. JSON, Form) to add request body data.",
+                                        ),
                                     ),
                             )
                             .into_any_element(),
