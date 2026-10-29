@@ -1,6 +1,7 @@
 use crate::components::env_autocomplete::{build_tokenized_content, detect_unclosed_env_var};
 use crate::components::env_input::render_env_input;
 use crate::components::kv_table::KvTable;
+use crate::components::ModalDialog;
 use crate::state::{EnvironmentState, ModalState, ScopeSettingsTarget, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -530,83 +531,22 @@ impl RenderOnce for ScopeSettingsModal {
         let api_val_input = api_val_holder.read(cx).0.clone();
 
         // Render modal
-        div()
-            .id("scope-settings-modal-overlay")
-            .absolute()
-            .inset_0()
-            .bg(gpui_kit::Hsla { a: 0.6, ..t.bg_app })
-            .flex()
-            .items_center()
-            .justify_center()
-            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .on_click({
+        ModalDialog::new("scope-settings-modal")
+            .w(px(640.))
+            .max_h(px(580.))
+            .title(title)
+            .icon(IconName::Settings)
+            .on_close({
                 let modal_s = modal_clone.clone();
-                move |_, _, cx| {
+                move |_, cx| {
                     modal_s.update(cx, |state, cx| state.close_scope_settings(cx));
                 }
             })
+            // Tab Bar
             .child(
                 div()
-                    .id("scope-settings-modal-dialog")
-                    .occlude()
-                    .w(px(640.))
-                    .max_h(px(580.))
-                    .min_h(px(400.))
-                    .rounded(px(8.))
-                    .bg(t.bg_card)
-                    .border_1()
-                    .border_color(t.border)
-                    .shadow_2xl()
-                    .flex()
-                    .flex_col()
-                    .overflow_hidden()
-                    .on_click(|_, _, cx| cx.stop_propagation())
-                    // Header
-                    .child(
-                        div()
-                            .h(px(46.))
-                            .px(px(16.))
-                            .border_b_1()
-                            .border_color(t.border)
-                            .bg(t.bg_titlebar)
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(8.))
-                                    .child(Icon::new(IconName::Settings).size(px(18.)))
-                                    .child(
-                                        div()
-                                            .text_sm()
-                                            .font_weight(gpui_kit::FontWeight::BOLD)
-                                            .text_color(t.text_primary)
-                                            .child(title),
-                                    ),
-                            )
-                            .child({
-                                let modal_s = modal_clone.clone();
-                                div()
-                                    .id("close-scope-settings-modal")
-                                    .cursor_pointer()
-                                    .px(px(6.))
-                                    .py(px(2.))
-                                    .rounded(px(4.))
-                                    .text_color(t.text_muted)
-                                    .hover(|s| s.bg(t.bg_hover).text_color(t.text_primary))
-                                    .on_click(move |_, _, cx| {
-                                        modal_s.update(cx, |state, cx| state.close_scope_settings(cx));
-                                    })
-                                    .child("✕")
-                            }),
-                    )
-                    // Tab Bar
-                    .child(
-                        div()
-                            .px(px(16.))
-                            .pt(px(8.))
+                    .px(px(16.))
+                    .pt(px(8.))
                             .border_b_1()
                             .border_color(t.border)
                             .flex()
@@ -1512,8 +1452,7 @@ impl RenderOnce for ScopeSettingsModal {
                                         .into_any_element()
                                 }
                             }),
-                    ),
-            )
+                    )
             .into_any_element()
     }
 }

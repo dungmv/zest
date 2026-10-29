@@ -1,4 +1,5 @@
 use crate::app::actions::DismissModal;
+use crate::components::ModalDialog;
 use crate::state::{EnvironmentState, ModalState, SidebarState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -232,103 +233,24 @@ impl RenderOnce for EnvironmentModal {
             Vec::new()
         };
 
-        div()
-            .id("env-modal-overlay")
-            .absolute()
-            .inset_0()
-            .bg(gpui_kit::Hsla { a: 0.65, ..t.bg_app })
-            .flex()
-            .items_center()
-            .justify_center()
-            .on_click({
+        ModalDialog::new("env-modal")
+            .w(px(980.))
+            .h(px(580.))
+            .title("Environments & Variables")
+            .icon(IconName::Globe)
+            .on_close({
                 let modal_s = modal_clone.clone();
-                move |_, _, cx| {
+                move |_, cx| {
                     modal_s.update(cx, |state, cx| {
                         state.close_env_modal(cx);
                     });
                 }
             })
-            .on_key_down({
-                let modal_s = modal_clone.clone();
-                move |event, _, cx| {
-                    if event.keystroke.key.as_str() == "escape" {
-                        modal_s.update(cx, |state, cx| {
-                            state.close_env_modal(cx);
-                        });
-                    }
-                }
-            })
+            // Modal Body: Sidebar (Left) + Detail Editor (Right)
             .child(
                 div()
-                    .id("env-modal-dialog")
-                    .occlude()
-                    .w(px(980.))
-                    .h(px(580.))
-                    .rounded(px(10.))
-                    .bg(t.bg_card)
-                    .border_1()
-                    .border_color(t.border)
-                    .shadow_xl()
+                    .flex_1()
                     .flex()
-                    .flex_col()
-                    .overflow_hidden()
-                    .on_key_down({
-                        let modal_s = modal_clone.clone();
-                        move |event, _, cx| {
-                            if event.keystroke.key.as_str() == "escape" {
-                                modal_s.update(cx, |state, cx| {
-                                    state.close_env_modal(cx);
-                                });
-                            }
-                        }
-                    })
-                    // Modal Header
-                    .child(
-                        div()
-                            .h(px(46.))
-                            .px(px(16.))
-                            .border_b_1()
-                            .border_color(t.border)
-                            .bg(t.bg_titlebar)
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(8.))
-                                    .child(
-                                        div()
-                                            .text_sm()
-                                            .font_weight(gpui_kit::FontWeight::BOLD)
-                                            .text_color(t.text_primary)
-                                            .child("Environments & Variables"),
-                                    ),
-                            )
-                            .child({
-                                let modal_s = modal_clone.clone();
-                                div()
-                                    .id("close-env-modal")
-                                    .cursor_pointer()
-                                    .px(px(6.))
-                                    .py(px(2.))
-                                    .rounded(px(4.))
-                                    .text_color(t.text_muted)
-                                    .hover(|s| s.bg(t.bg_hover).text_color(t.text_primary))
-                                    .on_click(move |_, _, cx| {
-                                        modal_s.update(cx, |state, cx| {
-                                            state.toggle_env_modal(cx);
-                                        });
-                                    })
-                                    .child("✕")
-                            }),
-                    )
-                    // Modal Body: Sidebar (Left) + Detail Editor (Right)
-                    .child(
-                        div()
-                            .flex_1()
-                            .flex()
                             .overflow_hidden()
                             // LEFT SIDEBAR
                             .child(
@@ -1019,7 +941,6 @@ impl RenderOnce for EnvironmentModal {
                                             ),
                                     ),
                             ),
-                    ),
-            )
+                    )
     }
 }

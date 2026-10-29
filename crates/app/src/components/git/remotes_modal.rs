@@ -1,4 +1,5 @@
 use super::common::{render_error_banner, render_not_a_repo_view};
+use crate::components::ModalDialog;
 use crate::services::GitService;
 use crate::state::GitState;
 use crate::theme::theme;
@@ -185,7 +186,7 @@ pub fn render_remotes_view(
 
 impl RenderOnce for GitRemotesModal {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let t = theme();
+        let _t = theme();
         let git_clone = self.git_state.clone();
         let svc_clone = self.git_service.clone();
 
@@ -226,116 +227,35 @@ impl RenderOnce for GitRemotesModal {
         );
         let remote_url_input = remote_url_holder.read(cx).0.clone();
 
-        div()
-            .id("git-remotes-modal-overlay")
-            .absolute()
-            .inset_0()
-            .bg(gpui_kit::Hsla {
-                a: 0.65,
-                ..t.bg_app
-            })
-            .flex()
-            .items_center()
-            .justify_center()
-            .on_click({
+        ModalDialog::new("git-remotes-modal")
+            .w(px(480.))
+            .h(px(340.))
+            .title("Manage Remotes")
+            .icon(IconName::Globe)
+            .on_close({
                 let git_s = git_clone.clone();
-                move |_, _, cx| {
+                move |_, cx| {
                     git_s.update(cx, |state, cx| {
                         state.close_modal(cx);
                     });
                 }
             })
-            .on_key_down({
-                let git_s = git_clone.clone();
-                move |event, _, cx| {
-                    if event.keystroke.key.as_str() == "escape" {
-                        git_s.update(cx, |state, cx| {
-                            state.close_modal(cx);
-                        });
-                    }
-                }
+            // Error banner
+            .when_some(git_error, |this, err| {
+                this.child(render_error_banner(git_clone.clone(), err))
             })
-            .child(
-                div()
-                    .id("git-remotes-modal-dialog")
-                    .occlude()
-                    .w(px(480.))
-                    .h(px(340.))
-                    .rounded(px(8.))
-                    .bg(t.bg_card)
-                    .border_1()
-                    .border_color(t.border)
-                    .shadow_2xl()
-                    .flex()
-                    .flex_col()
-                    .overflow_hidden()
-                    .on_key_down({
-                        let git_s = git_clone.clone();
-                        move |event, _, cx| {
-                            if event.keystroke.key.as_str() == "escape" {
-                                git_s.update(cx, |state, cx| {
-                                    state.close_modal(cx);
-                                });
-                            }
-                        }
-                    })
-                    // Header
-                    .child(
-                        div()
-                            .h(px(44.))
-                            .px(px(16.))
-                            .border_b_1()
-                            .border_color(t.border)
-                            .bg(t.bg_titlebar)
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(8.))
-                                    .child(div().text_base().text_color(t.primary).child("⇄"))
-                                    .child(
-                                        div()
-                                            .text_sm()
-                                            .font_weight(gpui_kit::FontWeight::BOLD)
-                                            .text_color(t.text_primary)
-                                            .child("Manage Remotes"),
-                                    ),
-                            )
-                            .child(
-                                Button::new("btn-git-remotes-close")
-                                    .ghost()
-                                    .xsmall()
-                                    .icon(IconName::Close)
-                                    .on_click({
-                                        let git_s = git_clone.clone();
-                                        move |_, _, cx| {
-                                            git_s.update(cx, |state, cx| {
-                                                state.close_modal(cx);
-                                            });
-                                        }
-                                    }),
-                            ),
-                    )
-                    // Error banner
-                    .when_some(git_error, |this, err| {
-                        this.child(render_error_banner(git_clone.clone(), err))
-                    })
-                    // Body
-                    .child(div().flex_1().overflow_hidden().child(if !is_repo {
-                        render_not_a_repo_view(svc_clone.clone(), is_loading)
-                    } else {
-                        render_remotes_view(
-                            svc_clone.clone(),
-                            remotes,
-                            remote_name_input,
-                            remote_url_input,
-                            is_loading,
-                        )
-                    })),
-            )
+            // Body
+            .child(div().flex_1().overflow_hidden().child(if !is_repo {
+                render_not_a_repo_view(svc_clone.clone(), is_loading)
+            } else {
+                render_remotes_view(
+                    svc_clone.clone(),
+                    remotes,
+                    remote_name_input,
+                    remote_url_input,
+                    is_loading,
+                )
+            }))
             .into_any_element()
     }
 }

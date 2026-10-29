@@ -2,12 +2,14 @@ use super::common::{render_error_banner, render_not_a_repo_view};
 use super::diff_view::{
     render_diff_content, render_diff_view_toggle, split_diff_into_files, DiffViewMode,
 };
+use crate::components::modal_dialog::{DialogHeader, DialogTitle, ModalDialog};
 use crate::services::GitService;
 use crate::state::GitState;
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::Icon;
 use gpui_kit::component::Sizable as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -345,132 +347,90 @@ impl RenderOnce for GitHistoryModal {
         let view_mode_entity = view_mode_holder.read(cx).0.clone();
         let view_mode = *view_mode_entity.read(cx);
 
-        div()
-            .id("git-history-modal-overlay")
-            .absolute()
-            .inset_0()
-            .bg(gpui_kit::Hsla {
-                a: 0.65,
-                ..t.bg_app
-            })
+        let header_el = div()
+            .h(px(46.))
+            .px(px(16.))
+            .border_b_1()
+            .border_color(t.border)
+            .bg(t.bg_titlebar)
             .flex()
             .items_center()
-            .justify_center()
-            .on_click({
+            .justify_between()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .child(Icon::new(IconName::Clock).size(px(18.)))
+                    .child(
+                        DialogHeader::new().child(
+                            DialogTitle::new()
+                                .text_sm()
+                                .font_weight(gpui_kit::FontWeight::BOLD)
+                                .text_color(t.text_primary)
+                                .child("Git History"),
+                        ),
+                    )
+                    .when(is_repo, |this| {
+                        this.child(
+                            div()
+                                .px(px(6.))
+                                .py(px(2.))
+                                .rounded(px(4.))
+                                .bg(t.bg_hover)
+                                .border_1()
+                                .border_color(t.border)
+                                .text_xs()
+                                .font_family(".SystemMonoFont")
+                                .text_color(t.text_secondary)
+                                .child(branch_name),
+                        )
+                    }),
+            )
+            .child(
+                Button::new("btn-git-history-close")
+                    .ghost()
+                    .xsmall()
+                    .icon(IconName::Close)
+                    .on_click({
+                        let git_s = git_clone.clone();
+                        move |_, _, cx| {
+                            git_s.update(cx, |state, cx| {
+                                state.close_modal(cx);
+                            });
+                        }
+                    }),
+            );
+
+        ModalDialog::new("git-history-modal")
+            .w(px(1060.))
+            .h(px(680.))
+            .header(header_el)
+            .on_close({
                 let git_s = git_clone.clone();
-                move |_, _, cx| {
+                move |_, cx| {
                     git_s.update(cx, |state, cx| {
                         state.close_modal(cx);
                     });
                 }
             })
-            .on_key_down({
-                let git_s = git_clone.clone();
-                move |event, _, cx| {
-                    if event.keystroke.key.as_str() == "escape" {
-                        git_s.update(cx, |state, cx| {
-                            state.close_modal(cx);
-                        });
-                    }
-                }
+            // Error banner
+            .when_some(git_error, |this, err| {
+                this.child(render_error_banner(git_clone.clone(), err))
             })
-            .child(
-                div()
-                    .id("git-history-modal-dialog")
-                    .occlude()
-                    .w(px(1060.))
-                    .h(px(680.))
-                    .rounded(px(8.))
-                    .bg(t.bg_card)
-                    .border_1()
-                    .border_color(t.border)
-                    .shadow_2xl()
-                    .flex()
-                    .flex_col()
-                    .overflow_hidden()
-                    .on_key_down({
-                        let git_s = git_clone.clone();
-                        move |event, _, cx| {
-                            if event.keystroke.key.as_str() == "escape" {
-                                git_s.update(cx, |state, cx| {
-                                    state.close_modal(cx);
-                                });
-                            }
-                        }
-                    })
-                    // Header
-                    .child(
-                        div()
-                            .h(px(46.))
-                            .px(px(16.))
-                            .border_b_1()
-                            .border_color(t.border)
-                            .bg(t.bg_titlebar)
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(10.))
-                                    .child(div().text_base().text_color(t.primary).child("◷"))
-                                    .child(
-                                        div()
-                                            .text_sm()
-                                            .font_weight(gpui_kit::FontWeight::BOLD)
-                                            .text_color(t.text_primary)
-                                            .child("Git History"),
-                                    )
-                                    .when(is_repo, |this| {
-                                        this.child(
-                                            div()
-                                                .px(px(6.))
-                                                .py(px(2.))
-                                                .rounded(px(4.))
-                                                .bg(t.bg_hover)
-                                                .border_1()
-                                                .border_color(t.border)
-                                                .text_xs()
-                                                .font_family(".SystemMonoFont")
-                                                .text_color(t.text_secondary)
-                                                .child(branch_name),
-                                        )
-                                    }),
-                            )
-                            .child(
-                                Button::new("btn-git-history-close")
-                                    .ghost()
-                                    .xsmall()
-                                    .icon(IconName::Close)
-                                    .on_click({
-                                        let git_s = git_clone.clone();
-                                        move |_, _, cx| {
-                                            git_s.update(cx, |state, cx| {
-                                                state.close_modal(cx);
-                                            });
-                                        }
-                                    }),
-                            ),
-                    )
-                    // Error banner
-                    .when_some(git_error, |this, err| {
-                        this.child(render_error_banner(git_clone.clone(), err))
-                    })
-                    // Body
-                    .child(div().flex_1().overflow_hidden().child(if !is_repo {
-                        render_not_a_repo_view(svc_clone.clone(), is_loading)
-                    } else {
-                        render_history_view(
-                            git_clone.clone(),
-                            history,
-                            selected_commit,
-                            view_mode,
-                            view_mode_entity,
-                            expanded_files,
-                        )
-                    })),
-            )
+            // Body
+            .child(div().flex_1().overflow_hidden().child(if !is_repo {
+                render_not_a_repo_view(svc_clone.clone(), is_loading)
+            } else {
+                render_history_view(
+                    git_clone.clone(),
+                    history,
+                    selected_commit,
+                    view_mode,
+                    view_mode_entity,
+                    expanded_files,
+                )
+            }))
             .into_any_element()
     }
 }

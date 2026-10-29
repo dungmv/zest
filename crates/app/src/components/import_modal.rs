@@ -1,9 +1,11 @@
+use crate::components::ModalDialog;
 use crate::state::{ModalState, ToastState, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::alert::Alert;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::checkbox::Checkbox;
+use gpui_kit::component::dialog::DialogFooter;
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::Disableable as _;
@@ -165,84 +167,23 @@ impl RenderOnce for ImportModal {
 
         let target_folder_rel = modal_entity_ref.read(cx).import_target_folder_rel.clone();
 
-        div()
-            .id("import-modal-overlay")
-            .absolute()
-            .inset_0()
-            .bg(gpui_kit::Hsla { a: 0.65, ..t.bg_app })
-            .flex()
-            .items_center()
-            .justify_center()
-            .on_click({
+        ModalDialog::new("import-modal")
+            .w(px(700.))
+            .max_h(px(600.))
+            .title("Import into Workspace")
+            .description("OpenAPI 3.0/3.1, Postman v2.0/v2.1, or cURL")
+            .icon(IconName::Download)
+            .on_close({
                 let modal_c = modal_entity_ref.clone();
-                move |_, _, cx| {
+                move |_, cx| {
                     modal_c.update(cx, |m, cx| m.close_import_modal(cx));
                 }
             })
-            .on_key_down({
-                let modal_c = modal_entity_ref.clone();
-                move |event, _, cx| {
-                    if event.keystroke.key.as_str() == "escape" {
-                        modal_c.update(cx, |m, cx| m.close_import_modal(cx));
-                    }
-                }
-            })
+            // Content Body (Scrollable)
             .child(
                 div()
-                    .id("import-modal-dialog")
-                    .occlude()
-                    .w(px(700.))
-                    .max_h(px(600.))
-                    .rounded(px(10.))
-                    .bg(t.bg_card)
-                    .border_1()
-                    .border_color(t.border)
-                    .shadow_xl()
-                    .flex()
-                    .flex_col()
-                    .overflow_hidden()
-                    // Header
-                    .child(
-                        div()
-                            .h(px(48.))
-                            .px(px(16.))
-                            .border_b_1()
-                            .border_color(t.border)
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(8.))
-                                    .child(Icon::new(IconName::Download).size(px(24.)))
-                                    .child(
-                                        div()
-                                            .text_sm()
-                                            .font_weight(FontWeight::BOLD)
-                                            .text_color(t.text_primary)
-                                            .child("Import into Workspace"),
-                                    ),
-                            )
-                            .child(
-                                Button::new("btn-close-import-modal")
-                                    .ghost()
-                                    .xsmall()
-                                    .icon(IconName::Close)
-                                    .on_click({
-                                        let modal_c = modal_entity_ref.clone();
-                                        move |_, _, cx| {
-                                            modal_c.update(cx, |m, cx| m.close_import_modal(cx));
-                                        }
-                                    }),
-                            ),
-                    )
-                    // Content Body (Scrollable)
-                    .child(
-                        div()
-                            .flex_1()
-                            .overflow_y_scrollbar()
+                    .flex_1()
+                    .overflow_y_scrollbar()
                             .p(px(16.))
                             .flex()
                             .flex_col()
@@ -418,101 +359,100 @@ impl RenderOnce for ImportModal {
                                     ),
                             ),
                     )
-                    // Footer Actions
+            // Footer Actions
+            .footer(
+                DialogFooter::new()
+                    .h(px(52.))
+                    .px(px(16.))
+                    .border_t_1()
+                    .border_color(t.border)
+                    .bg(t.bg_panel)
+                    .flex()
+                    .items_center()
+                    .justify_between()
                     .child(
                         div()
-                            .h(px(52.))
-                            .px(px(16.))
-                            .border_t_1()
-                            .border_color(t.border)
-                            .bg(t.bg_panel)
+                            .text_xs()
+                            .text_color(t.text_muted)
+                            .child(match &parse_result {
+                                Some(Ok(res)) => format!("Ready to import {} requests", res.requests.len()),
+                                Some(Err(_)) => "Please resolve parse error".to_string(),
+                                None => "Select a file or paste content to preview".to_string(),
+                            }),
+                    )
+                    .child(
+                        div()
                             .flex()
                             .items_center()
-                            .justify_between()
+                            .gap(px(8.))
                             .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(t.text_muted)
-                                    .child(match &parse_result {
-                                        Some(Ok(res)) => format!("Ready to import {} requests", res.requests.len()),
-                                        Some(Err(_)) => "Please resolve parse error".to_string(),
-                                        None => "Select a file or paste content to preview".to_string(),
+                                Button::new("btn-cancel-import")
+                                    .ghost()
+                                    .small()
+                                    .label("Cancel")
+                                    .on_click({
+                                        let modal_c = modal_entity_ref.clone();
+                                        move |_, _, cx| {
+                                            modal_c.update(cx, |m, cx| m.close_import_modal(cx));
+                                        }
                                     }),
                             )
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(8.))
-                                    .child(
-                                        Button::new("btn-cancel-import")
-                                            .ghost()
-                                            .small()
-                                            .label("Cancel")
-                                            .on_click({
-                                                let modal_c = modal_entity_ref.clone();
-                                                move |_, _, cx| {
-                                                    modal_c.update(cx, |m, cx| m.close_import_modal(cx));
-                                                }
-                                            }),
-                                    )
-                                    .child({
-                                        let is_valid = matches!(&parse_result, Some(Ok(r)) if !r.requests.is_empty());
-                                        let ws_exec = ws_entity.clone();
-                                        let modal_exec = modal_entity_ref.clone();
-                                        let toast_exec = toast_entity.clone();
-                                        let st_exec = modal_entity.clone();
+                            .child({
+                                let is_valid = matches!(&parse_result, Some(Ok(r)) if !r.requests.is_empty());
+                                let ws_exec = ws_entity.clone();
+                                let modal_exec = modal_entity_ref.clone();
+                                let toast_exec = toast_entity.clone();
+                                let st_exec = modal_entity.clone();
 
-                                        Button::new("btn-execute-import")
-                                            .primary()
-                                            .small()
-                                            .disabled(!is_valid)
-                                            .label("Import Now")
-                                            .on_click(move |_, _, cx: &mut App| {
-                                                if !is_valid {
-                                                    return;
-                                                }
-                                                let state = st_exec.read(cx);
-                                                let Some(Ok(result)) = state.parse_result.clone() else {
-                                                    return;
-                                                };
+                                Button::new("btn-execute-import")
+                                    .primary()
+                                    .small()
+                                    .disabled(!is_valid)
+                                    .label("Import Now")
+                                    .on_click(move |_, _, cx: &mut App| {
+                                        if !is_valid {
+                                            return;
+                                        }
+                                        let state = st_exec.read(cx);
+                                        let Some(Ok(result)) = state.parse_result.clone() else {
+                                            return;
+                                        };
 
-                                                let options = ImportOptions {
-                                                    target_folder_rel: target_folder_rel.clone(),
-                                                    create_enclosing_folder: state.create_enclosing_folder,
-                                                    enclosing_folder_name: Some(result.title.clone()),
-                                                    import_environments: state.import_environments,
-                                                };
+                                        let options = ImportOptions {
+                                            target_folder_rel: target_folder_rel.clone(),
+                                            create_enclosing_folder: state.create_enclosing_folder,
+                                            enclosing_folder_name: Some(result.title.clone()),
+                                            import_environments: state.import_environments,
+                                        };
 
-                                                let res = ws_exec.update(cx, |ws, cx| {
-                                                    ws.execute_import_current_workspace(result, options, cx)
+                                        let res = ws_exec.update(cx, |ws, cx| {
+                                            ws.execute_import_current_workspace(result, options, cx)
+                                        });
+
+                                        match res {
+                                            Ok(summary) => {
+                                                modal_exec.update(cx, |m, cx| {
+                                                    m.close_import_modal(cx);
                                                 });
-
-                                                match res {
-                                                    Ok(summary) => {
-                                                        modal_exec.update(cx, |m, cx| {
-                                                            m.close_import_modal(cx);
-                                                        });
-                                                        toast_exec.update(cx, |ts, cx| {
-                                                            ts.push_success(
-                                                                "Import Complete",
-                                                                format!(
-                                                                    "Imported {} requests and {} folders into workspace",
-                                                                    summary.total_requests, summary.total_folders
-                                                                ),
-                                                                cx,
-                                                            );
-                                                        });
-                                                    }
-                                                    Err(e) => {
-                                                        toast_exec.update(cx, |ts, cx| {
-                                                            ts.push_error("Import Failed", e.to_string(), cx);
-                                                        });
-                                                    }
-                                                }
-                                            })
-                                    }),
-                            ),
+                                                toast_exec.update(cx, |ts, cx| {
+                                                    ts.push_success(
+                                                        "Import Complete",
+                                                        format!(
+                                                            "Imported {} requests and {} folders into workspace",
+                                                            summary.total_requests, summary.total_folders
+                                                        ),
+                                                        cx,
+                                                    );
+                                                });
+                                            }
+                                            Err(e) => {
+                                                toast_exec.update(cx, |ts, cx| {
+                                                    ts.push_error("Import Failed", e.to_string(), cx);
+                                                });
+                                            }
+                                        }
+                                    })
+                            }),
                     ),
             )
     }

@@ -79,8 +79,8 @@
 
 Dưới đây là danh sách toàn bộ các component và màn hình hiện còn đang tự vẽ thủ công (ad-hoc), cần được tiếp tục migrate trong các giai đoạn tới:
 
-### 3.1 Nhóm 1: Dialog & Modal Overlays (`gpui_kit::component::dialog::*`)
-- **Thực trạng**: Hiện tại 5 màn hình modal trong Zest đang tự vẽ container overlay:
+### 3.1 Nhóm 1: Dialog & Modal Overlays (`gpui_kit::component::dialog::*`) (Đã hoàn thành ✅)
+- **Thực trạng ban đầu**: 5 màn hình modal trong Zest tự vẽ container overlay ad-hoc:
   ```rust
   div()
       .id("modal-overlay")
@@ -91,16 +91,15 @@ Dưới đây là danh sách toàn bộ các component và màn hình hiện cò
       .items_center()
       .justify_center()
   ```
-  Các modal bao gồm:
-  1. `crates/app/src/components/settings_modal/mod.rs` (Settings & Preferences)
-  2. `crates/app/src/components/env_modal.rs` (Manage Environments & Globals)
-  3. `crates/app/src/components/import_modal.rs` (Import Collection / OpenAPI)
-  4. `crates/app/src/components/scope_settings_modal.rs` (Folder & Collection Scope Settings)
-  5. `crates/app/src/components/git/*_modal.rs` (Git Commit, Branch, History, Remotes)
-- **Mục tiêu thay thế**: Chuyển sang sử dụng `gpui_kit::component::dialog::Dialog`:
-  - Backdrop tối mờ tự động, hiệu ứng mở mượt mà (`DialogEntrance`).
-  - Hỗ trợ semantic layout chuẩn: `DialogHeader`, `DialogTitle`, `DialogDescription`, `DialogContent`, `DialogFooter`.
-  - Tự động xử lý phím `Escape` để đóng modal mà không cần gắn event listener riêng rẽ.
+- **Kết quả triển khai**:
+  - Tạo mới component thống nhất `crates/app/src/components/modal_dialog.rs` (`ModalDialog`) kết hợp chặt chẽ semantic layout từ `gpui_kit::component::dialog::{DialogHeader, DialogTitle, DialogDescription, DialogContent, DialogFooter}`.
+  - Tự động hóa backdrop tối mờ, chặn click-through xuyên thấu (`occlude`), xử lý phím `Escape` và click backdrop để đóng modal mà không cần code lặp lại.
+  - Thay thế thành công toàn bộ 5 hệ thống modal sang `ModalDialog` và semantic dialog parts:
+    1. `crates/app/src/components/settings_modal/mod.rs` (`SettingsModal`)
+    2. `crates/app/src/components/env_modal.rs` (`EnvironmentModal`)
+    3. `crates/app/src/components/import_modal.rs` (`ImportModal` - tích hợp `DialogFooter` cho Cancel & Import actions)
+    4. `crates/app/src/components/scope_settings_modal.rs` (`ScopeSettingsModal`)
+    5. `crates/app/src/components/git/*_modal.rs` (`GitBranchModal`, `GitCommitModal`, `GitHistoryModal`, `GitRemotesModal` - thay thế các ký tự emoji thô bằng icon chính quy `IconName::GitBranch`, `IconName::GitCommitHorizontal`, `IconName::Clock`, `IconName::Globe`).
 
 ### 3.2 Nhóm 2: Select & DropdownMenu (`gpui_kit::component::select::*` & `menu::DropdownMenu`)
 - **Thực trạng**: Nhiều vị trí chọn giá trị từ danh sách đang dùng popover hoặc floating div thủ công:
@@ -152,14 +151,21 @@ Dưới đây là danh sách toàn bộ các component và màn hình hiện cò
        ↓
 [Hoàn thành] Giai đoạn 3: Command Palette & Modal Buttons (Kbd hints, Dialog Buttons)
        ↓
+[Hoàn thành] Giai đoạn 6: Dialog & Overlay System (Settings, Environment, Scope, Git Modals)
+       ↓
 [Tiếp theo] Giai đoạn 4: Select & DropdownMenu (Method, Environment, Auth & Body Type selectors)
        ↓
 [Tiếp theo] Giai đoạn 5: Tag & Badge Component (MethodBadge, StatusCodeBadge, Tab Counter Badges)
        ↓
-[Tiếp theo] Giai đoạn 6: Dialog & Overlay System (Settings, Environment, Scope Settings Modals)
-       ↓
 [Tiếp theo] Giai đoạn 7: Toasts, Separators & GPU Diff View (Hoàn tất toàn bộ hệ thống)
 ```
+
+### Kế hoạch chi tiết Giai đoạn 6: Dialog & Modal Overlays (Đã hoàn thành ✅)
+1. **Nhiệm vụ 6.1**: Chuyển đổi `SettingsModal` sang `ModalDialog` + `DialogHeader`/`DialogTitle`.
+2. **Nhiệm vụ 6.2**: Chuyển đổi `EnvModal` sang `ModalDialog` + `DialogHeader`/`DialogTitle`.
+3. **Nhiệm vụ 6.3**: Chuyển đổi `ScopeSettingsModal` sang `ModalDialog` + `DialogHeader`/`DialogTitle`.
+4. **Nhiệm vụ 6.4**: Chuyển đổi `ImportModal` sang `ModalDialog` + `DialogFooter`.
+5. **Nhiệm vụ 6.5**: Chuyển đổi các Git modal (`commit`, `branch`, `history`, `remotes`) sang `ModalDialog` và icons chuẩn.
 
 ### Kế hoạch chi tiết Giai đoạn 4: Select & Dropdown Menu
 1. **Nhiệm vụ 4.1**: Chuẩn hóa HTTP Method Dropdown trong `request_bar.rs` bằng `gpui_kit::component::select::Select` hoặc `menu::DropdownMenu`.
@@ -171,12 +177,6 @@ Dưới đây là danh sách toàn bộ các component và màn hình hiện cò
 1. **Nhiệm vụ 5.1**: Chuyển `MethodBadge` trong `status_badge.rs` sang `Tag::new(...)`.
 2. **Nhiệm vụ 5.2**: Chuyển `StatusCodeBadge` trong `status_badge.rs` sang `Tag::new(...)`.
 3. **Nhiệm vụ 5.3**: Chuyển `render_tab_badge` trong `tabs_with_badge.rs` sang `Badge::new()`.
-
-### Kế hoạch chi tiết Giai đoạn 6: Dialog & Modal Overlays
-1. **Nhiệm vụ 6.1**: Chuyển đổi `SettingsModal` sang `Dialog`.
-2. **Nhiệm vụ 6.2**: Chuyển đổi `EnvModal` sang `Dialog`.
-3. **Nhiệm vụ 6.3**: Chuyển đổi `ScopeSettingsModal` sang `Dialog`.
-4. **Nhiệm vụ 6.4**: Chuyển đổi các Git modal (`commit`, `branch`, `history`, `remotes`) sang `Dialog`.
 
 ---
 

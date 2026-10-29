@@ -9,6 +9,7 @@ pub mod git;
 pub mod import_modal;
 pub mod inherited_headers;
 pub mod kv_table;
+pub mod modal_dialog;
 pub mod request_bar;
 pub mod response_inspector;
 pub mod scope_settings_modal;
@@ -27,6 +28,7 @@ pub use env_autocomplete::*;
 pub use env_input::*;
 pub use env_modal::*;
 pub use kv_table::*;
+pub use modal_dialog::*;
 pub use request_bar::*;
 pub mod response_viewer {
     pub use super::response_inspector::*;
