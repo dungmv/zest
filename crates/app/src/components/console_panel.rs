@@ -1,6 +1,9 @@
 use crate::state::ResponseState;
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
+use gpui_kit::component::empty::{
+    Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyMediaVariant, EmptyTitle,
+};
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder as _;
@@ -45,57 +48,52 @@ impl RenderOnce for ConsolePanel {
                                 .enumerate()
                                 .map(|(idx, entry)| render_log_card(idx, entry)),
                         )
+                        .into_any_element()
                 }
             }),
         )
     }
 }
 
-fn render_empty_state() -> gpui_kit::Div {
+fn render_empty_state() -> gpui_kit::AnyElement {
     let t = theme();
-    div()
-        .size_full()
-        .flex()
-        .flex_col()
-        .items_center()
-        .justify_center()
-        .py(px(40.))
-        .gap(px(10.))
-        .child(
-            Icon::new(IconName::Terminal)
-                .size(px(32.))
-                .text_color(t.text_muted),
+    Empty::new()
+        .header(
+            EmptyHeader::new()
+                .media(
+                    EmptyMedia::new()
+                        .with_variant(EmptyMediaVariant::Icon)
+                        .child(Icon::new(IconName::Terminal).size(px(24.))),
+                )
+                .title(EmptyTitle::new().child("No Tests or Console Output"))
+                .description(EmptyDescription::new().child(
+                    "Test assertions from z.test(...) and logs from console.log() will appear here.",
+                )),
         )
-        .child(
-            div()
-                .text_sm()
-                .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                .text_color(t.text_primary)
-                .child("No Tests or Console Output"),
+        .content(
+            EmptyContent::new().child(
+                div()
+                    .w_full()
+                    .p(px(12.))
+                    .rounded(px(6.))
+                    .bg(t.bg_card)
+                    .border_1()
+                    .border_color(t.border)
+                    .font_family(".SystemMonoFont")
+                    .text_xs()
+                    .text_color(t.text_muted)
+                    .text_left()
+                    .flex()
+                    .flex_col()
+                    .gap(px(4.))
+                    .child("// In Pre-request or Post-response Script:")
+                    .child("console.log(\"Response status:\", z.response.status);")
+                    .child("z.test(\"Status is 200\", () => {")
+                    .child("    z.expect(z.response.status).toBe(200);")
+                    .child("});"),
+            ),
         )
-        .child(div().text_xs().text_color(t.text_secondary).child(
-            "Test assertions from z.test(...) and logs from console.log() will appear here.",
-        ))
-        .child(
-            div()
-                .mt(px(8.))
-                .p(px(12.))
-                .rounded(px(6.))
-                .bg(t.bg_card)
-                .border_1()
-                .border_color(t.border)
-                .font_family(".SystemMonoFont")
-                .text_xs()
-                .text_color(t.text_muted)
-                .flex()
-                .flex_col()
-                .gap(px(4.))
-                .child("// In Pre-request or Post-response Script:")
-                .child("console.log(\"Response status:\", z.response.status);")
-                .child("z.test(\"Status is 200\", () => {")
-                .child("    z.expect(z.response.status).toBe(200);")
-                .child("});"),
-        )
+        .into_any_element()
 }
 
 fn render_test_card(res: TestResult) -> gpui_kit::Div {

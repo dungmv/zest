@@ -1,10 +1,12 @@
 use crate::state::{ModalState, ToastState, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
+use gpui_kit::component::alert::Alert;
 use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::Icon;
+use gpui_kit::component::Sizable as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, App, AppContext as _, Context, Entity, FontWeight, InteractiveElement as _,
@@ -354,15 +356,11 @@ impl RenderOnce for ImportModal {
                                 match res {
                                     Ok(spec) => this.child(render_preview_card(&spec, t)),
                                     Err(err) => this.child(
-                                        div()
-                                            .p(px(10.))
-                                            .rounded(px(6.))
-                                            .bg(t.status_5xx.opacity(0.15))
-                                            .border_1()
-                                            .border_color(t.status_5xx)
-                                            .text_xs()
-                                            .text_color(t.status_5xx)
-                                            .child(format!("Parsing Error: {}", err)),
+                                        Alert::error(
+                                            "import-parse-error",
+                                            format!("Parsing Error: {}", err),
+                                        )
+                                        .with_size(gpui_kit::component::Size::Small),
                                     ),
                                 }
                             })

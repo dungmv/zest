@@ -1,6 +1,9 @@
 use crate::state::{ModalState, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
+use gpui_kit::component::empty::{
+    Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyMediaVariant, EmptyTitle,
+};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder as _;
@@ -162,45 +165,28 @@ pub fn render_cookies_tab(
         )
         // Cookie List or Empty State
         .child(if filtered_cookies.is_empty() {
-            div()
-                .w_full()
-                .min_w_0()
-                .py(px(48.))
-                .px(px(16.))
-                .rounded(px(6.))
-                .bg(t.bg_app)
-                .border_1()
-                .border_color(t.border)
-                .flex()
-                .flex_col()
-                .items_center()
-                .justify_center()
-                .gap(px(8.))
-                .child(
-                    Icon::new(IconName::Cookie)
-                        .size(px(28.))
-                        .text_color(t.text_muted),
-                )
-                .child(
-                    div()
-                        .text_xs()
-                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                        .text_color(t.text_secondary)
-                        .child(if total_count == 0 {
-                            "No cookies stored in this workspace"
-                        } else {
-                            "No cookies match your filter"
-                        }),
-                )
-                .child(
-                    div()
-                        .text_xs()
-                        .text_color(t.text_muted)
-                        .child(if total_count == 0 {
-                            "Cookies received via Set-Cookie response headers will automatically appear here."
-                        } else {
-                            "Try searching by a different domain, cookie name, or value."
-                        }),
+            Empty::new()
+                .header(
+                    EmptyHeader::new()
+                        .media(
+                            EmptyMedia::new()
+                                .with_variant(EmptyMediaVariant::Icon)
+                                .child(Icon::new(IconName::Cookie).size(px(24.))),
+                        )
+                        .title(
+                            EmptyTitle::new().child(if total_count == 0 {
+                                "No cookies stored in this workspace"
+                            } else {
+                                "No cookies match your filter"
+                            }),
+                        )
+                        .description(
+                            EmptyDescription::new().child(if total_count == 0 {
+                                "Cookies received via Set-Cookie response headers will automatically appear here."
+                            } else {
+                                "Try searching by a different domain, cookie name, or value."
+                            }),
+                        ),
                 )
                 .into_any_element()
         } else {

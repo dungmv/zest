@@ -2,7 +2,12 @@ use crate::services::GitService;
 use crate::state::GitState;
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
+use gpui_kit::component::alert::Alert;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::checkbox::Checkbox;
+use gpui_kit::component::empty::{
+    Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyMediaVariant, EmptyTitle,
+};
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -119,116 +124,53 @@ pub fn render_checkbox(
 }
 
 pub fn render_error_banner(git_state: Entity<GitState>, err: String) -> gpui_kit::AnyElement {
-    let t = theme();
     let git_err = git_state.clone();
 
-    div()
-        .px(px(16.))
-        .py(px(8.))
-        .bg(gpui_kit::Hsla {
-            h: 0.0,
-            s: 0.7,
-            l: 0.45,
-            a: 0.2,
+    Alert::error("git-error-banner", format!("Git: {}", err.trim()))
+        .banner()
+        .on_close(move |_, _, cx| {
+            git_err.update(cx, |git, cx| {
+                git.error = None;
+                cx.notify();
+            });
         })
-        .border_b_1()
-        .border_color(t.status_5xx)
-        .flex()
-        .items_center()
-        .justify_between()
-        .child(
-            div().text_xs().text_color(t.status_5xx).child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(4.))
-                    .child(Icon::new(IconName::TriangleAlert).size(px(14.)))
-                    .child(format!("Git: {}", err)),
-            ),
-        )
-        .child(
-            div()
-                .id("btn-dismiss-git-error")
-                .cursor_pointer()
-                .text_xs()
-                .text_color(t.text_muted)
-                .hover(|s| s.text_color(t.text_primary))
-                .on_click(move |_, _, cx| {
-                    git_err.update(cx, |git, cx| {
-                        git.error = None;
-                        cx.notify();
-                    });
-                })
-                .child("✕"),
-        )
         .into_any_element()
 }
 
 pub fn render_not_a_repo_view(git_service: GitService, is_loading: bool) -> gpui_kit::AnyElement {
-    let t = theme();
     let svc_init = git_service;
 
-    div()
-        .size_full()
-        .flex()
-        .flex_col()
-        .items_center()
-        .justify_center()
-        .gap(px(14.))
-        .child(div().text_2xl().text_color(t.text_muted).child("📦"))
-        .child(
-            div()
-                .text_base()
-                .font_weight(gpui_kit::FontWeight::BOLD)
-                .text_color(t.text_primary)
-                .child("Not a Git Repository"),
-        )
-        .child(
-            div()
-                .max_w(px(400.))
-                .text_center()
-                .text_xs()
-                .text_color(t.text_muted)
-                .child(
+    Empty::new()
+        .header(
+            EmptyHeader::new()
+                .media(
+                    EmptyMedia::new()
+                        .with_variant(EmptyMediaVariant::Icon)
+                        .child(Icon::new(IconName::GitBranch).size(px(24.))),
+                )
+                .title(EmptyTitle::new().child("Not a Git Repository"))
+                .description(EmptyDescription::new().child(
                     "This workspace directory does not have Git version control initialized yet.",
-                ),
+                )),
         )
-        .child(
-            div()
-                .id("btn-git-init")
-                .mt(px(8.))
-                .px(px(16.))
-                .py(px(8.))
-                .rounded(px(6.))
-                .when(!is_loading, |s| {
-                    s.bg(t.primary)
-                        .cursor_pointer()
-                        .text_color(t.primary_foreground)
-                        .hover(|s| s.opacity(0.9))
-                })
-                .when(is_loading, |s| s.bg(t.bg_hover).text_color(t.text_muted))
-                .text_xs()
-                .font_weight(gpui_kit::FontWeight::BOLD)
-                .on_click(move |_, _, cx| {
-                    if is_loading {
-                        return;
-                    }
-                    svc_init.init_repo(cx);
-                })
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(6.))
-                        .when(is_loading, |s| {
-                            s.child(Icon::new(IconName::RefreshCw).size(px(14.)))
-                                .child("Initializing...")
-                        })
-                        .when(!is_loading, |s| {
-                            s.child(Icon::new(IconName::GitBranch).size(px(14.)))
-                                .child("Initialize Git Repository")
-                        }),
-                ),
+        .content(
+            EmptyContent::new().child(
+                Button::new("btn-git-init")
+                    .primary()
+                    .loading(is_loading)
+                    .icon(IconName::GitBranch)
+                    .label(if is_loading {
+                        "Initializing..."
+                    } else {
+                        "Initialize Git Repository"
+                    })
+                    .on_click(move |_, _, cx| {
+                        if is_loading {
+                            return;
+                        }
+                        svc_init.init_repo(cx);
+                    }),
+            ),
         )
         .into_any_element()
 }

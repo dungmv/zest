@@ -1,8 +1,10 @@
 # Plan: Migrate các custom UI component sang gpui-kit standard components
 
 - **Ngày**: 2026-10-29
-- **Trạng thái**: Hoàn thành Giai đoạn 1 (Phase 1 Completed)
-- **Phạm vi**: `crates/app/src/components/` (`git/common.rs`, `import_modal.rs`, `kv_table.rs`, `body_editor/multipart.rs`, `settings_modal/network_tab.rs`, `settings_modal/shortcuts_tab.rs`, `tabs_with_badge.rs`)
+- **Trạng thái**: Hoàn thành Giai đoạn 1 & 2 (Phase 1 & Phase 2 Completed)
+- **Phạm vi**: 
+  - Giai đoạn 1: `crates/app/src/components/` (`git/common.rs`, `import_modal.rs`, `kv_table.rs`, `body_editor/multipart.rs`, `settings_modal/network_tab.rs`, `settings_modal/shortcuts_tab.rs`, `tabs_with_badge.rs`, `app/request_composer.rs`, `components/response_inspector.rs`)
+  - Giai đoạn 2: `crates/app/src/components/` (`git/common.rs`, `import_modal.rs`, `settings_modal/cookies_tab.rs`, `console_panel.rs`, `git/diff_view.rs`)
 
 ---
 
@@ -86,11 +88,31 @@ Trong khi đó, `gpui-kit` (phiên bản `0.8.1`, tích hợp sẵn `gpui-compon
   - Import `gpui_kit::component::kbd::Kbd`.
   - Thay thế div badge thủ công bằng `Kbd::new(Keystroke::parse(...))` hoặc hiển thị chuẩn.
 
-### Nhiệm vụ 4: Tabs & Spacing Alignment
-- **Phát hiện & Quyết định thiết kế**:
-  - `gpui_kit::component::tab::Tab` với biến thể `TabVariant::Underline` trong `gpui-component` được thiết kế có `padding_x = 0` và chiều cao cố định 26px vì nó phụ thuộc vào container `TabBar` (với sliding indicator animation).
-  - Khi render standalone trong thanh tab 34px của Request Composer và Response Inspector, `Tab` bị mất padding ngang và đường underline bị lơ lửng giữa chừng.
-  - Do đó, `TabItem` được chuẩn hóa với chiều cao `h(px(34.))`, khoảng đệm ngang `px(px(10.))`, khoảng cách nội bộ `gap(px(6.))` cho badge đếm và underline bám sát viền đáy `border_b_2()`, giải quyết triệt để tình trạng dính chữ.
+### Nhiệm vụ 4: Combo TabBar & Tab
+- Chuyển đổi thanh tab của Request Composer (`request_composer.rs`) và Response Inspector (`response_inspector.rs`) sang `TabBar::new(...).underline()` + `Tab::new()`.
+- Tự động hóa khoảng cách (`gap: 16px`), sliding indicator animation và border đáy.
+- Hoàn thành và vượt qua toàn bộ test suite.
+
+---
+
+## 4.2 Giai đoạn 2: Feedback (Alert) & Empty States (Empty)
+
+### Nhiệm vụ 5: Migrate Alert (Error Banners & Parse Errors)
+- **`crates/app/src/components/git/common.rs`**:
+  - Thay thế `render_error_banner` bằng `gpui_kit::component::alert::Alert::error("git-error-banner", format!("Git: {}", err.trim())).banner().on_close(...)`.
+  - Tự động nâng cấp giao diện thông báo lỗi cho 4 git modal: `branch_modal.rs`, `commit_modal.rs`, `history_modal.rs`, `remotes_modal.rs`.
+- **`crates/app/src/components/import_modal.rs`**:
+  - Thay thế khối div hiển thị lỗi `Parsing Error` bằng `Alert::error("import-parse-error", format!("Parsing Error: {}", err))`.
+
+### Nhiệm vụ 6: Migrate Empty States & Actions
+- **`crates/app/src/components/git/common.rs` (`render_not_a_repo_view`)**:
+  - Chuyển sang `Empty::new().header(...).content(...)` với `Button::new("btn-git-init").primary().loading(is_loading)`.
+- **`crates/app/src/components/settings_modal/cookies_tab.rs`**:
+  - Thay thế khối div empty state bằng `Empty::new().header(...)` với icon `Cookie`, tiêu đề và mô tả giải thích.
+- **`crates/app/src/components/console_panel.rs`**:
+  - Thay thế `render_empty_state` bằng `Empty::new().header(...).content(...)` chứa code snippet mẫu.
+- **`crates/app/src/components/git/diff_view.rs`**:
+  - Thay thế các empty div hiển thị khi chưa chọn file hoặc file không có thay đổi bằng `Empty::new().header(...)`.
 
 ---
 

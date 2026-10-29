@@ -1,4 +1,9 @@
 use crate::theme::theme;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::empty::{
+    Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyMediaVariant, EmptyTitle,
+};
+use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
@@ -568,17 +573,35 @@ pub fn render_diff_content(
                 }
             }
         }
-        Some(_) => div()
-            .p(px(12.))
-            .text_xs()
-            .text_color(t.text_muted)
-            .child("File has no modifications compared to HEAD.")
+        Some(_) => Empty::new()
+            .header(
+                EmptyHeader::new()
+                    .media(
+                        EmptyMedia::new()
+                            .with_variant(EmptyMediaVariant::Icon)
+                            .child(Icon::new(IconName::FileCheck).size(px(24.))),
+                    )
+                    .title(EmptyTitle::new().child("No Modifications"))
+                    .description(
+                        EmptyDescription::new()
+                            .child("File has no modifications compared to HEAD."),
+                    ),
+            )
             .into_any_element(),
-        None => div()
-            .p(px(12.))
-            .text_xs()
-            .text_color(t.text_muted)
-            .child("Select a modified or staged file to view its git diff.")
+        None => Empty::new()
+            .header(
+                EmptyHeader::new()
+                    .media(
+                        EmptyMedia::new()
+                            .with_variant(EmptyMediaVariant::Icon)
+                            .child(Icon::new(IconName::GitCompare).size(px(24.))),
+                    )
+                    .title(EmptyTitle::new().child("No File Selected"))
+                    .description(
+                        EmptyDescription::new()
+                            .child("Select a modified or staged file to view its git diff."),
+                    ),
+            )
             .into_any_element(),
     }
 }
