@@ -1,12 +1,11 @@
 use crate::state::ModalState;
 use crate::theme::theme;
+use gpui_kit::component::switch::Switch;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, App, Entity, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled,
 };
-use gpui_kit::component::Icon;
-use gpui_kit::assets::IconName;
 
 pub fn render_network_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl IntoElement {
     let t = theme();
@@ -162,42 +161,13 @@ pub fn render_network_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
                         ),
                 )
                 .child(
-                    div()
-                        .id("toggle-follow-redirects")
-                        .flex_shrink_0()
-                        .px(px(12.))
-                        .py(px(5.))
-                        .rounded(px(4.))
-                        .bg(if cur_follow { t.primary } else { t.bg_input })
-                        .border_1()
-                        .border_color(if cur_follow { t.primary } else { t.border })
-                        .text_color(if cur_follow {
-                            t.primary_foreground
-                        } else {
-                            t.text_muted
-                        })
-                        .cursor_pointer()
-                        .flex()
-                        .items_center()
-                        .gap(px(5.))
-                        .text_xs()
-                        .font_weight(gpui_kit::FontWeight::MEDIUM)
-                        .hover(|s| {
-                            if !cur_follow {
-                                s.bg(t.bg_hover).text_color(t.text_primary)
-                            } else {
-                                s
-                            }
-                        })
-                        .on_click(move |_, _, cx| {
+                    Switch::new("toggle-follow-redirects")
+                        .checked(cur_follow)
+                        .on_click(move |&next_val, _, cx| {
                             modal_set.update(cx, |st, cx| {
-                                st.set_follow_redirects(!cur_follow, cx);
+                                st.set_follow_redirects(next_val, cx);
                             });
-                        })
-                        .when(cur_follow, |this| {
-                            this.child(Icon::new(IconName::Check).size(px(12.)))
-                        })
-                        .child(if cur_follow { "Enabled" } else { "Disabled" }),
+                        }),
                 )
         })
         // 3. Validate TLS Certificates toggle
@@ -237,42 +207,13 @@ pub fn render_network_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
                         ),
                 )
                 .child(
-                    div()
-                        .id("toggle-validate-tls")
-                        .flex_shrink_0()
-                        .px(px(12.))
-                        .py(px(5.))
-                        .rounded(px(4.))
-                        .bg(if cur_tls { t.primary } else { t.bg_input })
-                        .border_1()
-                        .border_color(if cur_tls { t.primary } else { t.border })
-                        .text_color(if cur_tls {
-                            t.primary_foreground
-                        } else {
-                            t.text_muted
-                        })
-                        .cursor_pointer()
-                        .flex()
-                        .items_center()
-                        .gap(px(5.))
-                        .text_xs()
-                        .font_weight(gpui_kit::FontWeight::MEDIUM)
-                        .hover(|s| {
-                            if !cur_tls {
-                                s.bg(t.bg_hover).text_color(t.text_primary)
-                            } else {
-                                s
-                            }
-                        })
-                        .on_click(move |_, _, cx| {
+                    Switch::new("toggle-validate-tls")
+                        .checked(cur_tls)
+                        .on_click(move |&next_val, _, cx| {
                             modal_set.update(cx, |st, cx| {
-                                st.set_validate_tls(!cur_tls, cx);
+                                st.set_validate_tls(next_val, cx);
                             });
-                        })
-                        .when(cur_tls, |this| {
-                            this.child(Icon::new(IconName::Check).size(px(12.)))
-                        })
-                        .child(if cur_tls { "Enabled" } else { "Disabled" }),
+                        }),
                 )
         })
 }

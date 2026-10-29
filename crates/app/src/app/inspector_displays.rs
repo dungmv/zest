@@ -1,6 +1,6 @@
 use crate::state::ResponseState;
-use gpui_kit::{App, AppContext as _, Entity, Window};
 use gpui_kit::component::input::EditorState as CodeEditorState;
+use gpui_kit::{App, AppContext as _, Entity, Window};
 use std::rc::Rc;
 
 type HighlighterFactory =

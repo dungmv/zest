@@ -2,17 +2,19 @@ use crate::components::env_autocomplete::{build_tokenized_content, detect_unclos
 use crate::components::env_input::render_env_input;
 use crate::state::{EnvironmentState, ModalState};
 use crate::theme::{theme, AppTheme};
+use gpui_kit::assets::IconName;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::checkbox::Checkbox;
+use gpui_kit::component::input::{InputEvent, InputState};
+use gpui_kit::component::popover::Popover;
+use gpui_kit::component::Disableable as _;
+use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, App, AppContext as _, Div, Entity, InteractiveElement as _, IntoElement,
     ParentElement, Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled,
     Subscription, Window,
 };
-use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::input::{InputEvent, InputState};
-use gpui_kit::component::popover::Popover;
-use gpui_kit::component::{Icon, Sizable as _};
-use gpui_kit::assets::IconName;
 use std::rc::Rc;
 use zest_core::models::KeyValuePair;
 
@@ -291,23 +293,9 @@ impl RenderOnce for KvTable {
                     .py(px(2.))
                     .gap(px(8.))
                     .child(
-                        div()
-                            .w(px(20.))
-                            .h(px(20.))
-                            .rounded(px(4.))
-                            .border_1()
-                            .border_color(if row.enabled { t.text_muted } else { t.border })
-                            .bg(if row.enabled {
-                                t.text_muted
-                            } else {
-                                t.bg_input
-                            })
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_xs()
-                            .text_color(t.bg_input)
-                            .child(if row.enabled { "✓" } else { "" }),
+                        Checkbox::new(format!("{row_id}-chk"))
+                            .checked(row.enabled)
+                            .disabled(true),
                     )
                     .child(
                         div()
@@ -433,30 +421,14 @@ impl RenderOnce for KvTable {
                                 let on_update_c = on_update.clone();
                                 let key_in_chk = key_input.clone();
                                 let val_in_chk = val_input.clone();
-                                div()
-                                    .id(gpui_kit::SharedString::from(format!("{}-check", row_prefix)))
-                                    .w(px(20.))
-                                    .h(px(20.))
-                                    .rounded(px(4.))
-                                    .border_1()
-                                    .border_color(if enabled { t.primary } else { t.border })
-                                    .bg(if enabled { t.primary } else { t.bg_input })
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .cursor_pointer()
-                                    .text_xs()
-                                    .text_color(t.primary_foreground)
-                                    .on_click(move |_, window, cx| {
+                                Checkbox::new(format!("{}-check", row_prefix))
+                                    .checked(enabled)
+                                    .on_click(move |&next_enabled, window, cx| {
                                         let pos = {
                                             let st = ts_chk.read(cx);
                                             st.rows.iter().position(|r| r.key_input == key_in_chk)
                                         };
                                         if let Some(pos) = pos {
-                                            let next_enabled = {
-                                                let st = ts_chk.read(cx);
-                                                !st.rows[pos].enabled
-                                            };
                                             ts_chk.update(cx, |st, _| {
                                                 if pos < st.rows.len() {
                                                     st.rows[pos].enabled = next_enabled;
@@ -474,7 +446,6 @@ impl RenderOnce for KvTable {
                                             );
                                         }
                                     })
-                                    .child(if enabled { "✓" } else { "" })
                             })
                             // Key Column
                             .child(div().w(KEY_COLUMN_WIDTH).child(render_env_input(
@@ -534,7 +505,10 @@ impl RenderOnce for KvTable {
                 this.child(
                     div().pt(px(6.)).flex().items_center().gap(px(8.)).child(
                         div()
-                            .id(gpui_kit::SharedString::from(format!("{}-btn-add", id_prefix)))
+                            .id(gpui_kit::SharedString::from(format!(
+                                "{}-btn-add",
+                                id_prefix
+                            )))
                             .px(px(10.))
                             .py(px(4.))
                             .rounded(px(4.))

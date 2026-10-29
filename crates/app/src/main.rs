@@ -10,8 +10,8 @@ mod state;
 mod theme;
 
 use app::*;
-use gpui_kit::*;
 use gpui_kit::assets::AllAssets;
+use gpui_kit::*;
 use platform::default_window_options;
 
 fn main() {

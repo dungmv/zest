@@ -1,54 +1,46 @@
 use crate::theme::theme;
+use gpui_kit::component::kbd::Kbd;
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{div, px, IntoElement, ParentElement, Styled};
+use gpui_kit::{div, px, IntoElement, Keystroke, ParentElement, Styled};
 
 pub fn render_shortcuts_tab() -> impl IntoElement {
     let t = theme();
-    let is_macos = cfg!(target_os = "macos");
 
     let shortcuts: [(&'static str, &'static str, &'static str); 7] = [
         (
             "Send Active Request",
             "Execute the current HTTP request",
-            if is_macos {
-                "⌘ + Enter"
-            } else {
-                "Ctrl + Enter"
-            },
+            "cmd-enter",
         ),
         (
             "Command Palette",
             "Quickly search requests, environments, and commands",
-            if is_macos { "⌘ + K" } else { "Ctrl + K" },
+            "cmd-k",
         ),
         (
             "Toggle Sidebar",
             "Collapse or expand the left collection tree",
-            if is_macos { "⌘ + B" } else { "Ctrl + B" },
+            "cmd-b",
         ),
         (
             "Open Settings",
             "Open this Settings & Preferences dialog",
-            if is_macos { "⌘ + ," } else { "Ctrl + ," },
+            "cmd-,",
         ),
         (
             "Git Source Control",
             "Open Git staging, commit, and branch manager",
-            if is_macos {
-                "⌘ + Shift + G"
-            } else {
-                "Ctrl + Shift + G"
-            },
+            "cmd-shift-g",
         ),
         (
             "Import Collection / Spec",
             "Import OpenAPI 3.0/3.1 or Postman collection",
-            if is_macos { "⌘ + I" } else { "Ctrl + I" },
+            "cmd-i",
         ),
         (
             "Dismiss Modal / Cancel",
             "Close the topmost modal or palette",
-            "Esc",
+            "escape",
         ),
     ];
 
@@ -118,7 +110,9 @@ pub fn render_shortcuts_tab() -> impl IntoElement {
                                     )
                                     .child(div().text_xs().text_color(t.text_muted).child(desc)),
                             )
-                            .child(
+                            .child(if let Ok(stroke) = Keystroke::parse(keybinding) {
+                                Kbd::new(stroke).into_any_element()
+                            } else {
                                 div()
                                     .flex_shrink_0()
                                     .px(px(8.))
@@ -131,8 +125,9 @@ pub fn render_shortcuts_tab() -> impl IntoElement {
                                     .font_family(".SystemMonoFont")
                                     .font_weight(gpui_kit::FontWeight::MEDIUM)
                                     .text_color(t.text_primary)
-                                    .child(keybinding),
-                            )
+                                    .child(keybinding)
+                                    .into_any_element()
+                            })
                     },
                 )),
         )

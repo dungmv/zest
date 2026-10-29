@@ -1,7 +1,9 @@
 use crate::theme::theme;
+use gpui_kit::component::tab::Tab;
+use gpui_kit::component::{Selectable as _, Sizable as _, Size};
 use gpui_kit::{
     div, px, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, ParentElement,
-    RenderOnce, StatefulInteractiveElement as _, Styled, Window,
+    RenderOnce, Styled, Window,
 };
 use std::rc::Rc;
 
@@ -56,46 +58,22 @@ impl TabItem {
 impl RenderOnce for TabItem {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let t = theme();
-        let active = self.is_active;
+        let mut tab = Tab::new()
+            .underline()
+            .with_size(Size::Small)
+            .label(self.label)
+            .selected(self.is_active);
 
-        let fg = if active {
-            t.text_primary
-        } else {
-            t.text_secondary
-        };
-
-        let border_bottom = if active { t.primary } else { t.transparent };
-
-        let mut el = div()
-            .id(self.id)
-            .h(px(32.))
-            .px(px(10.))
-            .flex()
-            .items_center()
-            .gap(px(6.))
-            .cursor_pointer()
-            .text_xs()
-            .font_weight(if active {
-                gpui_kit::FontWeight::SEMIBOLD
-            } else {
-                gpui_kit::FontWeight::NORMAL
-            })
-            .text_color(fg)
-            .border_b_2()
-            .border_color(border_bottom)
-            .hover(|s| s.text_color(t.text_primary))
-            .child(div().child(self.label));
-
-        if let Some(handler) = self.on_click {
-            el = el.on_click(move |ev, window, cx| handler(ev, window, cx));
-        }
+        let mut suffix_el = div().flex().items_center().gap(px(4.));
+        let mut has_suffix = false;
 
         if self.has_dropdown {
-            el = el.child(div().text_xs().text_color(t.text_muted).child("▾"));
+            suffix_el = suffix_el.child(div().text_xs().text_color(t.text_muted).child("▾"));
+            has_suffix = true;
         }
 
         if let Some(badge_text) = self.badge {
-            el = el.child(
+            suffix_el = suffix_el.child(
                 div()
                     .px(px(5.))
                     .py(px(0.5))
@@ -103,12 +81,25 @@ impl RenderOnce for TabItem {
                     .bg(t.bg_card)
                     .border_1()
                     .border_color(t.border)
-                    .text_color(if active { t.text_primary } else { t.text_muted })
+                    .text_color(if self.is_active {
+                        t.text_primary
+                    } else {
+                        t.text_muted
+                    })
                     .text_xs()
                     .child(badge_text),
             );
+            has_suffix = true;
         }
 
-        el
+        if has_suffix {
+            tab = tab.suffix(suffix_el);
+        }
+
+        if let Some(handler) = self.on_click {
+            tab = tab.on_click(move |ev, window, cx| handler(ev, window, cx));
+        }
+
+        div().id(self.id).child(tab)
     }
 }

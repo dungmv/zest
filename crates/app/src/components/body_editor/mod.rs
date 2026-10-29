@@ -14,16 +14,16 @@ use crate::state::{
     EnvironmentState, ModalState, RequestSessionState, ToastState, WorkspaceDataState,
 };
 use crate::theme::theme;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::input::{Editor, EditorState as CodeEditorState, Textarea, TextareaState};
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, App, Entity, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
     StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::input::{Editor, EditorState as CodeEditorState, Textarea, TextareaState};
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_kit::component::Icon;
-use gpui_kit::assets::IconName;
 use zest_core::models::{KeyValuePair, MultipartItem, RequestBody};
 
 pub(crate) fn clamp_char_boundary_left(s: &str, mut idx: usize) -> usize {

@@ -7,12 +7,12 @@ pub use render::{
 
 use crate::state::EnvironmentState;
 use anyhow::Result;
+use gpui_kit::component::input::{CompletionProvider, InlineToken, InputContent};
+use gpui_kit::component::RopeExt;
 use gpui_kit::{
     div, px, App, Div, Entity, InteractiveElement as _, KeyDownEvent, ParentElement as _,
     ScrollHandle, Styled as _, Task, Window,
 };
-use gpui_kit::component::input::{CompletionProvider, InlineToken, InputContent};
-use gpui_kit::component::RopeExt;
 use lsp_types::{
     CompletionContext, CompletionItem, CompletionItemKind, CompletionResponse, CompletionTextEdit,
     Documentation, Range as LspRange, TextEdit,

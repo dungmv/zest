@@ -1,7 +1,7 @@
 use crate::components::kv_table::KvTable;
 use crate::state::{EnvironmentState, ModalState, RequestSessionState, WorkspaceDataState};
-use gpui_kit::{div, AnyElement, Entity, IntoElement, ParentElement, Styled};
 use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::{div, AnyElement, Entity, IntoElement, ParentElement, Styled};
 use zest_core::models::KeyValuePair;
 
 pub fn render_form_editor(

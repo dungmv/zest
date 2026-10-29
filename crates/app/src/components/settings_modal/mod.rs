@@ -5,13 +5,13 @@ mod shortcuts_tab;
 
 use crate::state::{ModalState, SettingsTab, WorkspaceDataState};
 use crate::theme::theme;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::Icon;
 use gpui_kit::{
     div, px, App, Entity, InteractiveElement as _, IntoElement, MouseButton, ParentElement,
     RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::Icon;
-use gpui_kit::assets::IconName;
 
 #[derive(IntoElement)]
 pub struct SettingsModal {

@@ -3,11 +3,7 @@ use crate::state::{
     RequestSessionState, ResponseState, ResponseTabKind, ResponseViewMode, WorkspaceState,
 };
 use crate::theme::theme;
-use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{
-    div, px, uniform_list, AnyElement, App, Entity, InteractiveElement as _, IntoElement,
-    ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled, Window,
-};
+use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Editor, EditorState as CodeEditorState};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
@@ -15,7 +11,11 @@ use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::spinner::Spinner;
 use gpui_kit::component::text::TextView;
 use gpui_kit::component::{Icon, Sizable as _};
-use gpui_kit::assets::IconName;
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
+    div, px, uniform_list, AnyElement, App, Entity, InteractiveElement as _, IntoElement,
+    ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled, Window,
+};
 use zest_core::models::HttpResponseRecord;
 use zest_core::storage::models::{RequestExampleFile, RequestFile, RequestKvItem};
 

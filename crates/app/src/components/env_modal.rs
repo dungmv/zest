@@ -1,16 +1,16 @@
 use crate::app::actions::DismissModal;
 use crate::state::{EnvironmentState, ModalState, SidebarState};
 use crate::theme::theme;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenuItem};
+use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, AnyElement, App, AppContext as _, Entity, InteractiveElement as _, IntoElement,
     MouseButton, ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenuItem};
-use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::{Icon, Sizable as _};
-use gpui_kit::assets::IconName;
 use zest_core::models::{Environment, EnvironmentVariable};
 
 struct EnvVarTableContext<'a> {

@@ -1,14 +1,17 @@
 use crate::state::{ModalState, ToastState, WorkspaceDataState};
 use crate::theme::theme;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::checkbox::Checkbox;
+use gpui_kit::component::input::{Input, InputState};
+use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::tab::Tab;
+use gpui_kit::component::Icon;
+use gpui_kit::component::Selectable as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, App, AppContext as _, Context, Entity, FontWeight, InteractiveElement as _,
     IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_kit::component::input::{Input, InputState};
-use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::Icon;
-use gpui_kit::assets::IconName;
 use std::path::PathBuf;
 use zest_core::importers::{parse_content, ImportFormat, ImportOptions, ImportResult};
 use zest_core::models::HttpMethod;
@@ -585,25 +588,18 @@ fn render_tab_header<F>(
     label: &'static str,
     active: bool,
     on_click: F,
-    t: &crate::theme::AppTheme,
+    _t: &crate::theme::AppTheme,
 ) -> impl IntoElement
 where
     F: Fn(&gpui_kit::ClickEvent, &mut Window, &mut App) + 'static,
 {
-    div()
-        .id(id)
-        .pb(px(6.))
-        .cursor_pointer()
-        .text_xs()
-        .font_weight(if active {
-            FontWeight::SEMIBOLD
-        } else {
-            FontWeight::NORMAL
-        })
-        .text_color(if active { t.text_primary } else { t.text_muted })
-        .when(active, |s| s.border_b_2().border_color(t.primary))
-        .child(label)
-        .on_click(on_click)
+    div().id(id).child(
+        Tab::new()
+            .underline()
+            .label(label)
+            .selected(active)
+            .on_click(on_click),
+    )
 }
 
 fn render_file_picker_view(
@@ -903,32 +899,13 @@ fn render_checkbox<F>(
     label: &'static str,
     checked: bool,
     on_click: F,
-    t: &crate::theme::AppTheme,
+    _t: &crate::theme::AppTheme,
 ) -> impl IntoElement
 where
-    F: Fn(&gpui_kit::ClickEvent, &mut Window, &mut App) + 'static,
+    F: Fn(&bool, &mut Window, &mut App) + 'static,
 {
-    div()
-        .id(id)
-        .flex()
-        .items_center()
-        .gap(px(8.))
-        .cursor_pointer()
+    Checkbox::new(id)
+        .label(label)
+        .checked(checked)
         .on_click(on_click)
-        .child(
-            div()
-                .w(px(14.))
-                .h(px(14.))
-                .rounded(px(3.))
-                .border_1()
-                .border_color(if checked { t.primary } else { t.border })
-                .bg(if checked { t.primary } else { t.bg_card })
-                .flex()
-                .items_center()
-                .justify_center()
-                .when(checked, |s| {
-                    s.child(div().text_xs().text_color(t.primary_foreground).child("✓"))
-                }),
-        )
-        .child(div().text_xs().text_color(t.text_secondary).child(label))
 }

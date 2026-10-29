@@ -1,7 +1,7 @@
 use crate::components::script_editor::{ScriptCompletionProvider, ScriptEditorKind};
 use crate::state::{ComposerSyncScope, EnvironmentState, WorkspaceDataState};
-use gpui_kit::{App, AppContext as _, Entity, Window};
 use gpui_kit::component::input::{EditorState as CodeEditorState, InputState, TextareaState};
+use gpui_kit::{App, AppContext as _, Entity, Window};
 use std::rc::Rc;
 use zest_core::models::{Auth, RequestBody};
 

@@ -23,18 +23,18 @@ use crate::state::{
     ToastState, WorkspaceDataState,
 };
 use crate::theme::theme;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::input::InputState;
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, uniform_list, AnyElement, App, AppContext as _, Entity, InteractiveElement as _,
     IntoElement, ListSizingBehavior, ParentElement, RenderOnce, StatefulInteractiveElement as _,
     Styled, Window,
 };
-use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::input::InputState;
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::Icon;
-use gpui_kit::assets::IconName;
 use std::collections::HashMap;
 
 pub struct SidebarRenderContext<'a> {

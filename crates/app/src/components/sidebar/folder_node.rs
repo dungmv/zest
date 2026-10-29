@@ -4,14 +4,14 @@ use super::{SidebarRenderContext, SIDEBAR_ROW_HEIGHT};
 use crate::app::actions::DismissModal;
 use crate::state::ScopeSettingsTarget;
 use crate::theme::theme;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::menu::ContextMenuExt as _;
+use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, AnyElement, AppContext as _, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement, StatefulInteractiveElement as _, Styled,
 };
-use gpui_kit::component::menu::ContextMenuExt as _;
-use gpui_kit::component::{Icon, Sizable as _};
-use gpui_kit::assets::IconName;
 
 pub fn render_folder_row(
     folder_id: &str,
@@ -187,20 +187,22 @@ pub fn render_folder_row(
                         },
                     ),
                 )
-                .item(gpui_kit::component::menu::PopupMenuItem::new("Rename").on_click(
-                    move |_, window, cx| {
-                        let ws_c = ws_r.clone();
-                        sb_r.update(cx, |state, cx| {
-                            state.start_renaming_folder(
-                                f_id_r.clone(),
-                                f_name_r.clone(),
-                                ws_c,
-                                window,
-                                cx,
-                            );
-                        });
-                    },
-                ))
+                .item(
+                    gpui_kit::component::menu::PopupMenuItem::new("Rename").on_click(
+                        move |_, window, cx| {
+                            let ws_c = ws_r.clone();
+                            sb_r.update(cx, |state, cx| {
+                                state.start_renaming_folder(
+                                    f_id_r.clone(),
+                                    f_name_r.clone(),
+                                    ws_c,
+                                    window,
+                                    cx,
+                                );
+                            });
+                        },
+                    ),
+                )
                 .item(
                     gpui_kit::component::menu::PopupMenuItem::new("Folder Settings...")
                         .icon(IconName::Settings)
@@ -214,13 +216,15 @@ pub fn render_folder_row(
                         }),
                 )
                 .separator()
-                .item(gpui_kit::component::menu::PopupMenuItem::new("Delete").on_click(
-                    move |_, _, cx| {
-                        ws_d.update(cx, |state, cx| {
-                            state.delete_folder(&f_id_d, cx);
-                        });
-                    },
-                ))
+                .item(
+                    gpui_kit::component::menu::PopupMenuItem::new("Delete").on_click(
+                        move |_, _, cx| {
+                            ws_d.update(cx, |state, cx| {
+                                state.delete_folder(&f_id_d, cx);
+                            });
+                        },
+                    ),
+                )
             }
         })
         .child(

@@ -2,16 +2,17 @@ use crate::components::env_autocomplete::{build_tokenized_content, detect_unclos
 use crate::components::env_input::render_env_input;
 use crate::state::{EnvironmentState, ModalState, RequestSessionState, WorkspaceDataState};
 use crate::theme::theme;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::checkbox::Checkbox;
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, AnyElement, App, AppContext as _, Entity, InteractiveElement as _, IntoElement,
     ParentElement, StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::{Icon, Sizable as _};
-use gpui_kit::assets::IconName;
 use std::cell::RefCell;
 use std::rc::Rc;
 use zest_core::models::MultipartItem;
@@ -56,7 +57,8 @@ impl MpTableState {
         let init_k = item.key.clone();
         let init_v = item.value.clone();
         let key_input = cx.new(|cx| {
-            let mut s = gpui_kit::component::input::InputState::new(window, cx).placeholder("Key...");
+            let mut s =
+                gpui_kit::component::input::InputState::new(window, cx).placeholder("Key...");
             if let Some(env_ent) = ctx.env_state {
                 let content = build_tokenized_content(&init_k, env_ent.read(cx));
                 s.set_value(content, window, cx);
@@ -66,7 +68,8 @@ impl MpTableState {
             s
         });
         let val_input = cx.new(|cx| {
-            let mut s = gpui_kit::component::input::InputState::new(window, cx).placeholder("Value...");
+            let mut s =
+                gpui_kit::component::input::InputState::new(window, cx).placeholder("Value...");
             if let Some(env_ent) = ctx.env_state {
                 let content = build_tokenized_content(&init_v, env_ent.read(cx));
                 s.set_value(content, window, cx);
@@ -291,7 +294,8 @@ pub fn render_multipart_editor(
                     let id_row = req_id_str.clone();
                     let id_del = id_row.clone();
                     let snapshot = row_inputs.get(idx).cloned().unwrap_or_else(|| {
-                        let dummy = cx.new(|cx| gpui_kit::component::input::InputState::new(window, cx));
+                        let dummy =
+                            cx.new(|cx| gpui_kit::component::input::InputState::new(window, cx));
                         MpRowSnapshot {
                             key_input: dummy.clone(),
                             val_input: dummy,
@@ -328,23 +332,10 @@ pub fn render_multipart_editor(
                             let ed_toggle = ed_row.clone();
                             let ws_toggle = ws_row.clone();
                             let id_toggle = id_row.clone();
-                            div()
-                                .id(format!("check-mp-{}", idx))
-                                .w(px(20.))
-                                .h(px(20.))
-                                .flex_shrink_0()
-                                .rounded(px(4.))
-                                .border_1()
-                                .border_color(if enabled { t.primary } else { t.border })
-                                .bg(if enabled { t.primary } else { t.bg_input })
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .cursor_pointer()
-                                .text_xs()
-                                .text_color(t.primary_foreground)
-                                .on_click(move |_, _, cx| {
-                                    let (current_idx, k, v, is_f, fp, next_enabled) = {
+                            Checkbox::new(format!("check-mp-{}", idx))
+                                .checked(enabled)
+                                .on_click(move |&next_enabled, _, cx| {
+                                    let (current_idx, k, v, is_f, fp) = {
                                         let st = ts_toggle.read(cx);
                                         let pos = st
                                             .rows
@@ -365,17 +356,10 @@ pub fn render_multipart_editor(
                                                         .to_string(),
                                                     st.rows[i].is_file,
                                                     st.rows[i].file_path.clone(),
-                                                    !st.rows[i].enabled,
                                                 )
                                             })
-                                            .unwrap_or((
-                                                String::new(),
-                                                String::new(),
-                                                false,
-                                                None,
-                                                false,
-                                            ));
-                                        (pos, meta.0, meta.1, meta.2, meta.3, meta.4)
+                                            .unwrap_or((String::new(), String::new(), false, None));
+                                        (pos, meta.0, meta.1, meta.2, meta.3)
                                     };
                                     if let Some(pos) = current_idx {
                                         ts_toggle.update(cx, |st, _| {
@@ -402,7 +386,6 @@ pub fn render_multipart_editor(
                                         });
                                     }
                                 })
-                                .child(if enabled { "✓" } else { "" })
                         })
                         // Key
                         .child({

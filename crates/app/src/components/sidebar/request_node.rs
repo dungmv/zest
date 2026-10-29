@@ -6,14 +6,14 @@ use crate::app::actions::DismissModal;
 use crate::components::{MethodBadge, StatusCodeBadge};
 use crate::services::GitService;
 use crate::theme::theme;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenuItem};
+use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, AnyElement, AppContext as _, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement, StatefulInteractiveElement as _, Styled,
 };
-use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenuItem};
-use gpui_kit::component::{Icon, Sizable as _};
-use gpui_kit::assets::IconName;
 use zest_core::models::HttpMethod;
 use zest_core::storage::models::RequestFile;
 use zest_core::storage::serialize::to_yaml_string;
@@ -186,7 +186,9 @@ pub fn render_request_inner_pill(
                             if let Some(r) = ws_yaml.read(cx).find_request(&r_id_yaml) {
                                 let rf = RequestFile::from_item(r);
                                 if let Ok(yaml) = to_yaml_string(&rf) {
-                                    cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(yaml));
+                                    cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(
+                                        yaml,
+                                    ));
                                 }
                             }
                         }),

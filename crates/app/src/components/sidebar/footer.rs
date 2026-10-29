@@ -1,16 +1,16 @@
 use crate::services::GitService;
 use crate::state::{GitActiveModal, GitState, ToastState};
 use crate::theme::theme;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::spinner::Spinner;
+use gpui_kit::component::{Icon, Sizable};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, AnyElement, AppContext as _, Entity, InteractiveElement as _, IntoElement,
     ParentElement, StatefulInteractiveElement as _, Styled,
 };
-use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_kit::component::spinner::Spinner;
-use gpui_kit::component::{Icon, Sizable};
-use gpui_kit::assets::IconName;
 use zest_core::git::GitStatusResult;
 
 pub fn render_sidebar_footer(

@@ -3,17 +3,17 @@ use crate::components::env_input::render_env_input;
 use crate::components::kv_table::KvTable;
 use crate::state::{EnvironmentState, ModalState, ScopeSettingsTarget, WorkspaceDataState};
 use crate::theme::theme;
-use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{
-    div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, MouseButton,
-    ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled, Window,
-};
+use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::Icon;
-use gpui_kit::assets::IconName;
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
+    div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, MouseButton,
+    ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled, Window,
+};
 use zest_core::models::{ApiKeyLocation, Auth, KeyValuePair};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

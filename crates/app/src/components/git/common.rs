@@ -1,13 +1,14 @@
 use crate::services::GitService;
 use crate::state::GitState;
 use crate::theme::theme;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::checkbox::Checkbox;
+use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_kit::component::Icon;
-use gpui_kit::assets::IconName;
 use std::collections::HashMap;
 use zest_core::git::{GitFileStatus, GitStatusResult};
 
@@ -81,44 +82,40 @@ pub fn render_checkbox(
     id: &str,
     checked: bool,
     partial: bool,
-    on_toggle: impl Fn(&gpui_kit::ClickEvent, &mut Window, &mut App) + 'static,
+    on_toggle: impl Fn(&bool, &mut Window, &mut App) + 'static,
 ) -> gpui_kit::AnyElement {
-    let t = theme();
-    let symbol = if checked {
-        "✓"
-    } else if partial {
-        "−"
+    if partial {
+        let t = theme();
+        div()
+            .id(gpui_kit::SharedString::from(id.to_string()))
+            .w(px(16.))
+            .h(px(16.))
+            .flex_shrink_0()
+            .rounded(px(3.))
+            .border_1()
+            .border_color(t.primary)
+            .bg(t.primary)
+            .flex()
+            .items_center()
+            .justify_center()
+            .cursor_pointer()
+            .text_xs()
+            .font_weight(gpui_kit::FontWeight::BOLD)
+            .text_color(t.primary_foreground)
+            .on_click(move |_, window, cx| {
+                cx.stop_propagation();
+                on_toggle(&true, window, cx);
+            })
+            .child("−")
+            .into_any_element()
     } else {
-        ""
-    };
-    let is_active = checked || partial;
-
-    div()
-        .id(gpui_kit::SharedString::from(id.to_string()))
-        .w(px(16.))
-        .h(px(16.))
-        .flex_shrink_0()
-        .rounded(px(3.))
-        .border_1()
-        .border_color(if is_active { t.primary } else { t.border })
-        .bg(if is_active { t.primary } else { t.bg_input })
-        .flex()
-        .items_center()
-        .justify_center()
-        .cursor_pointer()
-        .text_xs()
-        .font_weight(gpui_kit::FontWeight::BOLD)
-        .text_color(if is_active {
-            t.primary_foreground
-        } else {
-            t.text_muted
-        })
-        .on_click(move |ev, window, cx| {
-            cx.stop_propagation();
-            on_toggle(ev, window, cx);
-        })
-        .child(symbol)
-        .into_any_element()
+        Checkbox::new(id.to_string())
+            .checked(checked)
+            .on_click(move |val, window, cx| {
+                on_toggle(val, window, cx);
+            })
+            .into_any_element()
+    }
 }
 
 pub fn render_error_banner(git_state: Entity<GitState>, err: String) -> gpui_kit::AnyElement {

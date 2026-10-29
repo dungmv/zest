@@ -3,13 +3,13 @@ use crate::components::inherited_headers::mask_secret;
 use crate::components::kv_table::render_disabled_input;
 use crate::state::{EnvironmentState, ModalState, RequestSessionState, WorkspaceDataState};
 use crate::theme::{theme, AppTheme};
-use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{div, px, App, Div, Entity, ParentElement, Styled, Window};
+use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::InputState;
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::Icon;
-use gpui_kit::assets::IconName;
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{div, px, App, Div, Entity, ParentElement, Styled, Window};
 use zest_core::models::{ApiKeyLocation, Auth};
 
 pub struct AuthTabInputs<'a> {

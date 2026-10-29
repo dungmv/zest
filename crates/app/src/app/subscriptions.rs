@@ -8,8 +8,8 @@ use crate::state::{
     RequestSessionState, ResponseEvent, ResponseState, SessionEvent, SidebarState, ToastState,
     WorkspaceDataState, WorkspaceEvent,
 };
-use gpui_kit::*;
 use gpui_kit::component::input::InputEvent;
+use gpui_kit::*;
 use zest_core::models::{ApiKeyLocation, Auth, RequestBody};
 
 pub struct SubscriptionTargets<'a> {

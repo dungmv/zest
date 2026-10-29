@@ -6,13 +6,13 @@ use crate::components::env_autocomplete::{
 };
 use crate::state::{EnvironmentState, ModalState};
 use crate::theme::theme;
+use gpui_kit::component::input::{Input, InputState};
+use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     deferred, div, px, App, Entity, Focusable as _, InteractiveElement as _, IntoElement,
     ParentElement, SharedString, StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_kit::component::input::{Input, InputState};
-use gpui_kit::component::scroll::ScrollableElement as _;
 
 pub fn render_env_input<F>(
     input_id: impl Into<SharedString>,

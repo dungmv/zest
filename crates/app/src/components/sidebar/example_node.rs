@@ -3,12 +3,12 @@ use super::{SidebarRenderContext, SIDEBAR_ROW_HEIGHT};
 use crate::app::actions::DismissModal;
 use crate::components::StatusCodeBadge;
 use crate::theme::theme;
+use gpui_kit::component::menu::ContextMenuExt as _;
+use gpui_kit::component::Sizable as _;
 use gpui_kit::{
     div, px, AnyElement, AppContext as _, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement, StatefulInteractiveElement as _, Styled,
 };
-use gpui_kit::component::menu::ContextMenuExt as _;
-use gpui_kit::component::Sizable as _;
 
 pub fn render_example_row(
     parent_id: &str,
@@ -114,20 +114,22 @@ pub fn render_example_row(
                 let ex_del_name = ex_name_ctx.clone();
 
                 let mut m = menu
-                    .item(gpui_kit::component::menu::PopupMenuItem::new("Rename").on_click(
-                        move |_, window, cx| {
-                            let ws_c = ws_ren.clone();
-                            sb_ren.update(cx, |state, cx| {
-                                state.start_renaming_example(
-                                    r_id_ren.clone(),
-                                    ex_ren_name.clone(),
-                                    ws_c,
-                                    window,
-                                    cx,
-                                );
-                            });
-                        },
-                    ))
+                    .item(
+                        gpui_kit::component::menu::PopupMenuItem::new("Rename").on_click(
+                            move |_, window, cx| {
+                                let ws_c = ws_ren.clone();
+                                sb_ren.update(cx, |state, cx| {
+                                    state.start_renaming_example(
+                                        r_id_ren.clone(),
+                                        ex_ren_name.clone(),
+                                        ws_c,
+                                        window,
+                                        cx,
+                                    );
+                                });
+                            },
+                        ),
+                    )
                     .item(
                         gpui_kit::component::menu::PopupMenuItem::new("Duplicate").on_click(
                             move |_, _, cx| {
@@ -195,8 +197,8 @@ pub fn render_example_row(
                     );
                 }
 
-                m.separator()
-                    .item(gpui_kit::component::menu::PopupMenuItem::new("Delete").on_click(
+                m.separator().item(
+                    gpui_kit::component::menu::PopupMenuItem::new("Delete").on_click(
                         move |_, _, cx| {
                             ws_del.update(cx, |ws, cx| {
                                 if let Some(mut rf) = ws.get_request_file(&r_id_del) {
@@ -211,7 +213,8 @@ pub fn render_example_row(
                                 }
                             });
                         },
-                    ))
+                    ),
+                )
             }
         })
         .child(

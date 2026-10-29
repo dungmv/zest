@@ -17,8 +17,8 @@ use crate::components::*;
 use crate::services::{HttpEngine, Runner};
 use crate::state::*;
 use crate::theme::theme;
-use gpui_kit::*;
 use gpui_kit::component::resizable::{h_resizable, resizable_panel, v_resizable};
+use gpui_kit::*;
 use std::sync::Arc;
 
 pub struct AppView {
@@ -33,8 +33,9 @@ impl AppView {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let state = AppState::new(cx);
 
-        type HighlighterFactory =
-            std::rc::Rc<dyn Fn(&str) -> Option<Box<dyn gpui_kit::component::input::InputHighlighter>>>;
+        type HighlighterFactory = std::rc::Rc<
+            dyn Fn(&str) -> Option<Box<dyn gpui_kit::component::input::InputHighlighter>>,
+        >;
 
         let highlighter_factory: HighlighterFactory = std::rc::Rc::new(|lang: &str| match lang {
             "json" => Some(Box::new(

@@ -1,13 +1,13 @@
 use crate::state::ResponseState;
 use crate::theme::theme;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, App, Entity, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
     StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::Icon;
-use gpui_kit::assets::IconName;
 use zest_core::models::{ConsoleLogEntry, ConsoleLogLevel, ConsoleLogSource, TestResult};
 
 #[derive(IntoElement)]

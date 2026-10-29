@@ -2,12 +2,12 @@ use super::common::{render_error_banner, render_not_a_repo_view};
 use crate::services::GitService;
 use crate::state::GitState;
 use crate::theme::theme;
+use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
     RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_kit::component::input::{Input, InputState};
 
 #[derive(IntoElement)]
 pub struct GitBranchModal {

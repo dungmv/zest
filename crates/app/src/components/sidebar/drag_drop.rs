@@ -1,8 +1,8 @@
 use crate::components::MethodBadge;
 use crate::theme::theme;
-use gpui_kit::{div, px, Context, IntoElement, ParentElement, Render, Styled, Window};
-use gpui_kit::component::Icon;
 use gpui_kit::assets::IconName;
+use gpui_kit::component::Icon;
+use gpui_kit::{div, px, Context, IntoElement, ParentElement, Render, Styled, Window};
 use zest_core::models::HttpMethod;
 
 #[derive(Clone, Debug)]

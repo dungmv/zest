@@ -1,10 +1,10 @@
 use crate::state::ModalState;
 use crate::theme::{theme, ThemePreference};
-use gpui_kit::{div, px, App, Entity, IntoElement, ParentElement, Styled};
+use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::Icon;
-use gpui_kit::assets::IconName;
+use gpui_kit::{div, px, App, Entity, IntoElement, ParentElement, Styled};
 
 pub fn render_general_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl IntoElement {
     let t = theme();

@@ -6,15 +6,15 @@ use super::diff_view::{render_diff_content, render_diff_view_toggle, DiffViewMod
 use crate::services::GitService;
 use crate::state::{GitState, WorkspaceDataState};
 use crate::theme::theme;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::input::{Input, InputState};
+use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
     RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_kit::component::input::{Input, InputState};
-use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::Icon;
-use gpui_kit::assets::IconName;
 use std::collections::HashSet;
 use zest_core::git::GitStatusResult;
 

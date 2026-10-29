@@ -1,10 +1,10 @@
 use super::{clamp_char_boundary_left, clamp_char_boundary_right};
 use crate::theme::theme;
-use gpui_kit::{Context, HighlightStyle, SharedString, Window};
 use gpui_kit::component::input::{
     EditorState as CodeEditorState, FoldRange, HighlightStyleResolver, InputEdit, InputHighlighter,
     Rope,
 };
+use gpui_kit::{Context, HighlightStyle, SharedString, Window};
 use std::ops::Range;
 
 pub struct XmlHighlighter {

@@ -7,18 +7,18 @@ use crate::components::env_autocomplete::{
 use crate::components::status_badge::MethodBadge;
 use crate::state::{EnvironmentState, ModalState, RequestSessionState};
 use crate::theme::theme;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::input::{Input, InputState};
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     deferred, div, px, App, AppContext as _, Entity, Focusable as _, FontWeight,
     InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
     StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::input::{Input, InputState};
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::Icon;
-use gpui_kit::assets::IconName;
 use zest_core::models::HttpMethod;
 
 #[allow(clippy::type_complexity)]
@@ -215,7 +215,10 @@ impl RenderOnce for RequestBar {
                             .rounded(px(4.))
                             .flex()
                             .items_center()
-                            .child(MethodBadge::new(method).font_weight(gpui_kit::FontWeight::SEMIBOLD))
+                            .child(
+                                MethodBadge::new(method)
+                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD),
+                            )
                             .dropdown_menu(move |menu, _window, _cx| {
                                 [
                                     HttpMethod::Get,

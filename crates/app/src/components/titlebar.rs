@@ -3,16 +3,16 @@ use crate::state::{
     SidebarState, WorkspaceDataState,
 };
 use crate::theme::{hex_to_hsla, theme};
+use gpui_kit::assets::IconName;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::{Icon, InteractiveElementExt as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, img, px, App, Context, Entity, Image, ImageFormat, InteractiveElement as _, IntoElement,
     MouseButton, ParentElement, Render, RenderOnce, StatefulInteractiveElement as _, Styled,
     Window, WindowControlArea,
 };
-use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_kit::component::{Icon, InteractiveElementExt as _};
-use gpui_kit::assets::IconName;
 use std::sync::{Arc, OnceLock};
 
 struct TitleBarState {

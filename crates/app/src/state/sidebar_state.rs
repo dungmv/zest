@@ -3,8 +3,8 @@ use crate::components::sidebar::{
     build_sidebar_req_items, flatten_sidebar_tree, FlatSidebarRow, SidebarCacheKey,
     SidebarFlatCache,
 };
-use gpui_kit::{px, AppContext, Context, Entity, Pixels, UniformListScrollHandle, Window};
 use gpui_kit::component::input::InputState;
+use gpui_kit::{px, AppContext, Context, Entity, Pixels, UniformListScrollHandle, Window};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::sync::Arc;

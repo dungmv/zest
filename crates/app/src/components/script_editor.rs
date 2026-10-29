@@ -2,17 +2,17 @@ use crate::components::env_autocomplete::{detect_unclosed_env_var, get_env_compl
 use crate::state::EnvironmentState;
 use crate::theme::theme;
 use anyhow::Result;
-use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{
-    div, px, App, Context, Entity, HighlightStyle, InteractiveElement as _, IntoElement,
-    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled, Task, Window,
-};
 use gpui_kit::component::input::{
     CompletionProvider, Editor, EditorState as CodeEditorState, FoldRange, HighlightStyleResolver,
     InputEdit, InputHighlighter, Rope,
 };
 use gpui_kit::component::scroll::{Scrollbar, ScrollbarMode};
 use gpui_kit::component::RopeExt;
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
+    div, px, App, Context, Entity, HighlightStyle, InteractiveElement as _, IntoElement,
+    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled, Task, Window,
+};
 use lsp_types::{
     CompletionContext, CompletionItem, CompletionItemKind, CompletionResponse, CompletionTextEdit,
     Documentation, Position, Range as LspRange, TextEdit,

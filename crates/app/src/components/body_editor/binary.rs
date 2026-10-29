@@ -1,12 +1,12 @@
 use crate::state::{RequestSessionState, WorkspaceDataState};
 use crate::theme::theme;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, AnyElement, Entity, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled,
 };
-use gpui_kit::component::Icon;
-use gpui_kit::assets::IconName;
 
 pub fn format_file_size(path_str: &str) -> String {
     if path_str.is_empty() {

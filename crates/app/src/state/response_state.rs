@@ -677,8 +677,8 @@ mod tests {
 
     #[test]
     fn test_toolbar_icons_exist_in_all_assets() {
-        use gpui_kit::AssetSource as _;
         use gpui_kit::assets::{AllAssets, IconName};
+        use gpui_kit::AssetSource as _;
 
         let assets = AllAssets;
         let icons = [
