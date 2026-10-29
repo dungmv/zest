@@ -136,7 +136,7 @@ Specialized runbooks and checklists are located in `.agents/skills/`:
 
 | Skill | Focus Area |
 | :--- | :--- |
-| [`gpui-architecture`](.agents/skills/gpui-architecture/SKILL.md) | Multi-entity state, typed `EventEmitter` + `cx.subscribe`, pure redraw `cx.observe`, component modularity |
+| [`gpui-architecture`](.agents/skills/gpui-architecture/SKILL.md) | `gpui-kit` unified dependency, multi-entity state, typed `EventEmitter` + `cx.subscribe`, pure redraw `cx.observe`, component modularity |
 | [`http-pipeline-engine`](.agents/skills/http-pipeline-engine/SKILL.md) | `HttpEngine` vs `Runner`, connection pooling, hierarchy merge (`HeaderMerger`), variable interpolation |
 | [`scripting-automation`](.agents/skills/scripting-automation/SKILL.md) | QuickJS (`rquickjs`) engine, `z.*` & `console.*` API, pre/post scripts, assertions, `FAKE_VAR_CATALOG` |
 | [`local-first-storage-vcs`](.agents/skills/local-first-storage-vcs/SKILL.md) | `.local/` & `collections/` YAML layout, `PersistenceCoordinator`, watcher reconciliation, `GitService` |

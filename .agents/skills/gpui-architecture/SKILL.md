@@ -2,16 +2,63 @@
 name: gpui-architecture
 description: >-
   Use this skill when developing, refactoring, or reviewing GPUI components, state management,
-  event-driven subscriptions, input handle synchronization, and view layouts in crates/app.
+  event-driven subscriptions, input handle synchronization, view layouts, and gpui-kit unified
+  dependency patterns in crates/app.
 ---
 
 # GPUI State & View Architecture Guide
 
-This skill guides the design, implementation, and maintenance of the GPUI-based UI layer in `crates/app`. It encapsulates the architecture forged through refactoring legacy God Objects (`WorkspaceState`, `AppView`) and eliminating observer polling anti-patterns.
+This skill guides the design, implementation, and maintenance of the GPUI-based UI layer in `crates/app`. It encapsulates the architecture forged through refactoring legacy God Objects (`WorkspaceState`, `AppView`), unifying dependencies via `gpui-kit`, and eliminating observer polling anti-patterns.
 
 ---
 
-## 1. Multi-Entity State Pattern
+## 1. Unified GPUI Ecosystem: `gpui-kit` (Single Dependency Rule)
+
+`crates/app` relies strictly on **`gpui-kit`** as the single unified crate for GPUI primitives, UI components, and bundled assets. Direct dependencies on `gpui`, `gpui-component`, or `gpui-kit-assets` in `crates/app/Cargo.toml` or application source code are **strictly forbidden**.
+
+### Why `gpui-kit`?
+- **Prevents Version Split & Resolution Conflicts**: Avoids duplicate or conflicting versions of layout engines (`taffy`), text shaping (`rustybuzz`), and GPUI runtime internals across separate `gpui` and `gpui-component` crates.
+- **Unified Feature Flags**: Bundles all necessary features (`component`, `assets`, `test-support`) under a single verified package version.
+
+### Cargo Dependency Setup:
+```toml
+# crates/app/Cargo.toml
+[dependencies]
+gpui-kit = { version = "0.8.1", features = ["component", "assets"] }
+
+[dev-dependencies]
+gpui-kit = { version = "0.8.1", features = ["test-support"] }
+```
+
+### Import Conventions & Namespace Mapping:
+Always import through `gpui_kit` namespaces:
+
+| Purpose | Replaces Legacy Import | ✅ Modern `gpui-kit` Import |
+| :--- | :--- | :--- |
+| **Core GPUI Primitives & Macro** | `use gpui::{div, px, App, Div, Entity, ...};` | `use gpui_kit::{div, px, App, Div, Entity, ParentElement, Styled, Window, ...};` |
+| **Actions Macro** | `use gpui::actions;` | `use gpui_kit::actions;` |
+| **Traits & Builders** | `use gpui::prelude::FluentBuilder;` | `use gpui_kit::prelude::FluentBuilder as _;`<br>`use gpui_kit::AppContext as _;` |
+| **UI Components** | `use gpui_component::button::Button;`<br>`use gpui_component::input::InputState;` | `use gpui_kit::component::button::{Button, ButtonVariants as _};`<br>`use gpui_kit::component::input::{EditorState, InputState, TextareaState};`<br>`use gpui_kit::component::resizable::{h_resizable, resizable_panel, v_resizable};` |
+| **Icons & Assets** | `use gpui_component::Icon;`<br>`use gpui_assets::IconName;` | `use gpui_kit::component::Icon;`<br>`use gpui_kit::assets::IconName;` |
+
+```rust
+// ❌ WRONG: Direct imports from gpui or gpui-component
+use gpui::{div, px, App, Entity, Window};
+use gpui_component::button::Button;
+use gpui_component::Icon;
+
+// ✅ CORRECT: Unified gpui-kit imports
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{div, px, App, Div, Entity, ParentElement, Styled, Window};
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::input::InputState;
+use gpui_kit::component::Icon;
+use gpui_kit::assets::IconName;
+```
+
+---
+
+## 2. Multi-Entity State Pattern
 
 `crates/app/src/state/` divides application state into 9 isolated GPUI `Entity<T>` states owned by `AppState` (`state/app_state.rs`), plus supporting event and persistence coordinators:
 
@@ -36,7 +83,7 @@ This skill guides the design, implementation, and maintenance of the GPUI-based 
 
 ---
 
-## 2. Dual-Channel Event & Redraw Architecture
+## 3. Dual-Channel Event & Redraw Architecture
 
 Zest strictly separates **view redraw notifications** from **cross-entity data synchronization**:
 
@@ -64,7 +111,7 @@ subscriptions.push(cx.observe(editor_state, |_, _, cx| cx.notify()));
 
 ---
 
-## 3. UI Component Patterns & Modularity
+## 4. UI Component Patterns & Modularity
 
 1. **Max File Size**: Target **< 650 LOC** per source file. When a component grows beyond this threshold, split it into a directory module (e.g., `components/sidebar/`, `components/git/`, `components/body_editor/`, `components/settings_modal/`, `components/env_autocomplete/`).
 2. **Environment Variable Input & Autocomplete**:
@@ -78,7 +125,7 @@ subscriptions.push(cx.observe(editor_state, |_, _, cx| cx.notify()));
 
 ---
 
-## 4. Verification & Testing
+## 5. Verification & Testing
 
 Whenever modifying GPUI components, state entities, or event handlers:
 ```bash
