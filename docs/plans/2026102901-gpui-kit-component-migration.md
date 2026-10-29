@@ -1,171 +1,189 @@
-# Plan: Migrate các custom UI component sang gpui-kit standard components
+# Kế hoạch & Nhật ký Migration sang gpui-kit Standard Components
 
-- **Ngày**: 2026-10-29
-- **Trạng thái**: Hoàn thành Giai đoạn 1, 2 & 3 (Phase 1, 2 & 3 Completed)
-- **Phạm vi**: 
-  - Giai đoạn 1: `crates/app/src/components/` (`git/common.rs`, `import_modal.rs`, `kv_table.rs`, `body_editor/multipart.rs`, `settings_modal/network_tab.rs`, `settings_modal/shortcuts_tab.rs`, `tabs_with_badge.rs`, `app/request_composer.rs`, `components/response_inspector.rs`)
-  - Giai đoạn 2: `crates/app/src/components/` (`git/common.rs`, `import_modal.rs`, `settings_modal/cookies_tab.rs`, `console_panel.rs`, `git/diff_view.rs`)
-  - Giai đoạn 3: `crates/app/src/components/` (`command_palette.rs`, `import_modal.rs`, `git/commit_modal.rs`, `git/branch_modal.rs`, `git/history_modal.rs`, `git/remotes_modal.rs`)
+- **Ngày cập nhật**: 2026-10-29
+- **Trạng thái**: Hoàn thành Giai đoạn 1, 2 & 3 — Lập kế hoạch chi tiết Giai đoạn 4, 5, 6 & 7
+- **Phiên bản thư viện**: `gpui-kit` (tích hợp `gpui-component 0.8.1` & `gpui-pre 0.3.10`)
 
 ---
 
-## 1. Goal
+## 1. Bảng đối chiếu toàn diện & Trạng thái Migration
 
-Thay thế các component UI tự viết lặp lại (reinventing the wheel) như `Checkbox`, `Switch`, `Kbd`, `TabItem` (Tabs) bằng các component chuẩn từ `gpui-kit` (`gpui_kit::component::*`). Mục tiêu:
-- Loại bỏ mã nguồn dư thừa, loại bỏ trùng lặp logic render và sự kiện.
-- Chuẩn hóa animation (spring), tương tác bàn phím (tab navigation, space/enter), accessibility (screen reader) và giao diện đồng nhất với theme.
-- Giữ 100% độ ổn định và tính tương thích của ứng dụng, vượt qua toàn bộ test suite và `clippy -D warnings`.
-
----
-
-## 2. Context
-
-Trong quá trình phát triển ban đầu của `zest`, nhiều UI element được tạo thủ công bằng các khối `div()` với inline styling:
-1. **`Checkbox`**: Được triển khai độc lập ở 4 vị trí:
-   - `crates/app/src/components/git/common.rs` (`render_checkbox`): vẽ div với ký tự `"✓"` hoặc `"−"`.
-   - `crates/app/src/components/import_modal.rs` (`render_checkbox`): vẽ div với ký tự `"✓"`.
-   - `crates/app/src/components/kv_table.rs`: vẽ div checkbox để toggle enable/disable row.
-   - `crates/app/src/components/body_editor/multipart.rs`: vẽ div checkbox để toggle multipart form field.
-2. **`Switch`**:
-   - `crates/app/src/components/settings_modal/network_tab.rs`: tự vẽ các nút toggle cho `Follow HTTP Redirects` và `Validate TLS Certificates` bằng `div()` đổi background khi bật/tắt.
-3. **`Kbd`**:
-   - `crates/app/src/components/settings_modal/shortcuts_tab.rs`: tự vẽ khung chữ nhật phím tắt với monospace font.
-   - `crates/app/src/components/command_palette.rs`: tự vẽ shortcut hint badge.
-4. **`TabItem` (Tabs)**:
-   - `crates/app/src/components/tabs_with_badge.rs`: tự viết `TabItem` với `border_b_2` cho active tab.
-
-Trong khi đó, `gpui-kit` (phiên bản `0.8.1`, tích hợp sẵn `gpui-component`) cung cấp đầy đủ các component đã được tối ưu hóa, hỗ trợ tương tác bàn phím và accessibility chuẩn macOS:
-- `gpui_kit::component::checkbox::Checkbox`
-- `gpui_kit::component::switch::Switch`
-- `gpui_kit::component::kbd::Kbd`
-- `gpui_kit::component::tab::{Tab, TabBar, TabVariant}`
+| STT | UI Component | Trạng thái | Vị trí hiện tại trong Zest | Component tương đương trong `gpui-kit` | Ghi chú & Tình trạng |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 1 | **Checkbox** | **ĐÃ HOÀN THÀNH** | `git/common.rs`, `import_modal.rs`, `kv_table.rs`, `multipart.rs` | `gpui_kit::component::checkbox::Checkbox` | Hỗ trợ 3 trạng thái (`checked`, `unchecked`, `indeterminate`), click/key event chuẩn macOS. |
+| 2 | **Switch (Toggle)** | **ĐÃ HOÀN THÀNH** | `settings_modal/network_tab.rs` | `gpui_kit::component::switch::Switch` | Spring animation chuẩn macOS, xử lý checked/disabled tự động. |
+| 3 | **Kbd (Phím tắt)** | **ĐÃ HOÀN THÀNH** | `settings_modal/shortcuts_tab.rs`, `command_palette.rs` | `gpui_kit::component::kbd::Kbd` | Phân giải tự động phím tắt macOS (⌘, ⌥, ⇧, ↵) và Windows (Ctrl, Alt). |
+| 4 | **Tab & TabBar** | **ĐÃ HOÀN THÀNH** | `request_composer.rs`, `response_inspector.rs` | `gpui_kit::component::tab::{Tab, TabBar}` | TabBar underline variant, sliding indicator bounds, padding và gap đồng bộ. |
+| 5 | **Alert (Banner)** | **ĐÃ HOÀN THÀNH** | `git/common.rs`, `import_modal.rs` | `gpui_kit::component::alert::Alert` | Banner cảnh báo trạng thái, hỗ trợ error/warning/info và nút close tự động. |
+| 6 | **Empty States** | **ĐÃ HOÀN THÀNH** | `git/common.rs`, `cookies_tab.rs`, `console_panel.rs`, `diff_view.rs`, `body_editor/mod.rs` | `gpui_kit::component::empty::Empty` | Chuẩn hóa header, icon, title, description và content actions. |
+| 7 | **Button Actions** | **ĐÃ HOÀN THÀNH** | `kv_table.rs`, `body_editor/mod.rs`, `response_inspector.rs`, `import_modal.rs`, `git/*_modal.rs` | `gpui_kit::component::button::Button` | Button `primary`, `ghost`, `small`, `xsmall`, tích hợp `loading`, icon và tooltip. |
+| 8 | **Delete Button** | **ĐÃ HOÀN THÀNH** | `kv_table.rs`, `body_editor/multipart.rs` | Container tương tác `size(px(24.))` | Kích thước chuẩn `sm` 24x24px, icon 14px, ghost style `t.text_muted`, hover chuyển sang đỏ mềm dịu `t.json_null` (`#f87171` / `#e11d48`) không gây chói mắt và không gây panic. |
+| 9 | **Line Wrap Toggle** | **ĐÃ HOÀN THÀNH** | `response_inspector.rs` | `Button::new("btn-toggle-wrap")` | Disabled là ghost button thông thường, enabled nổi bật với `ButtonVariant::Primary` (cyan/blue). |
+| 10 | **Dialog / Modals** | **CÒN THIẾU** | `settings_modal/`, `env_modal.rs`, `import_modal.rs`, `scope_settings_modal.rs`, `git/*_modal.rs` | `gpui_kit::component::dialog::{Dialog, DialogHeader, DialogTitle, DialogContent, DialogFooter}` | Hiện tại đang tự vẽ backdrop thủ công `div().absolute().inset_0().bg(rgba(0x00000088))`. |
+| 11 | **Select / Dropdown** | **CÒN THIẾU** | `request_bar.rs` (Method), `titlebar.rs` (Env), `auth_tab.rs` (Auth Type), `body_editor/mod.rs` (Body Type) | `gpui_kit::component::select::Select` & `menu::DropdownMenu` | Hiện tự vẽ menu floating hoặc popup menu ad-hoc. |
+| 12 | **Tag / Badge** | **CÒN THIẾU** | `status_badge.rs` (`MethodBadge`, `StatusCodeBadge`), `tabs_with_badge.rs` | `gpui_kit::component::tag::Tag` & `badge::Badge` | Hiện tự vẽ bằng `div()` bo tròn thủ công. |
+| 13 | **Toast / Notification** | **CÒN THIẾU** | `components/toast.rs` | `gpui_kit::component::notification::*` | Hiện tự render danh sách toast thủ công ở góc màn hình. |
+| 14 | **Separator / Divider** | **CÒN THIẾU** | `scope_settings_modal.rs`, `script_editor.rs`, sidebar dividers | `gpui_kit::component::separator::Separator` | Đang dùng các khối `div().h(px(1.)).bg(t.border)`. |
+| 15 | **Tooltip Unification** | **CÒN THIẾU** | Một số nút icon trong sidebar, request item, query params | `gpui_kit::component::tooltip::Tooltip` | Một số vị trí còn dùng text title hoặc hover thủ công chưa gắn Tooltip đồng nhất. |
+| 16 | **Git Diff View** | **CÒN THIẾU** | `git/diff_view.rs` | `gpui_kit::component::diff::Diff` | Đang tự phân tích diff hunks thủ công bằng regex và tự render table dòng code. |
 
 ---
 
-## 3. Architectural Decisions
+## 2. Phần 1: Chi tiết những gì ĐÃ LÀM ĐƯỢC
 
-1. **Phân kỳ thực thi an toàn (Phased Rollout)**:
-   - **Giai đoạn 1 (Đợt này - Quick Wins & High ROI)**:
-     - Migrate `render_checkbox` trong `git/common.rs` và `import_modal.rs`.
-     - Migrate Checkbox trong `kv_table.rs` và `body_editor/multipart.rs`.
-     - Migrate Switch trong `settings_modal/network_tab.rs`.
-     - Migrate Kbd trong `settings_modal/shortcuts_tab.rs`.
-     - Chuẩn hóa `TabItem` trong `tabs_with_badge.rs` với styling và semantic của `gpui-kit` Tab.
-   - **Giai đoạn tiếp theo (Tách riêng để giảm rủi ro)**:
-     - Overlays & Dialogs (`SettingsModal`, `EnvModal`, `ImportModal` sang `gpui_kit::component::dialog::Dialog`).
-     - Command Palette (`gpui_kit::component::command::Command`).
-     - Git Diff View (`gpui_kit::component::diff::Diff`).
+### 2.1 Giai đoạn 1: Form Controls & Tab Navigation (Hoàn thành)
+- **`Checkbox`**:
+  - `crates/app/src/components/git/common.rs`: Delegate `render_checkbox` sang `gpui_kit::component::checkbox::Checkbox`, hỗ trợ 3 trạng thái (`checked`, `unchecked`, `indeterminate`/`partial`).
+  - `crates/app/src/components/import_modal.rs`: Checkbox chọn file và import environment.
+  - `crates/app/src/components/kv_table.rs`: Checkbox kích hoạt/vô hiệu hóa từng dòng header / query param / form URL.
+  - `crates/app/src/components/body_editor/multipart.rs`: Checkbox bật/tắt từng field multipart form.
+- **`Switch`**:
+  - `crates/app/src/components/settings_modal/network_tab.rs`: Thay thế toàn bộ toggle div thủ công bằng `Switch::new("switch-follow-redirects")` và `Switch::new("switch-validate-tls")`.
+- **`Kbd`**:
+  - `crates/app/src/components/settings_modal/shortcuts_tab.rs`: Sử dụng `Kbd::new(Keystroke::parse(...))` cho danh sách phím tắt hệ thống.
+- **`TabBar` & `Tab`**:
+  - `crates/app/src/app/request_composer.rs`: Thanh tab `Body`, `Params`, `Headers`, `Auth`, `Pre-request`, `Post-response` chuyển sang `TabBar::new(...).underline()`.
+  - `crates/app/src/components/response_inspector.rs`: Thanh tab `Response`, `Request Sent`, `Headers`, `Cookies`, `Console` chuyển sang `TabBar::new(...).underline()`.
+  - Tự động hóa khoảng cách (`gap: 16px`), sliding indicator animation và border đáy.
 
-2. **Duy trì API Interface & Callback Signature**:
-   - `render_checkbox` giữ signature tiện dụng nhưng phần ruột delegate sang `gpui_kit::component::checkbox::Checkbox`.
-   - Các handler callback `on_click` / `on_change` cập nhật state đúng mô hình single-directional data flow của `zest`.
-   - Đối với switch, chuyển callback toggle sang `on_click` của `Switch`.
+### 2.2 Giai đoạn 2: Feedback, Empty States & Row Actions (Hoàn thành)
+- **`Alert`**:
+  - `crates/app/src/components/git/common.rs`: `render_error_banner` chuyển sang `gpui_kit::component::alert::Alert::error(...).banner()`, tự động áp dụng cho 4 modal: `branch_modal.rs`, `commit_modal.rs`, `history_modal.rs`, `remotes_modal.rs`.
+  - `crates/app/src/components/import_modal.rs`: Lỗi parsing spec chuyển sang `Alert::error(...)`.
+- **`Empty`**:
+  - `crates/app/src/components/git/common.rs`: `render_not_a_repo_view` chuyển sang `Empty::new().header(...)`.
+  - `crates/app/src/components/settings_modal/cookies_tab.rs`: Empty state không có cookie.
+  - `crates/app/src/components/console_panel.rs`: Empty state console log.
+  - `crates/app/src/components/git/diff_view.rs`: Empty state khi chưa chọn file hoặc không có diff.
+  - `crates/app/src/components/body_editor/mod.rs`: Empty state khi chọn `RequestBody::None`.
+- **`Button` Actions**:
+  - `Format JSON`, `Format XML`, `Add Part`, `Add Row` chuyển sang `Button::new(...)`.
+  - **Nút Delete**: Kích thước chuẩn `sm` (24x24px, icon 14px), style ghost với nền trong suốt và màu chữ/icon `t.text_muted`. Khi hover chuyển sang màu đỏ nhạt mềm dịu (`t.json_null` - coral/rose red `#f87171` / `#e11d48`, tránh màu đỏ rực) kèm hiệu ứng nền `t.json_null.opacity(0.12)` và `Tooltip::new("Delete row")`. Đã giải quyết triệt để lỗi runtime panic `hover style already set`.
+  - **Nút Line Wrap**: Khi disable hiển thị dưới dạng ghost button tiêu chuẩn (`btn.ghost()`), khi enable hiển thị nổi bật với màu primary (`btn.primary()`), trực quan rõ ràng 100% trên cả Dark mode và Light mode.
 
-3. **Bảo tồn Theme & Visual Styling**:
-   - Tận dụng `cx.theme()` tự động từ `gpui-kit` kết hợp với token màu sắc hiện tại của `theme()` trong `zest`.
-
----
-
-## 4. Step-by-Step Implementation Tasks
-
-### Nhiệm vụ 1: Migrate Checkbox
-- **`crates/app/src/components/git/common.rs`**:
-  - Cập nhật `render_checkbox`: Sử dụng `gpui_kit::component::checkbox::Checkbox`.
-  - Hỗ trợ cả trạng thái `checked`, `partial` (indeterminate) và callback click.
-- **`crates/app/src/components/import_modal.rs`**:
-  - Cập nhật `render_checkbox`: Dùng `Checkbox::new(id).checked(checked).label(label).on_click(...)`.
-- **`crates/app/src/components/kv_table.rs`**:
-  - Thay thế khối div checkbox thủ công bằng `Checkbox::new(...).checked(enabled).on_click(...)`.
-- **`crates/app/src/components/body_editor/multipart.rs`**:
-  - Thay thế khối div checkbox thủ công bằng `Checkbox::new(...).checked(enabled).on_click(...)`.
-
-### Nhiệm vụ 2: Migrate Switch (Toggle)
-- **`crates/app/src/components/settings_modal/network_tab.rs`**:
-  - Thay thế `#toggle-follow-redirects` bằng `Switch::new("switch-follow-redirects").checked(cur_follow).on_click(...)`.
-  - Thay thế `#toggle-validate-tls` bằng `Switch::new("switch-validate-tls").checked(cur_tls).on_click(...)`.
-
-### Nhiệm vụ 3: Migrate Kbd (Keyboard Shortcut)
-- **`crates/app/src/components/settings_modal/shortcuts_tab.rs`**:
-  - Import `gpui_kit::component::kbd::Kbd`.
-  - Thay thế div badge thủ công bằng `Kbd::new(Keystroke::parse(...))` hoặc hiển thị chuẩn.
-
-### Nhiệm vụ 4: Combo TabBar & Tab
-- Chuyển đổi thanh tab của Request Composer (`request_composer.rs`) và Response Inspector (`response_inspector.rs`) sang `TabBar::new(...).underline()` + `Tab::new()`.
-- Tự động hóa khoảng cách (`gap: 16px`), sliding indicator animation và border đáy.
-- Hoàn thành và vượt qua toàn bộ test suite.
-
----
-
-## 4.2 Giai đoạn 2: Feedback (Alert) & Empty States (Empty)
-
-### Nhiệm vụ 5: Migrate Alert (Error Banners & Parse Errors)
-- **`crates/app/src/components/git/common.rs`**:
-  - Thay thế `render_error_banner` bằng `gpui_kit::component::alert::Alert::error("git-error-banner", format!("Git: {}", err.trim())).banner().on_close(...)`.
-  - Tự động nâng cấp giao diện thông báo lỗi cho 4 git modal: `branch_modal.rs`, `commit_modal.rs`, `history_modal.rs`, `remotes_modal.rs`.
-- **`crates/app/src/components/import_modal.rs`**:
-  - Thay thế khối div hiển thị lỗi `Parsing Error` bằng `Alert::error("import-parse-error", format!("Parsing Error: {}", err))`.
-
-### Nhiệm vụ 6: Migrate Empty States & Actions
-- **`crates/app/src/components/git/common.rs` (`render_not_a_repo_view`)**:
-  - Chuyển sang `Empty::new().header(...).content(...)` với `Button::new("btn-git-init").primary().loading(is_loading)`.
-- **`crates/app/src/components/settings_modal/cookies_tab.rs`**:
-  - Thay thế khối div empty state bằng `Empty::new().header(...)` với icon `Cookie`, tiêu đề và mô tả giải thích.
-- **`crates/app/src/components/console_panel.rs`**:
-  - Thay thế `render_empty_state` bằng `Empty::new().header(...).content(...)` chứa code snippet mẫu.
-- **`crates/app/src/components/git/diff_view.rs`**:
-  - Thay thế các empty div hiển thị khi chưa chọn file hoặc file không có thay đổi bằng `Empty::new().header(...)`.
-- **`crates/app/src/components/body_editor/mod.rs`**:
-  - Thay thế khối div empty state khi `RequestBody::None` bằng `Empty::new().header(...)` với icon `FileText`.
-
-### Nhiệm vụ 7: Migrate Action Buttons (Button)
-- **`crates/app/src/components/kv_table.rs`**:
-  - Thay thế nút `+ Add Row` bằng `Button::new(...).small().icon(IconName::Plus).label("Add Row")`.
-  - Nút xóa hàng giữ nguyên kích thước chuẩn `sm` (24x24px, icon 14px), style là ghost với nền trong suốt và màu chữ/icon `t.text_muted`. Khi hover chuyển sang màu đỏ nhạt mềm dịu (`t.json_null` - coral/rose red, tránh màu đỏ rực) kèm hiệu ứng nền `t.json_null.opacity(0.12)` và `Tooltip::new("Delete row")`.
-- **`crates/app/src/components/body_editor/mod.rs`**:
-  - Chuyển `btn-format-json-body`, `btn-format-xml-body`, `btn-add-multipart-part`, `btn-add-form-row` sang `Button::new(...).ghost().xsmall()`.
-- **`crates/app/src/components/body_editor/multipart.rs`**:
-  - Nút xóa hàng multipart đồng bộ với KV Table: kích thước chuẩn `sm` (24x24px, icon 14px), style ghost bình thường màu `t.text_muted`, hover chuyển sang đỏ mềm dịu `t.json_null` với tooltip "Delete field".
-- **`crates/app/src/components/response_inspector.rs`**:
-  - Nút Line Wrap (`btn-toggle-wrap`): Khi disable hiển thị dưới dạng ghost button tiêu chuẩn (`btn.ghost()`); khi enable hiển thị nổi bật với màu primary (`btn.primary()`). Hiển thị rõ ràng 100% trên cả Dark và Light mode.
-
----
-
-## 4.3 Giai đoạn 3: Command Palette & Modals Buttons (Đã hoàn thành)
-
-### Nhiệm vụ 8: Chuẩn hóa Kbd trong Command Palette
-- **`crates/app/src/components/command_palette.rs`**:
-  - Thay thế các chuỗi shortcut thô (`Ctrl+Enter`, `Ctrl+,`, `Ctrl+Shift+G`, `Ctrl+I`) bằng `Kbd::new(Keystroke::parse(...))` chuẩn hóa glyph nền tảng macOS / Windows.
-  - Nút thoát ESC dùng `Kbd::new` thay vì nhãn text thô.
+### 2.3 Giai đoạn 3: Command Palette & Modals Buttons (Hoàn thành)
+- **`Kbd` trong Command Palette**:
+  - `crates/app/src/components/command_palette.rs`: Chuẩn hóa phím tắt `cmd-enter`, `cmd-,`, `cmd-shift-g`, `cmd-i`, `escape` qua helper `render_kbd_hint`.
+  - Nút ESC đóng palette được bọc trong component `Kbd`.
   - Thay thế emoji `"📜"` bằng icon `IconName::GitCommitHorizontal`.
-
-### Nhiệm vụ 9: Migrate Action & Close Buttons trong Modals
-- **`crates/app/src/components/import_modal.rs`**:
-  - `btn-close-import-modal`: Dùng `Button::new(...).ghost().xsmall().icon(IconName::Close)`.
-  - `btn-cancel-import`: Dùng `Button::new(...).ghost().small().label("Cancel")`.
-  - `btn-execute-import`: Dùng `Button::new(...).primary().small().disabled(!is_valid).label("Import Now")`.
-- **`crates/app/src/components/git/commit_modal.rs`**:
-  - `btn-commit-action`: Dùng `Button::new(...).primary().small().disabled(!can_commit || is_loading).loading(is_loading)`. Tận dụng spinner loading native của `Button`.
-  - `btn-git-commit-close`: Dùng `Button::new(...).ghost().xsmall().icon(IconName::Close)`.
-- **`crates/app/src/components/git/branch_modal.rs`**:
-  - `btn-cancel-create-branch` & `btn-confirm-create-branch`: Chuyển sang `Button` với loading indicator.
-  - `btn-git-branch-close`: Dùng `Button::new(...).ghost().xsmall().icon(IconName::Close)`.
-- **`crates/app/src/components/git/history_modal.rs`**:
-  - `btn-git-history-close`: Dùng `Button::new(...).ghost().xsmall().icon(IconName::Close)`.
-- **`crates/app/src/components/git/remotes_modal.rs`**:
-  - `btn-add-remote-action`: Dùng `Button::new(...).primary().small().loading(is_loading)`.
-  - `btn-git-remotes-close`: Dùng `Button::new(...).ghost().xsmall().icon(IconName::Close)`.
+- **Buttons trong các Modal**:
+  - `crates/app/src/components/import_modal.rs`: `btn-close-import-modal`, `btn-cancel-import`, `btn-execute-import` chuyển sang `Button`.
+  - `crates/app/src/components/git/commit_modal.rs`: `btn-commit-action` chuyển sang `Button::primary()` tích hợp spinner `loading(is_loading)` bản địa; `btn-git-commit-close` chuyển sang `Button::ghost()`.
+  - `crates/app/src/components/git/branch_modal.rs`: `btn-cancel-create-branch`, `btn-confirm-create-branch`, `btn-git-branch-close` chuyển sang `Button`.
+  - `crates/app/src/components/git/history_modal.rs`: `btn-git-history-close` chuyển sang `Button`.
+  - `crates/app/src/components/git/remotes_modal.rs`: `btn-add-remote-action`, `btn-git-remotes-close` chuyển sang `Button`.
 
 ---
 
-## 5. Risk Mitigation
+## 3. Phần 2: Chi tiết những gì CÒN THIẾU & CẦN LÀM TIẾP
 
-- **Stop Propagation trên Checkbox**: Checkbox trong hàng bảng (`kv_table`, `multipart`) cần ngăn việc click kích hoạt selection của row cha nếu có. `Checkbox` của `gpui-kit` xử lý click event riêng, nhưng cần kiểm tra đảm bảo không kích hoạt select nhầm.
-- **Controlled vs Uncontrolled**: Toàn bộ UI controls trong `zest` tuân thủ controlled state (trạng thái đọc từ GPUI State entity, callback mutate state và emit/notify để re-render). `Checkbox::on_click` và `Switch::on_click` nhận giá trị mới từ tương tác và cập nhật state chính xác.
+Dưới đây là danh sách toàn bộ các component và màn hình hiện còn đang tự vẽ thủ công (ad-hoc), cần được tiếp tục migrate trong các giai đoạn tới:
+
+### 3.1 Nhóm 1: Dialog & Modal Overlays (`gpui_kit::component::dialog::*`)
+- **Thực trạng**: Hiện tại 5 màn hình modal trong Zest đang tự vẽ container overlay:
+  ```rust
+  div()
+      .id("modal-overlay")
+      .absolute()
+      .inset_0()
+      .bg(gpui_kit::rgba(0x00000088))
+      .flex()
+      .items_center()
+      .justify_center()
+  ```
+  Các modal bao gồm:
+  1. `crates/app/src/components/settings_modal/mod.rs` (Settings & Preferences)
+  2. `crates/app/src/components/env_modal.rs` (Manage Environments & Globals)
+  3. `crates/app/src/components/import_modal.rs` (Import Collection / OpenAPI)
+  4. `crates/app/src/components/scope_settings_modal.rs` (Folder & Collection Scope Settings)
+  5. `crates/app/src/components/git/*_modal.rs` (Git Commit, Branch, History, Remotes)
+- **Mục tiêu thay thế**: Chuyển sang sử dụng `gpui_kit::component::dialog::Dialog`:
+  - Backdrop tối mờ tự động, hiệu ứng mở mượt mà (`DialogEntrance`).
+  - Hỗ trợ semantic layout chuẩn: `DialogHeader`, `DialogTitle`, `DialogDescription`, `DialogContent`, `DialogFooter`.
+  - Tự động xử lý phím `Escape` để đóng modal mà không cần gắn event listener riêng rẽ.
+
+### 3.2 Nhóm 2: Select & DropdownMenu (`gpui_kit::component::select::*` & `menu::DropdownMenu`)
+- **Thực trạng**: Nhiều vị trí chọn giá trị từ danh sách đang dùng popover hoặc floating div thủ công:
+  1. **Method Selector** (`crates/app/src/components/request_bar.rs`): Nút chọn HTTP Method (`GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `HEAD`, `OPTIONS`) đang dùng dropdown menu tự quản lý state mở/đóng.
+  2. **Environment Selector** (`crates/app/src/components/titlebar.rs`): Dropdown chuyển đổi môi trường đang dùng popup menu thủ công.
+  3. **Auth Type Selector** (`crates/app/src/app/auth_tab.rs`): Nút chọn kiểu xác thực (`Inherit`, `No Auth`, `Bearer Token`, `Basic Auth`, `API Key`).
+  4. **Body Type Selector** (`crates/app/src/components/body_editor/mod.rs`): Chọn định dạng Body (`None`, `JSON`, `XML`, `Form URL-Encoded`, `Multipart Form`, `Raw Text`, `Binary File`).
+- **Mục tiêu thay thế**:
+  - Chuẩn hóa sang `gpui_kit::component::select::Select` hoặc `gpui_kit::component::menu::DropdownMenu`.
+  - Có hỗ trợ keyboard navigation (phím mũi tên lên/xuống, Enter để chọn).
+
+### 3.3 Nhóm 3: Tag & Status Badges (`gpui_kit::component::tag::Tag`, `badge::Badge`)
+- **Thực trạng**:
+  1. `crates/app/src/components/status_badge.rs`: `MethodBadge` và `StatusCodeBadge` hiện đang tự vẽ bằng `div()` thủ công với màu sắc tương ứng (`t.method_color(method)`, `t.status_color(status)`).
+  2. `crates/app/src/components/tabs_with_badge.rs`: `render_tab_badge` vẽ số lượng (`count`) bằng div tròn nhỏ màu xám/xanh.
+- **Mục tiêu thay thế**:
+  - `MethodBadge` & `StatusCodeBadge`: Chuyển sang `gpui_kit::component::tag::Tag` với `TagVariant::Custom { color, foreground, border }`.
+  - `render_tab_badge`: Sử dụng `gpui_kit::component::badge::Badge` với variant đếm số lượng bản địa.
+
+### 3.4 Nhóm 4: Toast & System Notifications (`gpui_kit::component::notification::*`)
+- **Thực trạng**: `crates/app/src/components/toast.rs` hiện tự quản lý stack mảng `toasts` và tự render các thẻ thông báo nổi ở góc dưới.
+- **Mục tiêu thay thế**:
+  - Tích hợp với `gpui_kit::component::notification::*`.
+  - Giữ nguyên `ToastState` entity để duy trì luồng sự kiện không phá vỡ API hiện có.
+
+### 3.5 Nhóm 5: Separator / Divider Lines (`gpui_kit::component::separator::Separator`)
+- **Thực trạng**: Khá nhiều đường kẻ ngăn cách giữa các cột hoặc các phần trong modal/toolbar đang dùng `div().h(px(1.)).bg(t.border)` hoặc `div().w(px(1.)).bg(t.border)`:
+  - `crates/app/src/components/scope_settings_modal.rs`
+  - `crates/app/src/components/script_editor.rs`
+  - Thanh phân cách toolbar và panels.
+- **Mục tiêu thay thế**: Dùng `Separator::new().horizontal()` / `Separator::new().vertical()`.
+
+### 3.6 Nhóm 6: Tooltip Toàn diện (`gpui_kit::component::tooltip::Tooltip`)
+- **Thực trạng**: Vẫn còn một số nút icon nhỏ (như pin request, copy path, duplicate item trong sidebar context menu, icon trong response viewer) chưa có tooltip hoặc chỉ dùng nhãn hover thô.
+- **Mục tiêu thay thế**: Chuẩn hóa 100% các action icon đều có `.tooltip(...)` sử dụng `Tooltip::new(...)`.
+
+### 3.7 Nhóm 7: Git Diff View Component (`gpui_kit::component::diff::Diff`)
+- **Thực trạng**: `crates/app/src/components/git/diff_view.rs` (~480 LOC) tự parse diff text, hunks, dòng thêm/bớt và tự render giao diện split/unified.
+- **Mục tiêu thay thế**: Nghiên cứu khả năng tích hợp `gpui_kit::component::diff::Diff` của `gpui-component` để tận dụng GPU syntax highlighting và side-by-side view siêu mượt mà.
 
 ---
 
-## 6. Verification Steps
+## 4. Phần 3: Lộ trình phân kỳ triển khai tiếp theo (Next Phases Roadmap)
 
-1. `cargo test` — đảm bảo toàn bộ unit test và integration test pass 100%.
-2. `cargo clippy --all-targets -- -D warnings` — đảm bảo 0 warning.
-3. Kiểm tra trực quan các màn hình: Settings Modal (Network tab toggle switch, Shortcuts tab kbd), Git commit checkbox, KV table checkbox, Multipart form checkbox.
+```
+[Hoàn thành] Giai đoạn 1: Form Controls & Tabs (Checkbox, Switch, Kbd, TabBar+Tab)
+       ↓
+[Hoàn thành] Giai đoạn 2: Feedback & Empty States (Alert, Empty, Row Actions, Delete & Wrap buttons)
+       ↓
+[Hoàn thành] Giai đoạn 3: Command Palette & Modal Buttons (Kbd hints, Dialog Buttons)
+       ↓
+[Tiếp theo] Giai đoạn 4: Select & DropdownMenu (Method, Environment, Auth & Body Type selectors)
+       ↓
+[Tiếp theo] Giai đoạn 5: Tag & Badge Component (MethodBadge, StatusCodeBadge, Tab Counter Badges)
+       ↓
+[Tiếp theo] Giai đoạn 6: Dialog & Overlay System (Settings, Environment, Scope Settings Modals)
+       ↓
+[Tiếp theo] Giai đoạn 7: Toasts, Separators & GPU Diff View (Hoàn tất toàn bộ hệ thống)
+```
+
+### Kế hoạch chi tiết Giai đoạn 4: Select & Dropdown Menu
+1. **Nhiệm vụ 4.1**: Chuẩn hóa HTTP Method Dropdown trong `request_bar.rs` bằng `gpui_kit::component::select::Select` hoặc `menu::DropdownMenu`.
+2. **Nhiệm vụ 4.2**: Chuẩn hóa Environment Dropdown trong `titlebar.rs`.
+3. **Nhiệm vụ 4.3**: Chuẩn hóa Auth Type Selector trong `app/auth_tab.rs`.
+4. **Nhiệm vụ 4.4**: Chuẩn hóa Body Type Selector trong `body_editor/mod.rs`.
+
+### Kế hoạch chi tiết Giai đoạn 5: Tag & Badge Component
+1. **Nhiệm vụ 5.1**: Chuyển `MethodBadge` trong `status_badge.rs` sang `Tag::new(...)`.
+2. **Nhiệm vụ 5.2**: Chuyển `StatusCodeBadge` trong `status_badge.rs` sang `Tag::new(...)`.
+3. **Nhiệm vụ 5.3**: Chuyển `render_tab_badge` trong `tabs_with_badge.rs` sang `Badge::new()`.
+
+### Kế hoạch chi tiết Giai đoạn 6: Dialog & Modal Overlays
+1. **Nhiệm vụ 6.1**: Chuyển đổi `SettingsModal` sang `Dialog`.
+2. **Nhiệm vụ 6.2**: Chuyển đổi `EnvModal` sang `Dialog`.
+3. **Nhiệm vụ 6.3**: Chuyển đổi `ScopeSettingsModal` sang `Dialog`.
+4. **Nhiệm vụ 6.4**: Chuyển đổi các Git modal (`commit`, `branch`, `history`, `remotes`) sang `Dialog`.
+
+---
+
+## 5. Quy tắc Kiểm định & Tiêu chí Chất lượng (Verification Checklist)
+
+Mọi thay đổi trong quá trình migration phải đáp ứng nghiêm ngặt 3 tiêu chuẩn bắt buộc:
+1. **Định dạng code**: `cargo fmt --check` không có khác biệt.
+2. **Clippy tĩnh**: `cargo clippy --all-targets -- -D warnings` đạt **0 cảnh báo**.
+3. **Độ ổn định & Kiểm thử**: `cargo test` pass **100% test cases** (188/188 tests).
+4. **Tránh Panic Hover**: Không bao giờ gọi trực tiếp `.hover(...)` trên `Button` của `gpui-kit` vì `Button::render` đã tự đăng ký hover nội bộ.
