@@ -86,9 +86,11 @@ Trong khi đó, `gpui-kit` (phiên bản `0.8.1`, tích hợp sẵn `gpui-compon
   - Import `gpui_kit::component::kbd::Kbd`.
   - Thay thế div badge thủ công bằng `Kbd::new(Keystroke::parse(...))` hoặc hiển thị chuẩn.
 
-### Nhiệm vụ 4: Chuẩn hóa Tabs
-- **`crates/app/src/components/tabs_with_badge.rs`**:
-  - Refactor `TabItem` để dùng token styling và cấu trúc chuẩn của `gpui-kit`.
+### Nhiệm vụ 4: Tabs & Spacing Alignment
+- **Phát hiện & Quyết định thiết kế**:
+  - `gpui_kit::component::tab::Tab` với biến thể `TabVariant::Underline` trong `gpui-component` được thiết kế có `padding_x = 0` và chiều cao cố định 26px vì nó phụ thuộc vào container `TabBar` (với sliding indicator animation).
+  - Khi render standalone trong thanh tab 34px của Request Composer và Response Inspector, `Tab` bị mất padding ngang và đường underline bị lơ lửng giữa chừng.
+  - Do đó, `TabItem` được chuẩn hóa với chiều cao `h(px(34.))`, khoảng đệm ngang `px(px(10.))`, khoảng cách nội bộ `gap(px(6.))` cho badge đếm và underline bám sát viền đáy `border_b_2()`, giải quyết triệt để tình trạng dính chữ.
 
 ---
 

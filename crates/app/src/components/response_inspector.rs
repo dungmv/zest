@@ -1,4 +1,4 @@
-use crate::components::tabs_with_badge::TabItem;
+use crate::components::tabs_with_badge::render_tab_badge;
 use crate::state::{
     RequestSessionState, ResponseState, ResponseTabKind, ResponseViewMode, WorkspaceState,
 };
@@ -9,6 +9,7 @@ use gpui_kit::component::input::{Editor, EditorState as CodeEditorState};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::spinner::Spinner;
+use gpui_kit::component::tab::{Tab, TabBar};
 use gpui_kit::component::text::TextView;
 use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -328,85 +329,72 @@ impl RenderOnce for ResponseInspector {
                     this
                 }
             })
-            // Response Tabs Bar: Response, Request Sent, Headers [N], Cookies [N]
-            .child(
-                div()
-                    .h(px(34.))
+            // Response Tabs Bar with TabBar: Response, Request Sent, Headers [N], Cookies [N], Console [N]
+            .child({
+                let active_idx = match active_tab {
+                    ResponseTabKind::Response => 0,
+                    ResponseTabKind::Request => 1,
+                    ResponseTabKind::Headers => 2,
+                    ResponseTabKind::Cookies => 3,
+                    ResponseTabKind::Console => 4,
+                };
+                let header_count = if is_sending_this_request {
+                    "-".to_string()
+                } else {
+                    current_resp
+                        .as_ref()
+                        .map(|r| format!("{}", r.headers.len()))
+                        .unwrap_or_else(|| "0".to_string())
+                };
+                let cookie_count = if is_sending_this_request {
+                    "-".to_string()
+                } else {
+                    current_resp
+                        .as_ref()
+                        .map(|r| format!("{}", r.cookies.len()))
+                        .unwrap_or_else(|| "0".to_string())
+                };
+                let console_count = if is_sending_this_request {
+                    "-".to_string()
+                } else {
+                    format!("{}", resp_s.console_logs.len())
+                };
+                let rs_c = resp_state_clone.clone();
+
+                TabBar::new("response-inspector-tabs")
+                    .underline()
                     .px(px(8.))
-                    .border_b_1()
-                    .border_color(t.border)
-                    .flex()
-                    .items_center()
-                    .gap(px(4.))
-                    .child({
-                        let rs_c = resp_state_clone.clone();
-                        TabItem::new("tab-resp-response", "Response")
-                            .active(active_tab == ResponseTabKind::Response)
-                            .on_click(move |_, _, cx| {
-                                rs_c.update(cx, |state, cx| {
-                                    state.set_active_tab(ResponseTabKind::Response, cx);
-                                });
-                            })
-                    })
-                    .child({
-                        let rs_c = resp_state_clone.clone();
-                        TabItem::new("tab-resp-request", "Request Sent")
-                            .active(active_tab == ResponseTabKind::Request)
-                            .on_click(move |_, _, cx| {
-                                rs_c.update(cx, |state, cx| {
-                                    state.set_active_tab(ResponseTabKind::Request, cx);
-                                });
-                            })
-                    })
-                    .child({
-                        let rs_c = resp_state_clone.clone();
-                        let count_str = if is_sending_this_request {
-                            "-".to_string()
-                        } else {
-                            current_resp.as_ref().map(|r| format!("{}", r.headers.len())).unwrap_or_else(|| "0".to_string())
+                    .selected_index(active_idx)
+                    .on_click(move |&idx, _, cx| {
+                        let kind = match idx {
+                            0 => ResponseTabKind::Response,
+                            1 => ResponseTabKind::Request,
+                            2 => ResponseTabKind::Headers,
+                            3 => ResponseTabKind::Cookies,
+                            _ => ResponseTabKind::Console,
                         };
-                        TabItem::new("tab-resp-headers", "Headers")
-                            .active(active_tab == ResponseTabKind::Headers)
-                            .badge(count_str)
-                            .on_click(move |_, _, cx| {
-                                rs_c.update(cx, |state, cx| {
-                                    state.set_active_tab(ResponseTabKind::Headers, cx);
-                                });
-                            })
+                        rs_c.update(cx, |state, cx| {
+                            state.set_active_tab(kind, cx);
+                        });
                     })
-                    .child({
-                        let rs_c = resp_state_clone.clone();
-                        let count_str = if is_sending_this_request {
-                            "-".to_string()
-                        } else {
-                            current_resp.as_ref().map(|r| format!("{}", r.cookies.len())).unwrap_or_else(|| "0".to_string())
-                        };
-                        TabItem::new("tab-resp-cookies", "Cookies")
-                            .active(active_tab == ResponseTabKind::Cookies)
-                            .badge(count_str)
-                            .on_click(move |_, _, cx| {
-                                rs_c.update(cx, |state, cx| {
-                                    state.set_active_tab(ResponseTabKind::Cookies, cx);
-                                });
-                            })
-                    })
-                    .child({
-                        let rs_c = resp_state_clone.clone();
-                        let badge_str = if is_sending_this_request {
-                            "-".to_string()
-                        } else {
-                            format!("{}", resp_s.console_logs.len())
-                        };
-                        TabItem::new("tab-resp-console", "Console")
-                            .active(active_tab == ResponseTabKind::Console)
-                            .badge(badge_str)
-                            .on_click(move |_, _, cx| {
-                                rs_c.update(cx, |state, cx| {
-                                    state.set_active_tab(ResponseTabKind::Console, cx);
-                                });
-                            })
-                    }),
-            )
+                    .child(Tab::new().label("Response"))
+                    .child(Tab::new().label("Request Sent"))
+                    .child(Tab::new().label("Headers").suffix(render_tab_badge(
+                        header_count,
+                        active_tab == ResponseTabKind::Headers,
+                        t,
+                    )))
+                    .child(Tab::new().label("Cookies").suffix(render_tab_badge(
+                        cookie_count,
+                        active_tab == ResponseTabKind::Cookies,
+                        t,
+                    )))
+                    .child(Tab::new().label("Console").suffix(render_tab_badge(
+                        console_count,
+                        active_tab == ResponseTabKind::Console,
+                        t,
+                    )))
+            })
             // Body / Content area
             .child(
                 div()

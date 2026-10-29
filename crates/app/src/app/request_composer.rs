@@ -3,6 +3,7 @@ use super::AppView;
 use crate::components::*;
 use crate::state::*;
 use crate::theme::theme;
+use gpui_kit::component::tab::{Tab, TabBar};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement,
@@ -204,85 +205,70 @@ impl AppView {
                     },
                 )
             })
-            // Request Tabs with badges: Body v, Params [count], Headers [count], Auth, Settings
-            .child(
-                div()
-                    .h(px(34.))
+            // Request Tabs with TabBar: Body, Params [count], Headers [count], Auth, Pre-request, Post-response
+            .child({
+                let active_idx = match active_tab_kind {
+                    RequestTabKind::Body => 0,
+                    RequestTabKind::Params => 1,
+                    RequestTabKind::Headers => 2,
+                    RequestTabKind::Auth => 3,
+                    RequestTabKind::PreRequestScript => 4,
+                    RequestTabKind::Tests => 5,
+                };
+                let param_count = active_req_info.as_ref().map(|info| info.0).unwrap_or(0);
+                let header_count = active_req_info.as_ref().map(|info| info.1).unwrap_or(0);
+                let has_pre = active_req_info.as_ref().map(|info| info.2).unwrap_or(false);
+                let has_test = active_req_info.as_ref().map(|info| info.3).unwrap_or(false);
+                let ed_c = ed_entity.clone();
+
+                TabBar::new("request-composer-tabs")
+                    .underline()
                     .px(px(8.))
-                    .border_b_1()
-                    .border_color(t.border)
-                    .flex()
-                    .items_center()
-                    .gap(px(4.))
-                    .child({
-                        let ed_c = ed_entity.clone();
-                        TabItem::new("tab-body", "Body")
-                            .active(active_tab_kind == RequestTabKind::Body)
-                            .on_click(move |_, _, cx| {
-                                ed_c.update(cx, |state, cx| {
-                                    state.set_active_tab_kind(RequestTabKind::Body, cx);
-                                });
-                            })
+                    .selected_index(active_idx)
+                    .on_click(move |&idx, _, cx| {
+                        let kind = match idx {
+                            0 => RequestTabKind::Body,
+                            1 => RequestTabKind::Params,
+                            2 => RequestTabKind::Headers,
+                            3 => RequestTabKind::Auth,
+                            4 => RequestTabKind::PreRequestScript,
+                            _ => RequestTabKind::Tests,
+                        };
+                        ed_c.update(cx, |state, cx| {
+                            state.set_active_tab_kind(kind, cx);
+                        });
                     })
-                    .child({
-                        let ed_c = ed_entity.clone();
-                        let param_count = active_req_info.as_ref().map(|info| info.0).unwrap_or(0);
-                        TabItem::new("tab-params", "Params")
-                            .active(active_tab_kind == RequestTabKind::Params)
-                            .badge(format!("{}", param_count))
-                            .on_click(move |_, _, cx| {
-                                ed_c.update(cx, |state, cx| {
-                                    state.set_active_tab_kind(RequestTabKind::Params, cx);
-                                });
-                            })
-                    })
-                    .child({
-                        let ed_c = ed_entity.clone();
-                        let header_count = active_req_info.as_ref().map(|info| info.1).unwrap_or(0);
-                        TabItem::new("tab-headers", "Headers")
-                            .active(active_tab_kind == RequestTabKind::Headers)
-                            .badge(format!("{}", header_count))
-                            .on_click(move |_, _, cx| {
-                                ed_c.update(cx, |state, cx| {
-                                    state.set_active_tab_kind(RequestTabKind::Headers, cx);
-                                });
-                            })
-                    })
-                    .child({
-                        let ed_c = ed_entity.clone();
-                        TabItem::new("tab-auth", "Auth")
-                            .active(active_tab_kind == RequestTabKind::Auth)
-                            .on_click(move |_, _, cx| {
-                                ed_c.update(cx, |state, cx| {
-                                    state.set_active_tab_kind(RequestTabKind::Auth, cx);
-                                });
-                            })
-                    })
-                    .child({
-                        let ed_c = ed_entity.clone();
-                        let has_pre = active_req_info.as_ref().map(|info| info.2).unwrap_or(false);
-                        TabItem::new("tab-pre-script", "Pre-request")
-                            .active(active_tab_kind == RequestTabKind::PreRequestScript)
-                            .when(has_pre, |tab| tab.badge("*"))
-                            .on_click(move |_, _, cx| {
-                                ed_c.update(cx, |state, cx| {
-                                    state.set_active_tab_kind(RequestTabKind::PreRequestScript, cx);
-                                });
-                            })
-                    })
-                    .child({
-                        let ed_c = ed_entity.clone();
-                        let has_test = active_req_info.as_ref().map(|info| info.3).unwrap_or(false);
-                        TabItem::new("tab-tests", "Post-response")
-                            .active(active_tab_kind == RequestTabKind::Tests)
-                            .when(has_test, |tab| tab.badge("*"))
-                            .on_click(move |_, _, cx| {
-                                ed_c.update(cx, |state, cx| {
-                                    state.set_active_tab_kind(RequestTabKind::Tests, cx);
-                                });
-                            })
-                    }),
-            )
+                    .child(Tab::new().label("Body"))
+                    .child(Tab::new().label("Params").when(param_count > 0, |tab| {
+                        tab.suffix(render_tab_badge(
+                            format!("{param_count}"),
+                            active_tab_kind == RequestTabKind::Params,
+                            t,
+                        ))
+                    }))
+                    .child(Tab::new().label("Headers").when(header_count > 0, |tab| {
+                        tab.suffix(render_tab_badge(
+                            format!("{header_count}"),
+                            active_tab_kind == RequestTabKind::Headers,
+                            t,
+                        ))
+                    }))
+                    .child(Tab::new().label("Auth"))
+                    .child(Tab::new().label("Pre-request").when(has_pre, |tab| {
+                        tab.suffix(render_tab_badge(
+                            "*",
+                            active_tab_kind == RequestTabKind::PreRequestScript,
+                            t,
+                        ))
+                    }))
+                    .child(Tab::new().label("Post-response").when(has_test, |tab| {
+                        tab.suffix(render_tab_badge(
+                            "*",
+                            active_tab_kind == RequestTabKind::Tests,
+                            t,
+                        ))
+                    }))
+            })
             // Request Tab Content
             .child(div().flex_1().overflow_hidden().child({
                 match active_tab_kind {

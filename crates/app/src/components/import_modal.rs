@@ -4,9 +4,7 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::tab::Tab;
 use gpui_kit::component::Icon;
-use gpui_kit::component::Selectable as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, App, AppContext as _, Context, Entity, FontWeight, InteractiveElement as _,
@@ -588,18 +586,25 @@ fn render_tab_header<F>(
     label: &'static str,
     active: bool,
     on_click: F,
-    _t: &crate::theme::AppTheme,
+    t: &crate::theme::AppTheme,
 ) -> impl IntoElement
 where
     F: Fn(&gpui_kit::ClickEvent, &mut Window, &mut App) + 'static,
 {
-    div().id(id).child(
-        Tab::new()
-            .underline()
-            .label(label)
-            .selected(active)
-            .on_click(on_click),
-    )
+    div()
+        .id(id)
+        .pb(px(6.))
+        .cursor_pointer()
+        .text_xs()
+        .font_weight(if active {
+            FontWeight::SEMIBOLD
+        } else {
+            FontWeight::NORMAL
+        })
+        .text_color(if active { t.text_primary } else { t.text_muted })
+        .when(active, |s| s.border_b_2().border_color(t.primary))
+        .child(label)
+        .on_click(on_click)
 }
 
 fn render_file_picker_view(
