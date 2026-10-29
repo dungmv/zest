@@ -21,8 +21,6 @@ pub struct RequestSessionState {
     pub running_request_id: Option<String>,
     pub send_progress: Option<String>,
     pub cancel_tx: Option<oneshot::Sender<()>>,
-    pub body_dropdown_open: bool,
-    pub auth_dropdown_open: bool,
     pub script_error: Option<String>,
     input_refresh_task: Option<Task<()>>,
 }
@@ -36,8 +34,6 @@ impl RequestSessionState {
             running_request_id: None,
             send_progress: None,
             cancel_tx: None,
-            body_dropdown_open: false,
-            auth_dropdown_open: false,
             script_error: None,
             input_refresh_task: None,
         }
@@ -60,16 +56,6 @@ impl RequestSessionState {
 
     pub fn set_active_tab_kind(&mut self, kind: RequestTabKind, cx: &mut Context<Self>) {
         self.active_tab_kind = kind;
-        cx.notify();
-    }
-
-    pub fn toggle_body_dropdown(&mut self, cx: &mut Context<Self>) {
-        self.body_dropdown_open = !self.body_dropdown_open;
-        cx.notify();
-    }
-
-    pub fn toggle_auth_dropdown(&mut self, cx: &mut Context<Self>) {
-        self.auth_dropdown_open = !self.auth_dropdown_open;
         cx.notify();
     }
 

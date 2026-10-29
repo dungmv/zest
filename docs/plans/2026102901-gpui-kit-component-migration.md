@@ -101,15 +101,12 @@ Dưới đây là danh sách toàn bộ các component và màn hình hiện cò
     4. `crates/app/src/components/scope_settings_modal.rs` (`ScopeSettingsModal`)
     5. `crates/app/src/components/git/*_modal.rs` (`GitBranchModal`, `GitCommitModal`, `GitHistoryModal`, `GitRemotesModal` - thay thế các ký tự emoji thô bằng icon chính quy `IconName::GitBranch`, `IconName::GitCommitHorizontal`, `IconName::Clock`, `IconName::Globe`).
 
-### 3.2 Nhóm 2: Select & DropdownMenu (`gpui_kit::component::select::*` & `menu::DropdownMenu`)
-- **Thực trạng**: Nhiều vị trí chọn giá trị từ danh sách đang dùng popover hoặc floating div thủ công:
-  1. **Method Selector** (`crates/app/src/components/request_bar.rs`): Nút chọn HTTP Method (`GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `HEAD`, `OPTIONS`) đang dùng dropdown menu tự quản lý state mở/đóng.
-  2. **Environment Selector** (`crates/app/src/components/titlebar.rs`): Dropdown chuyển đổi môi trường đang dùng popup menu thủ công.
-  3. **Auth Type Selector** (`crates/app/src/app/auth_tab.rs`): Nút chọn kiểu xác thực (`Inherit`, `No Auth`, `Bearer Token`, `Basic Auth`, `API Key`).
-  4. **Body Type Selector** (`crates/app/src/components/body_editor/mod.rs`): Chọn định dạng Body (`None`, `JSON`, `XML`, `Form URL-Encoded`, `Multipart Form`, `Raw Text`, `Binary File`).
-- **Mục tiêu thay thế**:
-  - Chuẩn hóa sang `gpui_kit::component::select::Select` hoặc `gpui_kit::component::menu::DropdownMenu`.
-  - Có hỗ trợ keyboard navigation (phím mũi tên lên/xuống, Enter để chọn).
+### 3.2 Nhóm 2: Select & DropdownMenu (`gpui_kit::component::select::*` & `menu::DropdownMenu`) - [ĐÃ HOÀN THÀNH ✅]
+- **Thực trạng & Cải tiến đã thực hiện**:
+  1. **Method Selector** (`crates/app/src/components/request_bar.rs`): Chuẩn hóa `Button::new("method-dropdown-btn").dropdown_menu(...)` với `PopupMenuItem::element(...).checked(mth == method)` hiển thị tick chọn cho active method, bổ sung icon `IconName::ChevronDown` tinh tế và hỗ trợ keyboard navigation (phím mũi tên lên/xuống, Enter để xác nhận, Escape để đóng).
+  2. **Environment Selector** (`crates/app/src/components/titlebar.rs`): Tích hợp chuẩn `Button::new("btn-env-breadcrumb").dropdown_menu(...)` với `PopupMenuItem::new(...).checked(...)` cho từng environment trong workspace, `No Environment` option, và action item mở `Environment Settings...`.
+  3. **Auth Type Selector** (`crates/app/src/app/auth_tab.rs` & `scope_settings_modal.rs`): Chuẩn hóa `Button::new("btn-auth-type-dropdown")` và `btn-auth-apikey-location-dropdown` với `IconName::ChevronDown`, fixed width, và menu items sử dụng `PopupMenuItem::new(...).checked(...)`.
+  4. **Body Type Selector** (`crates/app/src/components/body_editor/mod.rs`): Loại bỏ các cờ thủ công `body_dropdown_open` / `auth_dropdown_open` trong `RequestSessionState`. Chuẩn hóa menu chọn định dạng Body (`None`, `JSON`, `XML`, `Form URL-Encoded`, `Multipart Form`, `Raw Text`, `Binary File`) với `PopupMenuItem::new(...).checked(...)` và menu separator labels. Giảm kích thước `body_editor/mod.rs` từ 668 LOC xuống 636 LOC (< 650 LOC limit).
 
 ### 3.3 Nhóm 3: Tag & Status Badges (`gpui_kit::component::tag::Tag`, `badge::Badge`)
 - **Thực trạng**:
@@ -153,7 +150,7 @@ Dưới đây là danh sách toàn bộ các component và màn hình hiện cò
        ↓
 [Hoàn thành] Giai đoạn 6: Dialog & Overlay System (Settings, Environment, Scope, Git Modals)
        ↓
-[Tiếp theo] Giai đoạn 4: Select & DropdownMenu (Method, Environment, Auth & Body Type selectors)
+[Hoàn thành] Giai đoạn 4: Select & DropdownMenu (Method, Environment, Auth & Body Type selectors)
        ↓
 [Tiếp theo] Giai đoạn 5: Tag & Badge Component (MethodBadge, StatusCodeBadge, Tab Counter Badges)
        ↓

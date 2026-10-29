@@ -256,7 +256,6 @@ impl RenderOnce for BodyEditor {
                                                 });
                                             }
                                             ed_json.update(cx, |state, cx| {
-                                                state.body_dropdown_open = false;
                                                 state.notify_body_changed(cx);
                                             });
                                         }),
@@ -291,7 +290,6 @@ impl RenderOnce for BodyEditor {
                                                 });
                                             }
                                             ed_xml.update(cx, |state, cx| {
-                                                state.body_dropdown_open = false;
                                                 state.notify_body_changed(cx);
                                             });
                                         }),
@@ -327,7 +325,6 @@ impl RenderOnce for BodyEditor {
                                                 });
                                             }
                                             ed_text.update(cx, |state, cx| {
-                                                state.body_dropdown_open = false;
                                                 state.notify_body_changed(cx);
                                             });
                                         }),
@@ -364,7 +361,6 @@ impl RenderOnce for BodyEditor {
                                                 });
                                             }
                                             ed_mp.update(cx, |state, cx| {
-                                                state.body_dropdown_open = false;
                                                 state.notify_body_changed(cx);
                                             });
                                         }),
@@ -398,7 +394,6 @@ impl RenderOnce for BodyEditor {
                                                 });
                                             }
                                             ed_form.update(cx, |state, cx| {
-                                                state.body_dropdown_open = false;
                                                 state.notify_body_changed(cx);
                                             });
                                         }),
@@ -433,7 +428,6 @@ impl RenderOnce for BodyEditor {
                                                 });
                                             }
                                             ed_bin.update(cx, |state, cx| {
-                                                state.body_dropdown_open = false;
                                                 state.notify_body_changed(cx);
                                             });
                                         }),

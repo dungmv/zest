@@ -941,7 +941,7 @@ impl RenderOnce for ScopeSettingsModal {
                                                     Button::new("btn-scope-auth-type-dropdown")
                                                         .ghost()
                                                         .compact()
-                                                        .min_w(px(120.))
+                                                        .w(px(140.))
                                                         .px(px(8.))
                                                         .py(px(4.))
                                                         .h(px(28.))
@@ -951,10 +951,22 @@ impl RenderOnce for ScopeSettingsModal {
                                                         .border_color(t.border)
                                                         .child(
                                                             div()
-                                                                .text_xs()
-                                                                .font_weight(gpui_kit::FontWeight::MEDIUM)
-                                                                .text_color(t.text_primary)
-                                                                .child(auth_label),
+                                                                .w_full()
+                                                                .flex()
+                                                                .items_center()
+                                                                .justify_between()
+                                                                .child(
+                                                                    div()
+                                                                        .text_xs()
+                                                                        .font_weight(gpui_kit::FontWeight::MEDIUM)
+                                                                        .text_color(t.text_primary)
+                                                                        .child(auth_label),
+                                                                )
+                                                                .child(
+                                                                    Icon::new(IconName::ChevronDown)
+                                                                        .size(px(12.))
+                                                                        .text_color(t.text_muted),
+                                                                ),
                                                         )
                                                         .dropdown_menu(move |menu, _window, _cx| {
                                                             let mut m = menu;

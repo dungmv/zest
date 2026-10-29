@@ -242,6 +242,7 @@ impl RenderOnce for RequestBar {
                                                 .text_color(theme().method_color(mth))
                                                 .child(mth.as_str().to_string())
                                         })
+                                        .checked(mth == method)
                                         .on_click(
                                             move |_, _, cx| {
                                                 ws_set.update(cx, |ws, _| {
