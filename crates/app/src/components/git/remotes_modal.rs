@@ -2,8 +2,12 @@ use super::common::{render_error_banner, render_not_a_repo_view};
 use crate::services::GitService;
 use crate::state::GitState;
 use crate::theme::theme;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::Disableable as _;
+use gpui_kit::component::Sizable as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
@@ -154,24 +158,13 @@ pub fn render_remotes_view(
                     let svc_add = git_service.clone();
                     let inp_n = remote_name_input.clone();
                     let inp_u = remote_url_input.clone();
-                    div()
-                        .id("btn-add-remote-action")
-                        .px(px(12.))
-                        .h(px(30.))
-                        .rounded(px(6.))
-                        .when(!is_loading, |s| {
-                            s.bg(t.primary)
-                                .cursor_pointer()
-                                .text_color(t.primary_foreground)
-                                .hover(|s| s.opacity(0.9))
-                        })
-                        .when(is_loading, |s| s.bg(t.bg_hover).text_color(t.text_muted))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .text_xs()
-                        .font_weight(gpui_kit::FontWeight::BOLD)
-                        .on_click(move |_, window, cx| {
+                    Button::new("btn-add-remote-action")
+                        .primary()
+                        .small()
+                        .disabled(is_loading)
+                        .loading(is_loading)
+                        .label(if is_loading { "Adding..." } else { "+ Add" })
+                        .on_click(move |_, window, cx: &mut App| {
                             if is_loading {
                                 return;
                             }
@@ -185,8 +178,6 @@ pub fn render_remotes_view(
                             });
                             svc_add.add_remote(&name, &url, cx);
                         })
-                        .when(is_loading, |s| s.child("Adding..."))
-                        .when(!is_loading, |s| s.child("+ Add"))
                 }),
         )
         .into_any_element()
@@ -314,15 +305,10 @@ impl RenderOnce for GitRemotesModal {
                                     ),
                             )
                             .child(
-                                div()
-                                    .id("btn-git-remotes-close")
-                                    .px(px(8.))
-                                    .py(px(4.))
-                                    .rounded(px(4.))
-                                    .cursor_pointer()
-                                    .text_sm()
-                                    .text_color(t.text_muted)
-                                    .hover(|s| s.text_color(t.text_primary))
+                                Button::new("btn-git-remotes-close")
+                                    .ghost()
+                                    .xsmall()
+                                    .icon(IconName::Close)
                                     .on_click({
                                         let git_s = git_clone.clone();
                                         move |_, _, cx| {
@@ -330,8 +316,7 @@ impl RenderOnce for GitRemotesModal {
                                                 state.close_modal(cx);
                                             });
                                         }
-                                    })
-                                    .child("✕"),
+                                    }),
                             ),
                     )
                     // Error banner

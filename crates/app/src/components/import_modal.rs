@@ -2,9 +2,11 @@ use crate::state::{ModalState, ToastState, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::alert::Alert;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::Disableable as _;
 use gpui_kit::component::Icon;
 use gpui_kit::component::Sizable as _;
 use gpui_kit::prelude::FluentBuilder as _;
@@ -224,14 +226,10 @@ impl RenderOnce for ImportModal {
                                     ),
                             )
                             .child(
-                                div()
-                                    .id("btn-close-import-modal")
-                                    .cursor_pointer()
-                                    .p(px(4.))
-                                    .rounded(px(4.))
-                                    .hover(|s| s.bg(t.bg_hover))
-                                    .text_color(t.text_muted)
-                                    .child("✕")
+                                Button::new("btn-close-import-modal")
+                                    .ghost()
+                                    .xsmall()
+                                    .icon(IconName::Close)
                                     .on_click({
                                         let modal_c = modal_entity_ref.clone();
                                         move |_, _, cx| {
@@ -447,16 +445,10 @@ impl RenderOnce for ImportModal {
                                     .items_center()
                                     .gap(px(8.))
                                     .child(
-                                        div()
-                                            .id("btn-cancel-import")
-                                            .px(px(12.))
-                                            .py(px(6.))
-                                            .rounded(px(6.))
-                                            .cursor_pointer()
-                                            .hover(|s| s.bg(t.bg_hover))
-                                            .text_xs()
-                                            .text_color(t.text_secondary)
-                                            .child("Cancel")
+                                        Button::new("btn-cancel-import")
+                                            .ghost()
+                                            .small()
+                                            .label("Cancel")
                                             .on_click({
                                                 let modal_c = modal_entity_ref.clone();
                                                 move |_, _, cx| {
@@ -471,26 +463,12 @@ impl RenderOnce for ImportModal {
                                         let toast_exec = toast_entity.clone();
                                         let st_exec = modal_entity.clone();
 
-                                        div()
-                                            .id("btn-execute-import")
-                                            .px(px(14.))
-                                            .py(px(6.))
-                                            .rounded(px(6.))
-                                            .font_weight(FontWeight::SEMIBOLD)
-                                            .text_xs()
-                                            .when(is_valid, |s| {
-                                                s.bg(t.primary)
-                                                    .text_color(t.primary_foreground)
-                                                    .cursor_pointer()
-                                                    .hover(|h| h.bg(t.primary_hover))
-                                            })
-                                            .when(!is_valid, |s| {
-                                                s.bg(t.bg_hover)
-                                                    .text_color(t.text_muted)
-                                                    .cursor_not_allowed()
-                                            })
-                                            .child("Import Now")
-                                            .on_click(move |_, _, cx| {
+                                        Button::new("btn-execute-import")
+                                            .primary()
+                                            .small()
+                                            .disabled(!is_valid)
+                                            .label("Import Now")
+                                            .on_click(move |_, _, cx: &mut App| {
                                                 if !is_valid {
                                                     return;
                                                 }

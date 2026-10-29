@@ -7,9 +7,12 @@ use crate::services::GitService;
 use crate::state::{GitState, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::Disableable as _;
 use gpui_kit::component::Icon;
+use gpui_kit::component::Sizable as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
@@ -295,27 +298,18 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui_kit::AnyElement {
                                         ),
                                 )
                                 .child(
-                                    div()
-                                        .id("btn-commit-action")
-                                        .h(px(28.))
-                                        .px(px(16.))
-                                        .rounded(px(6.))
-                                        .flex()
-                                        .items_center()
-                                        .justify_center()
-                                        .when(can_commit, |s| {
-                                            s.bg(t.primary)
-                                                .cursor_pointer()
-                                                .text_color(t.primary_foreground)
-                                                .hover(|h| h.opacity(0.9))
+                                    Button::new("btn-commit-action")
+                                        .primary()
+                                        .small()
+                                        .disabled(!can_commit || is_loading)
+                                        .loading(is_loading)
+                                        .label(if is_loading {
+                                            "Committing..."
+                                        } else {
+                                            "✓ Commit"
                                         })
-                                        .when(!can_commit, |s| {
-                                            s.bg(t.bg_hover).text_color(t.text_muted)
-                                        })
-                                        .text_xs()
-                                        .font_weight(gpui_kit::FontWeight::BOLD)
-                                        .on_click(move |_, window, cx| {
-                                            if !can_commit {
+                                        .on_click(move |_, window, cx: &mut App| {
+                                            if !can_commit || is_loading {
                                                 return;
                                             }
                                             let msg = inp.read(cx).value().to_string();
@@ -326,21 +320,7 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui_kit::AnyElement {
                                                 inp_st.set_value("", window, cx);
                                             });
                                             svc_commit.commit(&msg, cx);
-                                        })
-                                        .when(is_loading, |s| {
-                                            s.child(
-                                                div()
-                                                    .flex()
-                                                    .items_center()
-                                                    .gap(px(6.))
-                                                    .child(
-                                                        Icon::new(IconName::RefreshCw)
-                                                            .size(px(14.)),
-                                                    )
-                                                    .child("Committing..."),
-                                            )
-                                        })
-                                        .when(!is_loading, |s| s.child("✓ Commit")),
+                                        }),
                                 )
                         }),
                 ),
@@ -587,26 +567,18 @@ impl RenderOnce for GitCommitModal {
                                     }),
                             )
                             .child(
-                                div().flex().items_center().gap(px(8.)).child(
-                                    div()
-                                        .id("btn-git-commit-close")
-                                        .px(px(8.))
-                                        .py(px(4.))
-                                        .rounded(px(4.))
-                                        .cursor_pointer()
-                                        .text_sm()
-                                        .text_color(t.text_muted)
-                                        .hover(|s| s.text_color(t.text_primary))
-                                        .on_click({
-                                            let git_s = git_clone.clone();
-                                            move |_, _, cx| {
-                                                git_s.update(cx, |state, cx| {
-                                                    state.close_modal(cx);
-                                                });
-                                            }
-                                        })
-                                        .child("✕"),
-                                ),
+                                Button::new("btn-git-commit-close")
+                                    .ghost()
+                                    .xsmall()
+                                    .icon(IconName::Close)
+                                    .on_click({
+                                        let git_s = git_clone.clone();
+                                        move |_, _, cx| {
+                                            git_s.update(cx, |state, cx| {
+                                                state.close_modal(cx);
+                                            });
+                                        }
+                                    }),
                             ),
                     )
                     // Error banner

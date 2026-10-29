@@ -1,10 +1,11 @@
 # Plan: Migrate các custom UI component sang gpui-kit standard components
 
 - **Ngày**: 2026-10-29
-- **Trạng thái**: Hoàn thành Giai đoạn 1 & 2 (Phase 1 & Phase 2 Completed)
+- **Trạng thái**: Hoàn thành Giai đoạn 1, 2 & 3 (Phase 1, 2 & 3 Completed)
 - **Phạm vi**: 
   - Giai đoạn 1: `crates/app/src/components/` (`git/common.rs`, `import_modal.rs`, `kv_table.rs`, `body_editor/multipart.rs`, `settings_modal/network_tab.rs`, `settings_modal/shortcuts_tab.rs`, `tabs_with_badge.rs`, `app/request_composer.rs`, `components/response_inspector.rs`)
   - Giai đoạn 2: `crates/app/src/components/` (`git/common.rs`, `import_modal.rs`, `settings_modal/cookies_tab.rs`, `console_panel.rs`, `git/diff_view.rs`)
+  - Giai đoạn 3: `crates/app/src/components/` (`command_palette.rs`, `import_modal.rs`, `git/commit_modal.rs`, `git/branch_modal.rs`, `git/history_modal.rs`, `git/remotes_modal.rs`)
 
 ---
 
@@ -126,6 +127,33 @@ Trong khi đó, `gpui-kit` (phiên bản `0.8.1`, tích hợp sẵn `gpui-compon
   - Nút xóa hàng multipart đồng bộ với KV Table: kích thước chuẩn `sm` (24x24px, icon 14px), style ghost bình thường màu `t.text_muted`, hover chuyển sang đỏ mềm dịu `t.json_null` với tooltip "Delete field".
 - **`crates/app/src/components/response_inspector.rs`**:
   - Nút Line Wrap (`btn-toggle-wrap`): Khi disable hiển thị dưới dạng ghost button tiêu chuẩn (`btn.ghost()`); khi enable hiển thị nổi bật với màu primary (`btn.primary()`). Hiển thị rõ ràng 100% trên cả Dark và Light mode.
+
+---
+
+## 4.3 Giai đoạn 3: Command Palette & Modals Buttons (Đã hoàn thành)
+
+### Nhiệm vụ 8: Chuẩn hóa Kbd trong Command Palette
+- **`crates/app/src/components/command_palette.rs`**:
+  - Thay thế các chuỗi shortcut thô (`Ctrl+Enter`, `Ctrl+,`, `Ctrl+Shift+G`, `Ctrl+I`) bằng `Kbd::new(Keystroke::parse(...))` chuẩn hóa glyph nền tảng macOS / Windows.
+  - Nút thoát ESC dùng `Kbd::new` thay vì nhãn text thô.
+  - Thay thế emoji `"📜"` bằng icon `IconName::GitCommitHorizontal`.
+
+### Nhiệm vụ 9: Migrate Action & Close Buttons trong Modals
+- **`crates/app/src/components/import_modal.rs`**:
+  - `btn-close-import-modal`: Dùng `Button::new(...).ghost().xsmall().icon(IconName::Close)`.
+  - `btn-cancel-import`: Dùng `Button::new(...).ghost().small().label("Cancel")`.
+  - `btn-execute-import`: Dùng `Button::new(...).primary().small().disabled(!is_valid).label("Import Now")`.
+- **`crates/app/src/components/git/commit_modal.rs`**:
+  - `btn-commit-action`: Dùng `Button::new(...).primary().small().disabled(!can_commit || is_loading).loading(is_loading)`. Tận dụng spinner loading native của `Button`.
+  - `btn-git-commit-close`: Dùng `Button::new(...).ghost().xsmall().icon(IconName::Close)`.
+- **`crates/app/src/components/git/branch_modal.rs`**:
+  - `btn-cancel-create-branch` & `btn-confirm-create-branch`: Chuyển sang `Button` với loading indicator.
+  - `btn-git-branch-close`: Dùng `Button::new(...).ghost().xsmall().icon(IconName::Close)`.
+- **`crates/app/src/components/git/history_modal.rs`**:
+  - `btn-git-history-close`: Dùng `Button::new(...).ghost().xsmall().icon(IconName::Close)`.
+- **`crates/app/src/components/git/remotes_modal.rs`**:
+  - `btn-add-remote-action`: Dùng `Button::new(...).primary().small().loading(is_loading)`.
+  - `btn-git-remotes-close`: Dùng `Button::new(...).ghost().xsmall().icon(IconName::Close)`.
 
 ---
 

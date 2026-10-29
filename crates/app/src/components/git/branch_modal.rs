@@ -2,7 +2,11 @@ use super::common::{render_error_banner, render_not_a_repo_view};
 use crate::services::GitService;
 use crate::state::GitState;
 use crate::theme::theme;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Input, InputState};
+use gpui_kit::component::Disableable as _;
+use gpui_kit::component::Sizable as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
@@ -75,41 +79,28 @@ pub fn render_new_branch_view(
                 .justify_end()
                 .gap(px(8.))
                 .child(
-                    div()
-                        .id("btn-cancel-create-branch")
-                        .px(px(14.))
-                        .py(px(6.))
-                        .rounded(px(6.))
-                        .border_1()
-                        .border_color(t.border)
-                        .cursor_pointer()
-                        .text_xs()
-                        .font_weight(gpui_kit::FontWeight::MEDIUM)
-                        .text_color(t.text_primary)
-                        .hover(|s| s.bg(t.bg_hover))
+                    Button::new("btn-cancel-create-branch")
+                        .ghost()
+                        .small()
+                        .label("Cancel")
                         .on_click(move |_, _, cx| {
                             git_cancel.update(cx, |git, cx| {
                                 git.close_modal(cx);
                             });
-                        })
-                        .child("Cancel"),
+                        }),
                 )
                 .child(
-                    div()
-                        .id("btn-confirm-create-branch")
-                        .px(px(14.))
-                        .py(px(6.))
-                        .rounded(px(6.))
-                        .when(!is_loading, |s| {
-                            s.bg(t.primary)
-                                .cursor_pointer()
-                                .text_color(t.primary_foreground)
-                                .hover(|s| s.opacity(0.9))
+                    Button::new("btn-confirm-create-branch")
+                        .primary()
+                        .small()
+                        .disabled(is_loading)
+                        .loading(is_loading)
+                        .label(if is_loading {
+                            "Creating..."
+                        } else {
+                            "Create Branch"
                         })
-                        .when(is_loading, |s| s.bg(t.bg_hover).text_color(t.text_muted))
-                        .text_xs()
-                        .font_weight(gpui_kit::FontWeight::BOLD)
-                        .on_click(move |_, window, cx| {
+                        .on_click(move |_, window, cx: &mut App| {
                             if is_loading {
                                 return;
                             }
@@ -121,9 +112,7 @@ pub fn render_new_branch_view(
                                 inp_st.set_value("", window, cx);
                             });
                             svc_create.create_branch(&name, cx);
-                        })
-                        .when(is_loading, |s| s.child("Creating..."))
-                        .when(!is_loading, |s| s.child("Create Branch")),
+                        }),
                 ),
         )
         .into_any_element()
@@ -235,15 +224,10 @@ impl RenderOnce for GitBranchModal {
                                     ),
                             )
                             .child(
-                                div()
-                                    .id("btn-git-branch-close")
-                                    .px(px(8.))
-                                    .py(px(4.))
-                                    .rounded(px(4.))
-                                    .cursor_pointer()
-                                    .text_sm()
-                                    .text_color(t.text_muted)
-                                    .hover(|s| s.text_color(t.text_primary))
+                                Button::new("btn-git-branch-close")
+                                    .ghost()
+                                    .xsmall()
+                                    .icon(IconName::Close)
                                     .on_click({
                                         let git_s = git_clone.clone();
                                         move |_, _, cx| {
@@ -251,8 +235,7 @@ impl RenderOnce for GitBranchModal {
                                                 state.close_modal(cx);
                                             });
                                         }
-                                    })
-                                    .child("✕"),
+                                    }),
                             ),
                     )
                     // Error banner

@@ -6,13 +6,26 @@ use crate::state::{
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::kbd::Kbd;
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
-    RenderOnce, StatefulInteractiveElement as _, Styled, Window,
+    div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, Keystroke,
+    ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
+
+fn render_kbd_hint(keybinding: &'static str) -> impl IntoElement {
+    if let Ok(stroke) = Keystroke::parse(keybinding) {
+        Kbd::new(stroke).into_any_element()
+    } else {
+        div()
+            .text_xs()
+            .text_color(theme().text_muted)
+            .child(keybinding.to_string())
+            .into_any_element()
+    }
+}
 
 #[allow(clippy::type_complexity)]
 #[derive(IntoElement)]
@@ -208,15 +221,12 @@ impl RenderOnce for CommandPalette {
                                 div()
                                     .id("close-cmd-pal")
                                     .cursor_pointer()
-                                    .text_xs()
-                                    .text_color(t.text_muted)
-                                    .hover(|s| s.text_color(t.text_primary))
                                     .on_click(move |_, _, cx| {
                                         modal_s.update(cx, |state, cx| {
                                             state.close_command_palette(cx);
                                         });
                                     })
-                                    .child("ESC")
+                                    .child(render_kbd_hint("escape"))
                             }),
                     )
                     // Actions & Items List
@@ -262,7 +272,7 @@ impl RenderOnce for CommandPalette {
                                                     .child("Send Active Request"),
                                             ),
                                     )
-                                    .child(div().text_xs().text_color(t.text_muted).child("Ctrl+Enter"))
+                                    .child(render_kbd_hint("cmd-enter"))
                             })
                             // Action: Open Settings
                             .when(q.is_empty() || "settings".contains(&q) || "preferences".contains(&q), |this| {
@@ -298,7 +308,7 @@ impl RenderOnce for CommandPalette {
                                                         .child("Open Settings"),
                                                 ),
                                         )
-                                        .child(div().text_xs().text_color(t.text_muted).child("Ctrl+,"))
+                                        .child(render_kbd_hint("cmd-,"))
                                 )
                             })
                             // Action: Manage Cookies (Settings -> Cookies tab)
@@ -376,7 +386,7 @@ impl RenderOnce for CommandPalette {
                                                         .child("Git: Open Source Control (Commit & Diff)"),
                                                 ),
                                         )
-                                        .child(div().text_xs().text_color(t.text_muted).child("Ctrl+Shift+G"))
+                                        .child(render_kbd_hint("cmd-shift-g"))
                                 )
                             })
                             // Action: Git Switch Branch / Checkout
@@ -454,7 +464,7 @@ impl RenderOnce for CommandPalette {
                                                         .child("Import: OpenAPI (YAML/JSON) or Postman"),
                                                 ),
                                         )
-                                        .child(div().text_xs().text_color(t.text_muted).child("Ctrl+I"))
+                                        .child(render_kbd_hint("cmd-i"))
                                 )
                             })
                             // Action: Git Commit History
@@ -486,7 +496,7 @@ impl RenderOnce for CommandPalette {
                                                 .flex()
                                                 .items_center()
                                                 .gap(px(8.))
-                                                .child("📜")
+                                                .child(Icon::new(IconName::GitCommitHorizontal).size(px(14.)))
                                                 .child(
                                                     div()
                                                         .text_sm()

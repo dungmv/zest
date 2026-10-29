@@ -5,7 +5,10 @@ use super::diff_view::{
 use crate::services::GitService;
 use crate::state::GitState;
 use crate::theme::theme;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::Sizable as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
@@ -436,26 +439,18 @@ impl RenderOnce for GitHistoryModal {
                                     }),
                             )
                             .child(
-                                div().flex().items_center().gap(px(8.)).child(
-                                    div()
-                                        .id("btn-git-history-close")
-                                        .px(px(8.))
-                                        .py(px(4.))
-                                        .rounded(px(4.))
-                                        .cursor_pointer()
-                                        .text_sm()
-                                        .text_color(t.text_muted)
-                                        .hover(|s| s.text_color(t.text_primary))
-                                        .on_click({
-                                            let git_s = git_clone.clone();
-                                            move |_, _, cx| {
-                                                git_s.update(cx, |state, cx| {
-                                                    state.close_modal(cx);
-                                                });
-                                            }
-                                        })
-                                        .child("✕"),
-                                ),
+                                Button::new("btn-git-history-close")
+                                    .ghost()
+                                    .xsmall()
+                                    .icon(IconName::Close)
+                                    .on_click({
+                                        let git_s = git_clone.clone();
+                                        move |_, _, cx| {
+                                            git_s.update(cx, |state, cx| {
+                                                state.close_modal(cx);
+                                            });
+                                        }
+                                    }),
                             ),
                     )
                     // Error banner
