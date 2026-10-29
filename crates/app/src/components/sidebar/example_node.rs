@@ -3,12 +3,12 @@ use super::{SidebarRenderContext, SIDEBAR_ROW_HEIGHT};
 use crate::app::actions::DismissModal;
 use crate::components::StatusCodeBadge;
 use crate::theme::theme;
-use gpui::{
+use gpui_kit::{
     div, px, AnyElement, AppContext as _, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement, StatefulInteractiveElement as _, Styled,
 };
-use gpui_component::menu::ContextMenuExt as _;
-use gpui_component::Sizable as _;
+use gpui_kit::component::menu::ContextMenuExt as _;
+use gpui_kit::component::Sizable as _;
 
 pub fn render_example_row(
     parent_id: &str,
@@ -114,7 +114,7 @@ pub fn render_example_row(
                 let ex_del_name = ex_name_ctx.clone();
 
                 let mut m = menu
-                    .item(gpui_component::menu::PopupMenuItem::new("Rename").on_click(
+                    .item(gpui_kit::component::menu::PopupMenuItem::new("Rename").on_click(
                         move |_, window, cx| {
                             let ws_c = ws_ren.clone();
                             sb_ren.update(cx, |state, cx| {
@@ -129,7 +129,7 @@ pub fn render_example_row(
                         },
                     ))
                     .item(
-                        gpui_component::menu::PopupMenuItem::new("Duplicate").on_click(
+                        gpui_kit::component::menu::PopupMenuItem::new("Duplicate").on_click(
                             move |_, _, cx| {
                                 ws_dup.update(cx, |ws, cx| {
                                     if let Some(mut rf) = ws.get_request_file(&r_id_dup) {
@@ -161,7 +161,7 @@ pub fn render_example_row(
                     let ws_up = ws_ctx.clone();
                     let r_id_up = r_id_ctx.clone();
                     m = m.item(
-                        gpui_component::menu::PopupMenuItem::new("Move Up").on_click(
+                        gpui_kit::component::menu::PopupMenuItem::new("Move Up").on_click(
                             move |_, _, cx| {
                                 ws_up.update(cx, |ws, cx| {
                                     if let Some(mut rf) = ws.get_request_file(&r_id_up) {
@@ -180,7 +180,7 @@ pub fn render_example_row(
                     let ws_down = ws_ctx.clone();
                     let r_id_down = r_id_ctx.clone();
                     m = m.item(
-                        gpui_component::menu::PopupMenuItem::new("Move Down").on_click(
+                        gpui_kit::component::menu::PopupMenuItem::new("Move Down").on_click(
                             move |_, _, cx| {
                                 ws_down.update(cx, |ws, cx| {
                                     if let Some(mut rf) = ws.get_request_file(&r_id_down) {
@@ -196,7 +196,7 @@ pub fn render_example_row(
                 }
 
                 m.separator()
-                    .item(gpui_component::menu::PopupMenuItem::new("Delete").on_click(
+                    .item(gpui_kit::component::menu::PopupMenuItem::new("Delete").on_click(
                         move |_, _, cx| {
                             ws_del.update(cx, |ws, cx| {
                                 if let Some(mut rf) = ws.get_request_file(&r_id_del) {
@@ -246,7 +246,7 @@ pub fn render_example_row(
                                 });
                             })
                             .child(
-                                gpui_component::input::Input::new(inp)
+                                gpui_kit::component::input::Input::new(inp)
                                     .id(format!("rename-ex-input-{}-{}", parent_id, idx))
                                     .appearance(false)
                                     .bordered(false)

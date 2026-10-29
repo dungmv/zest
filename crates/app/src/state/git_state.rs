@@ -1,4 +1,4 @@
-use gpui::Context;
+use gpui_kit::Context;
 use std::collections::HashSet;
 use std::path::PathBuf;
 

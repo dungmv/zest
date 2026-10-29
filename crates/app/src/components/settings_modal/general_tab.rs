@@ -1,9 +1,9 @@
 use crate::state::ModalState;
 use crate::theme::{theme, ThemePreference};
-use gpui::{div, px, App, Entity, IntoElement, ParentElement, Styled};
-use gpui_component::button::{Button, ButtonVariants as _};
-use gpui_component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_component::Icon;
+use gpui_kit::{div, px, App, Entity, IntoElement, ParentElement, Styled};
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::Icon;
 use gpui_kit::assets::IconName;
 
 pub fn render_general_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl IntoElement {
@@ -42,7 +42,7 @@ pub fn render_general_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
                 .child(
                     div()
                         .text_xs()
-                        .font_weight(gpui::FontWeight::BOLD)
+                        .font_weight(gpui_kit::FontWeight::BOLD)
                         .text_color(t.text_secondary)
                         .child("APPEARANCE & LAYOUT"),
                 )
@@ -70,7 +70,7 @@ pub fn render_general_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
                                 .child(
                                     div()
                                         .text_xs()
-                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                         .text_color(t.text_primary)
                                         .child("Theme Mode"),
                                 )
@@ -102,7 +102,7 @@ pub fn render_general_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
                                     .child(
                                         div()
                                             .text_xs()
-                                            .font_weight(gpui::FontWeight::MEDIUM)
+                                            .font_weight(gpui_kit::FontWeight::MEDIUM)
                                             .text_color(t.text_primary)
                                             .child(theme_label),
                                     )
@@ -182,7 +182,7 @@ pub fn render_general_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
                                 .child(
                                     div()
                                         .text_xs()
-                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                         .text_color(t.text_primary)
                                         .child("Editor & Inspector Layout"),
                                 )
@@ -214,7 +214,7 @@ pub fn render_general_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
                                     .child(
                                         div()
                                             .text_xs()
-                                            .font_weight(gpui::FontWeight::MEDIUM)
+                                            .font_weight(gpui_kit::FontWeight::MEDIUM)
                                             .text_color(t.text_primary)
                                             .child(layout_label),
                                     )

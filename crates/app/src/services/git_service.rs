@@ -1,5 +1,5 @@
 use crate::state::{GitState, ToastState};
-use gpui::{App, Context, Entity};
+use gpui_kit::{App, Context, Entity};
 
 /// Command router for Git VCS operations.
 ///

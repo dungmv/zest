@@ -3,8 +3,8 @@ use crate::components::sidebar::{
     build_sidebar_req_items, flatten_sidebar_tree, FlatSidebarRow, SidebarCacheKey,
     SidebarFlatCache,
 };
-use gpui::{px, AppContext, Context, Entity, Pixels, UniformListScrollHandle, Window};
-use gpui_component::input::InputState;
+use gpui_kit::{px, AppContext, Context, Entity, Pixels, UniformListScrollHandle, Window};
+use gpui_kit::component::input::InputState;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -12,7 +12,7 @@ use std::sync::Arc;
 pub struct RenamingState<T> {
     pub id: T,
     pub input: Entity<InputState>,
-    pub subscription: gpui::Subscription,
+    pub subscription: gpui_kit::Subscription,
 }
 
 pub struct SidebarState {
@@ -200,9 +200,9 @@ impl SidebarState {
 
         let sub = cx.subscribe(
             &input,
-            move |this, input, event: &gpui_component::input::InputEvent, cx| match event {
-                gpui_component::input::InputEvent::PressEnter { .. }
-                | gpui_component::input::InputEvent::Blur => {
+            move |this, input, event: &gpui_kit::component::input::InputEvent, cx| match event {
+                gpui_kit::component::input::InputEvent::PressEnter { .. }
+                | gpui_kit::component::input::InputEvent::Blur => {
                     let value = input.read(cx).value().to_string();
                     this.cancel_any_renaming(cx);
                     let trimmed = value.trim();

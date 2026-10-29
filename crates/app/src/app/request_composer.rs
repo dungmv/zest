@@ -3,8 +3,8 @@ use super::AppView;
 use crate::components::*;
 use crate::state::*;
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled, Window,
 };
@@ -69,7 +69,7 @@ impl AppView {
                     div()
                         .px(px(12.))
                         .py(px(6.))
-                        .bg(gpui::Hsla {
+                        .bg(gpui_kit::Hsla {
                             a: 0.15,
                             ..t.status_4xx
                         })
@@ -86,7 +86,7 @@ impl AppView {
                                 .gap(px(8.))
                                 .child(
                                     div()
-                                        .font_weight(gpui::FontWeight::BOLD)
+                                        .font_weight(gpui_kit::FontWeight::BOLD)
                                         .text_color(t.status_4xx)
                                         .child("! Conflict:"),
                                 )
@@ -148,7 +148,7 @@ impl AppView {
                     div()
                         .px(px(12.))
                         .py(px(6.))
-                        .bg(gpui::Hsla {
+                        .bg(gpui_kit::Hsla {
                             a: 0.12,
                             ..t.status_5xx
                         })
@@ -174,7 +174,7 @@ impl AppView {
                     div()
                         .px(px(12.))
                         .py(px(6.))
-                        .bg(gpui::Hsla {
+                        .bg(gpui_kit::Hsla {
                             a: 0.15,
                             ..t.status_4xx
                         })

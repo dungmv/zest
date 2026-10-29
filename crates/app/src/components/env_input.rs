@@ -6,13 +6,13 @@ use crate::components::env_autocomplete::{
 };
 use crate::state::{EnvironmentState, ModalState};
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     deferred, div, px, App, Entity, Focusable as _, InteractiveElement as _, IntoElement,
     ParentElement, SharedString, StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_component::input::{Input, InputState};
-use gpui_component::scroll::ScrollableElement as _;
+use gpui_kit::component::input::{Input, InputState};
+use gpui_kit::component::scroll::ScrollableElement as _;
 
 pub fn render_env_input<F>(
     input_id: impl Into<SharedString>,
@@ -53,7 +53,7 @@ where
     let scroll_handle = window.use_keyed_state(
         SharedString::from(format!("auto-scroll-{}", input_id)),
         cx,
-        |_window, _cx| gpui::ScrollHandle::new(),
+        |_window, _cx| gpui_kit::ScrollHandle::new(),
     );
 
     let current_q = unclosed.as_ref().map(|(_, _, q)| q.clone());
@@ -120,7 +120,7 @@ where
                                 let env = env_ent.read(cx);
                                 build_tokenized_content(&new_text, env)
                             } else {
-                                gpui_component::input::InputContent::new(&new_text)
+                                gpui_kit::component::input::InputContent::new(&new_text)
                             };
                             inp_c.update(cx, |inp, cx| {
                                 inp.set_value(content, window, cx);
@@ -219,7 +219,7 @@ where
                         .border_color(t.border)
                         .shadow_2xl()
                         .occlude()
-                        .on_mouse_down(gpui::MouseButton::Left, |_, window, cx| {
+                        .on_mouse_down(gpui_kit::MouseButton::Left, |_, window, cx| {
                             window.prevent_default();
                             cx.stop_propagation();
                         })
@@ -265,7 +265,7 @@ where
                                                         let env = env_ent.read(cx);
                                                         build_tokenized_content(&new_text, env)
                                                     } else {
-                                                        gpui_component::input::InputContent::new(
+                                                        gpui_kit::component::input::InputContent::new(
                                                             &new_text,
                                                         )
                                                     };

@@ -1,12 +1,12 @@
 use crate::state::ResponseState;
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, App, Entity, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
     StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_component::scroll::ScrollableElement as _;
-use gpui_component::Icon;
+use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::Icon;
 use gpui_kit::assets::IconName;
 use zest_core::models::{ConsoleLogEntry, ConsoleLogLevel, ConsoleLogSource, TestResult};
 
@@ -51,7 +51,7 @@ impl RenderOnce for ConsolePanel {
     }
 }
 
-fn render_empty_state() -> gpui::Div {
+fn render_empty_state() -> gpui_kit::Div {
     let t = theme();
     div()
         .size_full()
@@ -69,7 +69,7 @@ fn render_empty_state() -> gpui::Div {
         .child(
             div()
                 .text_sm()
-                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                 .text_color(t.text_primary)
                 .child("No Tests or Console Output"),
         )
@@ -98,7 +98,7 @@ fn render_empty_state() -> gpui::Div {
         )
 }
 
-fn render_test_card(res: TestResult) -> gpui::Div {
+fn render_test_card(res: TestResult) -> gpui_kit::Div {
     let t = theme();
     let status_color = if res.passed {
         t.method_post
@@ -112,7 +112,7 @@ fn render_test_card(res: TestResult) -> gpui::Div {
         .bg(if res.passed {
             t.bg_card
         } else {
-            gpui::Hsla {
+            gpui_kit::Hsla {
                 a: 0.08,
                 ..status_color
             }
@@ -121,7 +121,7 @@ fn render_test_card(res: TestResult) -> gpui::Div {
         .border_color(if res.passed {
             t.border
         } else {
-            gpui::Hsla {
+            gpui_kit::Hsla {
                 a: 0.35,
                 ..status_color
             }
@@ -144,24 +144,24 @@ fn render_test_card(res: TestResult) -> gpui::Div {
                                 .px(px(6.))
                                 .py(px(1.))
                                 .rounded(px(3.))
-                                .bg(gpui::Hsla {
+                                .bg(gpui_kit::Hsla {
                                     a: 0.14,
                                     ..status_color
                                 })
                                 .border_1()
-                                .border_color(gpui::Hsla {
+                                .border_color(gpui_kit::Hsla {
                                     a: 0.3,
                                     ..status_color
                                 })
                                 .text_xs()
-                                .font_weight(gpui::FontWeight::BOLD)
+                                .font_weight(gpui_kit::FontWeight::BOLD)
                                 .text_color(status_color)
                                 .child(if res.passed { "✓ PASS" } else { "✗ FAIL" }),
                         )
                         .child(
                             div()
                                 .text_xs()
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                 .text_color(t.text_primary)
                                 .child(res.name),
                         ),
@@ -187,7 +187,7 @@ fn render_test_card(res: TestResult) -> gpui::Div {
         })
 }
 
-fn render_log_card(idx: usize, entry: ConsoleLogEntry) -> gpui::Div {
+fn render_log_card(idx: usize, entry: ConsoleLogEntry) -> gpui_kit::Div {
     let t = theme();
     let is_err = entry.level == ConsoleLogLevel::Error;
     let is_warn = entry.level == ConsoleLogLevel::Warn;
@@ -209,12 +209,12 @@ fn render_log_card(idx: usize, entry: ConsoleLogEntry) -> gpui::Div {
     };
 
     let card_border = if is_err {
-        gpui::Hsla {
+        gpui_kit::Hsla {
             a: 0.35,
             ..t.method_delete
         }
     } else if is_warn {
-        gpui::Hsla {
+        gpui_kit::Hsla {
             a: 0.35,
             ..crate::theme::hex_to_hsla(0xf59e0b)
         }
@@ -223,12 +223,12 @@ fn render_log_card(idx: usize, entry: ConsoleLogEntry) -> gpui::Div {
     };
 
     let card_bg = if is_err {
-        gpui::Hsla {
+        gpui_kit::Hsla {
             a: 0.08,
             ..t.method_delete
         }
     } else if is_warn {
-        gpui::Hsla {
+        gpui_kit::Hsla {
             a: 0.06,
             ..crate::theme::hex_to_hsla(0xf59e0b)
         }
@@ -267,17 +267,17 @@ fn render_log_card(idx: usize, entry: ConsoleLogEntry) -> gpui::Div {
                                 .px(px(6.))
                                 .py(px(1.))
                                 .rounded(px(3.))
-                                .bg(gpui::Hsla {
+                                .bg(gpui_kit::Hsla {
                                     a: 0.12,
                                     ..src_color
                                 })
                                 .border_1()
-                                .border_color(gpui::Hsla {
+                                .border_color(gpui_kit::Hsla {
                                     a: 0.25,
                                     ..src_color
                                 })
                                 .text_xs()
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                 .text_color(src_color)
                                 .child(src_label),
                         )
@@ -286,17 +286,17 @@ fn render_log_card(idx: usize, entry: ConsoleLogEntry) -> gpui::Div {
                                 .px(px(5.))
                                 .py(px(1.))
                                 .rounded(px(3.))
-                                .bg(gpui::Hsla {
+                                .bg(gpui_kit::Hsla {
                                     a: 0.12,
                                     ..lvl_color
                                 })
                                 .border_1()
-                                .border_color(gpui::Hsla {
+                                .border_color(gpui_kit::Hsla {
                                     a: 0.25,
                                     ..lvl_color
                                 })
                                 .text_xs()
-                                .font_weight(gpui::FontWeight::BOLD)
+                                .font_weight(gpui_kit::FontWeight::BOLD)
                                 .text_color(lvl_color)
                                 .child(lvl_label),
                         ),
@@ -308,7 +308,7 @@ fn render_log_card(idx: usize, entry: ConsoleLogEntry) -> gpui::Div {
                         .text_color(t.text_muted)
                         .hover(|s| s.text_color(t.text_primary))
                         .on_click(move |_, _, cx| {
-                            cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                            cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(
                                 msg_copy.clone(),
                             ));
                         })

@@ -14,15 +14,15 @@ use crate::state::{
     EnvironmentState, ModalState, RequestSessionState, ToastState, WorkspaceDataState,
 };
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, App, Entity, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
     StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_component::button::{Button, ButtonVariants as _};
-use gpui_component::input::{Editor, EditorState as CodeEditorState, Textarea, TextareaState};
-use gpui_component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_component::Icon;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::input::{Editor, EditorState as CodeEditorState, Textarea, TextareaState};
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::Icon;
 use gpui_kit::assets::IconName;
 use zest_core::models::{KeyValuePair, MultipartItem, RequestBody};
 
@@ -183,7 +183,7 @@ impl RenderOnce for BodyEditor {
                                     .child(
                                         div()
                                             .text_xs()
-                                            .font_weight(gpui::FontWeight::MEDIUM)
+                                            .font_weight(gpui_kit::FontWeight::MEDIUM)
                                             .text_color(t.text_primary)
                                             .child(current_label),
                                     )
@@ -459,7 +459,7 @@ impl RenderOnce for BodyEditor {
                                         .cursor_pointer()
                                         .hover(|s| s.bg(t.bg_hover))
                                         .text_xs()
-                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                        .font_weight(gpui_kit::FontWeight::MEDIUM)
                                         .text_color(t.text_secondary)
                                         .on_click(move |_, window, cx| {
                                             let raw = j_text.read(cx).value().to_string();
@@ -514,7 +514,7 @@ impl RenderOnce for BodyEditor {
                                         .cursor_pointer()
                                         .hover(|s| s.bg(t.bg_hover))
                                         .text_xs()
-                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                        .font_weight(gpui_kit::FontWeight::MEDIUM)
                                         .text_color(t.text_secondary)
                                         .on_click(move |_, window, cx| {
                                             let raw = xml_tx.read(cx).value().to_string();
@@ -561,7 +561,7 @@ impl RenderOnce for BodyEditor {
                                         .cursor_pointer()
                                         .hover(|s| s.bg(t.bg_hover))
                                         .text_xs()
-                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                        .font_weight(gpui_kit::FontWeight::MEDIUM)
                                         .text_color(t.text_secondary)
                                         .on_click(move |_, _, cx| {
                                             if let Some(ws) = &ws_add {
@@ -596,7 +596,7 @@ impl RenderOnce for BodyEditor {
                                         .cursor_pointer()
                                         .hover(|s| s.bg(t.bg_hover))
                                         .text_xs()
-                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                        .font_weight(gpui_kit::FontWeight::MEDIUM)
                                         .text_color(t.text_secondary)
                                         .on_click(move |_, _, cx| {
                                             if let Some(ws) = &ws_add {
@@ -639,7 +639,7 @@ impl RenderOnce for BodyEditor {
                             .child(
                                 div()
                                     .text_xs()
-                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                    .font_weight(gpui_kit::FontWeight::MEDIUM)
                                     .text_color(t.text_secondary)
                                     .child("This request has no body payload"),
                             )
@@ -660,7 +660,7 @@ impl RenderOnce for BodyEditor {
                                 Editor::new(&self.json_editor)
                                     .appearance(false)
                                     .bordered(false)
-                                    .h(gpui::relative(1.)),
+                                    .h(gpui_kit::relative(1.)),
                             )
                             .into_any_element(),
                         Some(RequestBody::FormUrlEncoded { params: pairs }) => {
@@ -699,7 +699,7 @@ impl RenderOnce for BodyEditor {
                                     Editor::new(&self.xml_editor)
                                         .appearance(false)
                                         .bordered(false)
-                                        .h(gpui::relative(1.)),
+                                        .h(gpui_kit::relative(1.)),
                                 )
                                 .into_any_element()
                         }
@@ -710,7 +710,7 @@ impl RenderOnce for BodyEditor {
                                 Textarea::new(&self.raw_textarea)
                                     .appearance(false)
                                     .bordered(false)
-                                    .h(gpui::relative(1.)),
+                                    .h(gpui_kit::relative(1.)),
                             )
                             .into_any_element(),
                         Some(RequestBody::Binary { file_path }) => {

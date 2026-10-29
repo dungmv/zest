@@ -1,12 +1,12 @@
 use crate::components::script_editor::{ScriptCompletionProvider, ScriptEditorKind};
 use crate::state::{ComposerSyncScope, EnvironmentState, WorkspaceDataState};
-use gpui::{App, AppContext as _, Entity, Window};
-use gpui_component::input::{EditorState as CodeEditorState, InputState, TextareaState};
+use gpui_kit::{App, AppContext as _, Entity, Window};
+use gpui_kit::component::input::{EditorState as CodeEditorState, InputState, TextareaState};
 use std::rc::Rc;
 use zest_core::models::{Auth, RequestBody};
 
 type HighlighterFactory =
-    Rc<dyn Fn(&str) -> Option<Box<dyn gpui_component::input::InputHighlighter>>>;
+    Rc<dyn Fn(&str) -> Option<Box<dyn gpui_kit::component::input::InputHighlighter>>>;
 
 pub struct ComposerInputs {
     pub url_input: Entity<InputState>,

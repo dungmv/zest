@@ -3,16 +3,16 @@ use crate::components::env_input::render_env_input;
 use crate::components::kv_table::KvTable;
 use crate::state::{EnvironmentState, ModalState, ScopeSettingsTarget, WorkspaceDataState};
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_component::button::{Button, ButtonVariants as _};
-use gpui_component::input::{Input, InputEvent, InputState};
-use gpui_component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_component::scroll::ScrollableElement as _;
-use gpui_component::Icon;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::Icon;
 use gpui_kit::assets::IconName;
 use zest_core::models::{ApiKeyLocation, Auth, KeyValuePair};
 
@@ -125,7 +125,7 @@ impl RenderOnce for ScopeSettingsModal {
         };
 
         let ws_name_holder = window.use_keyed_state(
-            gpui::SharedString::from(format!("scope-ws-name-{}", workspace_path_str)),
+            gpui_kit::SharedString::from(format!("scope-ws-name-{}", workspace_path_str)),
             cx,
             |window, cx| {
                 let input =
@@ -164,7 +164,7 @@ impl RenderOnce for ScopeSettingsModal {
 
         // Input state holders for Auth
         let bearer_token_holder = window.use_keyed_state(
-            gpui::SharedString::from(format!("scope-auth-bearer-{:?}", target)),
+            gpui_kit::SharedString::from(format!("scope-auth-bearer-{:?}", target)),
             cx,
             |window, cx| {
                 let init_val = match &current_auth {
@@ -222,7 +222,7 @@ impl RenderOnce for ScopeSettingsModal {
         let bearer_input = bearer_token_holder.read(cx).0.clone();
 
         let basic_user_holder = window.use_keyed_state(
-            gpui::SharedString::from(format!("scope-auth-basic-u-{:?}", target)),
+            gpui_kit::SharedString::from(format!("scope-auth-basic-u-{:?}", target)),
             cx,
             |window, cx| {
                 let init_val = match &current_auth {
@@ -298,7 +298,7 @@ impl RenderOnce for ScopeSettingsModal {
         let basic_user_input = basic_user_holder.read(cx).0.clone();
 
         let basic_pass_holder = window.use_keyed_state(
-            gpui::SharedString::from(format!("scope-auth-basic-p-{:?}", target)),
+            gpui_kit::SharedString::from(format!("scope-auth-basic-p-{:?}", target)),
             cx,
             |window, cx| {
                 let init_val = match &current_auth {
@@ -374,7 +374,7 @@ impl RenderOnce for ScopeSettingsModal {
         let basic_pass_input = basic_pass_holder.read(cx).0.clone();
 
         let api_key_holder = window.use_keyed_state(
-            gpui::SharedString::from(format!("scope-auth-api-key-{:?}", target)),
+            gpui_kit::SharedString::from(format!("scope-auth-api-key-{:?}", target)),
             cx,
             |window, cx| {
                 let (init_k, _) = match &current_auth {
@@ -453,7 +453,7 @@ impl RenderOnce for ScopeSettingsModal {
         let api_key_input = api_key_holder.read(cx).0.clone();
 
         let api_val_holder = window.use_keyed_state(
-            gpui::SharedString::from(format!("scope-auth-api-val-{:?}", target)),
+            gpui_kit::SharedString::from(format!("scope-auth-api-val-{:?}", target)),
             cx,
             |window, cx| {
                 let (_, init_v) = match &current_auth {
@@ -534,7 +534,7 @@ impl RenderOnce for ScopeSettingsModal {
             .id("scope-settings-modal-overlay")
             .absolute()
             .inset_0()
-            .bg(gpui::Hsla { a: 0.6, ..t.bg_app })
+            .bg(gpui_kit::Hsla { a: 0.6, ..t.bg_app })
             .flex()
             .items_center()
             .justify_center()
@@ -581,7 +581,7 @@ impl RenderOnce for ScopeSettingsModal {
                                     .child(
                                         div()
                                             .text_sm()
-                                            .font_weight(gpui::FontWeight::BOLD)
+                                            .font_weight(gpui_kit::FontWeight::BOLD)
                                             .text_color(t.text_primary)
                                             .child(title),
                                     ),
@@ -621,9 +621,9 @@ impl RenderOnce for ScopeSettingsModal {
                                         .cursor_pointer()
                                         .pb(px(8.))
                                         .border_b_2()
-                                        .border_color(if is_active { t.border_focus } else { gpui::transparent_black() })
+                                        .border_color(if is_active { t.border_focus } else { gpui_kit::transparent_black() })
                                         .text_xs()
-                                        .font_weight(if is_active { gpui::FontWeight::BOLD } else { gpui::FontWeight::NORMAL })
+                                        .font_weight(if is_active { gpui_kit::FontWeight::BOLD } else { gpui_kit::FontWeight::NORMAL })
                                         .text_color(if is_active { t.text_primary } else { t.text_muted })
                                         .on_click(move |_, window, cx| {
                                             tab.update(cx, |state, _| *state = ScopeSettingsTab::General);
@@ -640,9 +640,9 @@ impl RenderOnce for ScopeSettingsModal {
                                     .cursor_pointer()
                                     .pb(px(8.))
                                     .border_b_2()
-                                    .border_color(if is_active { t.border_focus } else { gpui::transparent_black() })
+                                    .border_color(if is_active { t.border_focus } else { gpui_kit::transparent_black() })
                                     .text_xs()
-                                    .font_weight(if is_active { gpui::FontWeight::BOLD } else { gpui::FontWeight::NORMAL })
+                                    .font_weight(if is_active { gpui_kit::FontWeight::BOLD } else { gpui_kit::FontWeight::NORMAL })
                                     .text_color(if is_active { t.text_primary } else { t.text_muted })
                                     .on_click(move |_, window, cx| {
                                         tab.update(cx, |state, _| *state = ScopeSettingsTab::Headers);
@@ -658,9 +658,9 @@ impl RenderOnce for ScopeSettingsModal {
                                     .cursor_pointer()
                                     .pb(px(8.))
                                     .border_b_2()
-                                    .border_color(if is_active { t.border_focus } else { gpui::transparent_black() })
+                                    .border_color(if is_active { t.border_focus } else { gpui_kit::transparent_black() })
                                     .text_xs()
-                                    .font_weight(if is_active { gpui::FontWeight::BOLD } else { gpui::FontWeight::NORMAL })
+                                    .font_weight(if is_active { gpui_kit::FontWeight::BOLD } else { gpui_kit::FontWeight::NORMAL })
                                     .text_color(if is_active { t.text_primary } else { t.text_muted })
                                     .on_click(move |_, window, cx| {
                                         tab.update(cx, |state, _| *state = ScopeSettingsTab::Auth);
@@ -694,7 +694,7 @@ impl RenderOnce for ScopeSettingsModal {
                                         .child(
                                             div()
                                                 .text_xs()
-                                                .font_weight(gpui::FontWeight::BOLD)
+                                                .font_weight(gpui_kit::FontWeight::BOLD)
                                                 .text_color(t.text_secondary)
                                                 .child("WORKSPACE & STORAGE"),
                                         )
@@ -721,7 +721,7 @@ impl RenderOnce for ScopeSettingsModal {
                                                         .child(
                                                             div()
                                                                 .text_xs()
-                                                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                                .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                                 .text_color(t.text_primary)
                                                                 .child("Workspace Name"),
                                                         )
@@ -780,7 +780,7 @@ impl RenderOnce for ScopeSettingsModal {
                                                                         .items_center()
                                                                         .justify_center()
                                                                         .text_xs()
-                                                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                                         .hover(|s| s.opacity(0.9))
                                                                         .on_click(move |_, _, cx| {
                                                                             let val = name_inp_save.read(cx).value().to_string();
@@ -810,7 +810,7 @@ impl RenderOnce for ScopeSettingsModal {
                                                             div()
                                                                 .flex_shrink_0()
                                                                 .text_xs()
-                                                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                                .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                                 .text_color(t.text_primary)
                                                                 .child("Storage Directory"),
                                                         )
@@ -990,7 +990,7 @@ impl RenderOnce for ScopeSettingsModal {
                                                         .w(px(70.))
                                                         .flex_none()
                                                         .text_xs()
-                                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                         .text_color(t.text_secondary)
                                                         .child("Type:"),
                                                 )
@@ -1012,7 +1012,7 @@ impl RenderOnce for ScopeSettingsModal {
                                                         .child(
                                                             div()
                                                                 .text_xs()
-                                                                .font_weight(gpui::FontWeight::MEDIUM)
+                                                                .font_weight(gpui_kit::FontWeight::MEDIUM)
                                                                 .text_color(t.text_primary)
                                                                 .child(auth_label),
                                                         )
@@ -1171,7 +1171,7 @@ impl RenderOnce for ScopeSettingsModal {
                                                                 .w(px(70.))
                                                                 .flex_none()
                                                                 .text_xs()
-                                                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                                .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                                 .text_color(t.text_secondary)
                                                                 .child("Token:"),
                                                         )
@@ -1256,7 +1256,7 @@ impl RenderOnce for ScopeSettingsModal {
                                                                         .w(px(70.))
                                                                         .flex_none()
                                                                         .text_xs()
-                                                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                                         .text_color(t.text_secondary)
                                                                         .child("Username:"),
                                                                 )
@@ -1284,7 +1284,7 @@ impl RenderOnce for ScopeSettingsModal {
                                                                         .w(px(70.))
                                                                         .flex_none()
                                                                         .text_xs()
-                                                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                                         .text_color(t.text_secondary)
                                                                         .child("Password:"),
                                                                 )
@@ -1371,7 +1371,7 @@ impl RenderOnce for ScopeSettingsModal {
                                                                         .w(px(70.))
                                                                         .flex_none()
                                                                         .text_xs()
-                                                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                                         .text_color(t.text_secondary)
                                                                         .child("Key:"),
                                                                 )
@@ -1399,7 +1399,7 @@ impl RenderOnce for ScopeSettingsModal {
                                                                         .w(px(70.))
                                                                         .flex_none()
                                                                         .text_xs()
-                                                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                                         .text_color(t.text_secondary)
                                                                         .child("Value:"),
                                                                 )
@@ -1427,7 +1427,7 @@ impl RenderOnce for ScopeSettingsModal {
                                                                         .w(px(70.))
                                                                         .flex_none()
                                                                         .text_xs()
-                                                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                                         .text_color(t.text_secondary)
                                                                         .child("Add to:"),
                                                                 )
@@ -1452,7 +1452,7 @@ impl RenderOnce for ScopeSettingsModal {
                                                                         .child(
                                                                             div()
                                                                                 .text_xs()
-                                                                                .font_weight(gpui::FontWeight::MEDIUM)
+                                                                                .font_weight(gpui_kit::FontWeight::MEDIUM)
                                                                                 .text_color(t.text_primary)
                                                                                 .child(loc_label),
                                                                         )

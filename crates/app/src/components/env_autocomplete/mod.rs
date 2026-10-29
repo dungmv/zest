@@ -7,12 +7,12 @@ pub use render::{
 
 use crate::state::EnvironmentState;
 use anyhow::Result;
-use gpui::{
+use gpui_kit::{
     div, px, App, Div, Entity, InteractiveElement as _, KeyDownEvent, ParentElement as _,
     ScrollHandle, Styled as _, Task, Window,
 };
-use gpui_component::input::{CompletionProvider, InlineToken, InputContent};
-use gpui_component::RopeExt;
+use gpui_kit::component::input::{CompletionProvider, InlineToken, InputContent};
+use gpui_kit::component::RopeExt;
 use lsp_types::{
     CompletionContext, CompletionItem, CompletionItemKind, CompletionResponse, CompletionTextEdit,
     Documentation, Range as LspRange, TextEdit,
@@ -236,7 +236,7 @@ pub enum EnvVarKind {
 pub fn get_variable_kind_and_color(
     scope: &str,
     is_res: bool,
-) -> (EnvVarKind, gpui::Hsla, gpui::Hsla) {
+) -> (EnvVarKind, gpui_kit::Hsla, gpui_kit::Hsla) {
     if !is_res {
         // Red / Unresolved
         (
@@ -273,7 +273,7 @@ pub fn variable_value_tooltip(
     val: &str,
     scope: &str,
     is_res: bool,
-) -> gpui_component::tooltip::Tooltip {
+) -> gpui_kit::component::tooltip::Tooltip {
     let (_kind, color, _bg_tint) = get_variable_kind_and_color(scope, is_res);
 
     if is_res {
@@ -282,11 +282,11 @@ pub fn variable_value_tooltip(
         } else {
             val.to_string()
         };
-        gpui_component::tooltip::Tooltip::new(text)
+        gpui_kit::component::tooltip::Tooltip::new(text)
             .font_family(".SystemMonoFont")
             .text_xs()
     } else {
-        gpui_component::tooltip::Tooltip::new("Variable not found")
+        gpui_kit::component::tooltip::Tooltip::new("Variable not found")
             .text_color(color)
             .text_xs()
     }
@@ -326,7 +326,7 @@ impl EnvCompletionProvider {
 impl CompletionProvider for EnvCompletionProvider {
     fn completions(
         &self,
-        rope: &gpui_component::input::Rope,
+        rope: &gpui_kit::component::input::Rope,
         offset: usize,
         _trigger: CompletionContext,
         _window: &mut Window,

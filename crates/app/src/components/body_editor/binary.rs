@@ -1,11 +1,11 @@
 use crate::state::{RequestSessionState, WorkspaceDataState};
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, AnyElement, Entity, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled,
 };
-use gpui_component::Icon;
+use gpui_kit::component::Icon;
 use gpui_kit::assets::IconName;
 
 pub fn format_file_size(path_str: &str) -> String {
@@ -75,7 +75,7 @@ pub fn render_binary_editor(
                                 .child(
                                     div()
                                         .text_sm()
-                                        .font_weight(gpui::FontWeight::BOLD)
+                                        .font_weight(gpui_kit::FontWeight::BOLD)
                                         .text_color(t.text_primary)
                                         .child("Binary Request Payload"),
                                 )
@@ -145,7 +145,7 @@ pub fn render_binary_editor(
                                         .hover(|s| s.bg(t.primary_hover))
                                         .cursor_pointer()
                                         .text_xs()
-                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                         .on_click(move |_, _, cx| {
                                             let ed_bg = ed_pick.clone();
                                             let ws_bg = ws_pick.clone();

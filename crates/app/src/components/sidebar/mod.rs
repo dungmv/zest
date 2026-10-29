@@ -23,17 +23,17 @@ use crate::state::{
     ToastState, WorkspaceDataState,
 };
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, uniform_list, AnyElement, App, AppContext as _, Entity, InteractiveElement as _,
     IntoElement, ListSizingBehavior, ParentElement, RenderOnce, StatefulInteractiveElement as _,
     Styled, Window,
 };
-use gpui_component::button::{Button, ButtonVariants as _};
-use gpui_component::input::InputState;
-use gpui_component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_component::scroll::ScrollableElement as _;
-use gpui_component::Icon;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::input::InputState;
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::Icon;
 use gpui_kit::assets::IconName;
 use std::collections::HashMap;
 
@@ -70,7 +70,7 @@ fn render_flat_sidebar_row(row: &FlatSidebarRow, ctx: &SidebarRenderContext) -> 
             .flex()
             .items_center()
             .text_xs()
-            .font_weight(gpui::FontWeight::SEMIBOLD)
+            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
             .text_color(t.text_muted)
             .child("📌 PINNED")
             .into_any_element(),
@@ -259,15 +259,15 @@ impl RenderOnce for SidebarTree {
 
         let sb_search = sb_clone.clone();
         let search_holder = window.use_keyed_state(
-            gpui::SharedString::from("sidebar-search-input-holder"),
+            gpui_kit::SharedString::from("sidebar-search-input-holder"),
             cx,
             |window, cx| {
                 let search_input = cx.new(|cx| {
-                    gpui_component::input::InputState::new(window, cx).placeholder("Search...")
+                    gpui_kit::component::input::InputState::new(window, cx).placeholder("Search...")
                 });
                 let s_in = search_input.clone();
                 let sub = cx.subscribe_in(&search_input, window, move |_, _, event, _, cx| {
-                    if let gpui_component::input::InputEvent::Change = event {
+                    if let gpui_kit::component::input::InputEvent::Change = event {
                         let q = s_in.read(cx).value().to_string();
                         sb_search.update(cx, |state, cx| {
                             state.set_filter_query(q, cx);
@@ -316,7 +316,7 @@ impl RenderOnce for SidebarTree {
                             .items_center()
                             .child(
                                 div().flex_1().child(
-                                    gpui_component::input::Input::new(&search_input)
+                                    gpui_kit::component::input::Input::new(&search_input)
                                         .id("sidebar-search-input")
                                         .appearance(false)
                                         .bordered(false)
@@ -341,7 +341,7 @@ impl RenderOnce for SidebarTree {
                                     .text_color(t.text_secondary),
                             )
                             .dropdown_menu_with_anchor(
-                                gpui::Anchor::TopRight,
+                                gpui_kit::Anchor::TopRight,
                                 move |menu, _window, _cx| {
                                     let ws_req = ws_menu.clone();
                                     let ed_req = ed_menu.clone();
@@ -427,7 +427,7 @@ impl RenderOnce for SidebarTree {
                                         .cursor_pointer()
                                         .hover(|s| s.bg(t.bg_hover).text_color(t.text_primary))
                                         .text_xs()
-                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                        .font_weight(gpui_kit::FontWeight::MEDIUM)
                                         .text_color(t.text_secondary)
                                         .on_click(move |_, _, cx| {
                                             let req = ws_new.update(cx, |state, cx| {

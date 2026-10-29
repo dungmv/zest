@@ -4,8 +4,8 @@ use crate::state::{
     EnvironmentState, GitState, ModalState, PersistenceState, RequestSessionState, SidebarState,
     ToastState, WorkspaceDataState,
 };
-use gpui::prelude::FluentBuilder as _;
-use gpui::{App, Div, Entity, ParentElement, Window};
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{App, Div, Entity, ParentElement, Window};
 
 pub struct ModalOverlayEntities<'a> {
     pub workspace_state: &'a Entity<WorkspaceDataState>,

@@ -5,12 +5,12 @@ mod shortcuts_tab;
 
 use crate::state::{ModalState, SettingsTab, WorkspaceDataState};
 use crate::theme::theme;
-use gpui::{
+use gpui_kit::{
     div, px, App, Entity, InteractiveElement as _, IntoElement, MouseButton, ParentElement,
     RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_component::scroll::ScrollableElement as _;
-use gpui_component::Icon;
+use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::Icon;
 use gpui_kit::assets::IconName;
 
 #[derive(IntoElement)]
@@ -71,7 +71,7 @@ impl RenderOnce for SettingsModal {
             .id("settings-modal-overlay")
             .absolute()
             .inset_0()
-            .bg(gpui::Hsla { a: 0.6, ..t.bg_app })
+            .bg(gpui_kit::Hsla { a: 0.6, ..t.bg_app })
             .flex()
             .items_center()
             .justify_center()
@@ -139,7 +139,7 @@ impl RenderOnce for SettingsModal {
                                     .child(
                                         div()
                                             .text_sm()
-                                            .font_weight(gpui::FontWeight::BOLD)
+                                            .font_weight(gpui_kit::FontWeight::BOLD)
                                             .text_color(t.text_primary)
                                             .child("Settings"),
                                     ),
@@ -246,9 +246,9 @@ impl RenderOnce for SettingsModal {
                                                                 .truncate()
                                                                 .text_xs()
                                                                 .font_weight(if is_active {
-                                                                    gpui::FontWeight::SEMIBOLD
+                                                                    gpui_kit::FontWeight::SEMIBOLD
                                                                 } else {
-                                                                    gpui::FontWeight::MEDIUM
+                                                                    gpui_kit::FontWeight::MEDIUM
                                                                 })
                                                                 .text_color(if is_active {
                                                                     t.text_primary
@@ -275,7 +275,7 @@ impl RenderOnce for SettingsModal {
                                                             t.text_muted
                                                         })
                                                         .text_size(px(10.))
-                                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                         .child(format!("{}", count))
                                                 }))
                                         },

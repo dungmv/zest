@@ -1,12 +1,12 @@
 use crate::services::GitService;
 use crate::state::GitState;
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_component::Icon;
+use gpui_kit::component::Icon;
 use gpui_kit::assets::IconName;
 use std::collections::HashMap;
 use zest_core::git::{GitFileStatus, GitStatusResult};
@@ -51,19 +51,19 @@ pub fn collect_unified_changes(status: &GitStatusResult) -> Vec<UnifiedChangeIte
     items
 }
 
-pub fn render_status_badge(status: GitFileStatus) -> gpui::AnyElement {
+pub fn render_status_badge(status: GitFileStatus) -> gpui_kit::AnyElement {
     let color = match status {
-        GitFileStatus::Modified => gpui::rgb(0xfacc15),
-        GitFileStatus::Added | GitFileStatus::Untracked => gpui::rgb(0x4ade80),
-        GitFileStatus::Deleted => gpui::rgb(0xef4444),
-        _ => gpui::rgb(0x9ca3af),
+        GitFileStatus::Modified => gpui_kit::rgb(0xfacc15),
+        GitFileStatus::Added | GitFileStatus::Untracked => gpui_kit::rgb(0x4ade80),
+        GitFileStatus::Deleted => gpui_kit::rgb(0xef4444),
+        _ => gpui_kit::rgb(0x9ca3af),
     };
 
     div()
         .w(px(16.))
         .h(px(16.))
         .rounded(px(3.))
-        .bg(gpui::Hsla {
+        .bg(gpui_kit::Hsla {
             a: 0.15,
             ..color.into()
         })
@@ -71,7 +71,7 @@ pub fn render_status_badge(status: GitFileStatus) -> gpui::AnyElement {
         .items_center()
         .justify_center()
         .text_xs()
-        .font_weight(gpui::FontWeight::BOLD)
+        .font_weight(gpui_kit::FontWeight::BOLD)
         .text_color(color)
         .child(status.code())
         .into_any_element()
@@ -81,8 +81,8 @@ pub fn render_checkbox(
     id: &str,
     checked: bool,
     partial: bool,
-    on_toggle: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
-) -> gpui::AnyElement {
+    on_toggle: impl Fn(&gpui_kit::ClickEvent, &mut Window, &mut App) + 'static,
+) -> gpui_kit::AnyElement {
     let t = theme();
     let symbol = if checked {
         "✓"
@@ -94,7 +94,7 @@ pub fn render_checkbox(
     let is_active = checked || partial;
 
     div()
-        .id(gpui::SharedString::from(id.to_string()))
+        .id(gpui_kit::SharedString::from(id.to_string()))
         .w(px(16.))
         .h(px(16.))
         .flex_shrink_0()
@@ -107,7 +107,7 @@ pub fn render_checkbox(
         .justify_center()
         .cursor_pointer()
         .text_xs()
-        .font_weight(gpui::FontWeight::BOLD)
+        .font_weight(gpui_kit::FontWeight::BOLD)
         .text_color(if is_active {
             t.primary_foreground
         } else {
@@ -121,14 +121,14 @@ pub fn render_checkbox(
         .into_any_element()
 }
 
-pub fn render_error_banner(git_state: Entity<GitState>, err: String) -> gpui::AnyElement {
+pub fn render_error_banner(git_state: Entity<GitState>, err: String) -> gpui_kit::AnyElement {
     let t = theme();
     let git_err = git_state.clone();
 
     div()
         .px(px(16.))
         .py(px(8.))
-        .bg(gpui::Hsla {
+        .bg(gpui_kit::Hsla {
             h: 0.0,
             s: 0.7,
             l: 0.45,
@@ -167,7 +167,7 @@ pub fn render_error_banner(git_state: Entity<GitState>, err: String) -> gpui::An
         .into_any_element()
 }
 
-pub fn render_not_a_repo_view(git_service: GitService, is_loading: bool) -> gpui::AnyElement {
+pub fn render_not_a_repo_view(git_service: GitService, is_loading: bool) -> gpui_kit::AnyElement {
     let t = theme();
     let svc_init = git_service;
 
@@ -182,7 +182,7 @@ pub fn render_not_a_repo_view(git_service: GitService, is_loading: bool) -> gpui
         .child(
             div()
                 .text_base()
-                .font_weight(gpui::FontWeight::BOLD)
+                .font_weight(gpui_kit::FontWeight::BOLD)
                 .text_color(t.text_primary)
                 .child("Not a Git Repository"),
         )
@@ -211,7 +211,7 @@ pub fn render_not_a_repo_view(git_service: GitService, is_loading: bool) -> gpui
                 })
                 .when(is_loading, |s| s.bg(t.bg_hover).text_color(t.text_muted))
                 .text_xs()
-                .font_weight(gpui::FontWeight::BOLD)
+                .font_weight(gpui_kit::FontWeight::BOLD)
                 .on_click(move |_, _, cx| {
                     if is_loading {
                         return;

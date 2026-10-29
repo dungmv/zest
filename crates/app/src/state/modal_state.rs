@@ -1,5 +1,5 @@
 use crate::settings::AppSettings;
-use gpui::Context;
+use gpui_kit::Context;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ScopeSettingsTarget {

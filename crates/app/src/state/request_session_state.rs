@@ -1,5 +1,5 @@
 use super::{ComposerSyncScope, SessionEvent};
-use gpui::{Context, Task};
+use gpui_kit::{Context, Task};
 use tokio::sync::oneshot;
 use zest_core::models::HttpRequestItem;
 

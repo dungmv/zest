@@ -5,12 +5,12 @@ use super::diff_view::{
 use crate::services::GitService;
 use crate::state::GitState;
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
     RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_component::scroll::ScrollableElement as _;
+use gpui_kit::component::scroll::ScrollableElement as _;
 use std::collections::HashSet;
 
 #[derive(IntoElement)]
@@ -35,7 +35,7 @@ pub fn render_history_view(
     view_mode: DiffViewMode,
     mode_entity: Entity<DiffViewMode>,
     expanded_files: HashSet<String>,
-) -> gpui::AnyElement {
+) -> gpui_kit::AnyElement {
     let t = theme();
 
     div()
@@ -84,7 +84,7 @@ pub fn render_history_view(
                                 .child(
                                     div()
                                         .text_xs()
-                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                        .font_weight(gpui_kit::FontWeight::MEDIUM)
                                         .text_color(t.text_primary)
                                         .truncate()
                                         .child(item.message),
@@ -182,7 +182,7 @@ pub fn render_history_view(
                                             .flex_1()
                                             .min_w(px(0.))
                                             .text_sm()
-                                            .font_weight(gpui::FontWeight::BOLD)
+                                            .font_weight(gpui_kit::FontWeight::BOLD)
                                             .text_color(t.text_primary)
                                             .truncate()
                                             .child(commit_detail.commit.message.clone()),
@@ -266,7 +266,7 @@ pub fn render_history_view(
                                                         div()
                                                             .text_xs()
                                                             .font_family(".SystemMonoFont")
-                                                            .font_weight(gpui::FontWeight::MEDIUM)
+                                                            .font_weight(gpui_kit::FontWeight::MEDIUM)
                                                             .text_color(t.text_primary)
                                                             .child(format!("📄 {}", file_path)),
                                                     ),
@@ -332,7 +332,7 @@ impl RenderOnce for GitHistoryModal {
         };
 
         let view_mode_holder = window.use_keyed_state(
-            gpui::SharedString::from("git-diff-view-mode"),
+            gpui_kit::SharedString::from("git-diff-view-mode"),
             cx,
             |_window, cx| {
                 let st = cx.new(|_cx| DiffViewMode::Split);
@@ -346,7 +346,7 @@ impl RenderOnce for GitHistoryModal {
             .id("git-history-modal-overlay")
             .absolute()
             .inset_0()
-            .bg(gpui::Hsla {
+            .bg(gpui_kit::Hsla {
                 a: 0.65,
                 ..t.bg_app
             })
@@ -415,7 +415,7 @@ impl RenderOnce for GitHistoryModal {
                                     .child(
                                         div()
                                             .text_sm()
-                                            .font_weight(gpui::FontWeight::BOLD)
+                                            .font_weight(gpui_kit::FontWeight::BOLD)
                                             .text_color(t.text_primary)
                                             .child("Git History"),
                                     )

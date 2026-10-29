@@ -14,7 +14,7 @@ pub use remotes_modal::*;
 
 use crate::services::GitService;
 use crate::state::{GitActiveModal, GitState, WorkspaceDataState};
-use gpui::{div, App, AppContext as _, Entity, IntoElement, RenderOnce, Window};
+use gpui_kit::{div, App, AppContext as _, Entity, IntoElement, RenderOnce, Window};
 
 #[derive(IntoElement)]
 pub struct GitModal {

@@ -1,11 +1,11 @@
 use crate::state::ModalState;
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, App, Entity, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled,
 };
-use gpui_component::Icon;
+use gpui_kit::component::Icon;
 use gpui_kit::assets::IconName;
 
 pub fn render_network_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl IntoElement {
@@ -33,7 +33,7 @@ pub fn render_network_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
                 .child(
                     div()
                         .text_xs()
-                        .font_weight(gpui::FontWeight::BOLD)
+                        .font_weight(gpui_kit::FontWeight::BOLD)
                         .text_color(t.text_secondary)
                         .child("NETWORK & EXECUTION"),
                 )
@@ -67,7 +67,7 @@ pub fn render_network_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
                         .child(
                             div()
                                 .text_xs()
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                 .text_color(t.text_primary)
                                 .child("Request Timeout"),
                         )
@@ -108,7 +108,7 @@ pub fn render_network_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
                                 })
                                 .cursor_pointer()
                                 .text_xs()
-                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .font_weight(gpui_kit::FontWeight::MEDIUM)
                                 .hover(|st| {
                                     if !is_cur {
                                         st.bg(t.bg_hover).text_color(t.text_primary)
@@ -150,7 +150,7 @@ pub fn render_network_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
                         .child(
                             div()
                                 .text_xs()
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                 .text_color(t.text_primary)
                                 .child("Follow HTTP Redirects"),
                         )
@@ -181,7 +181,7 @@ pub fn render_network_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
                         .items_center()
                         .gap(px(5.))
                         .text_xs()
-                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .font_weight(gpui_kit::FontWeight::MEDIUM)
                         .hover(|s| {
                             if !cur_follow {
                                 s.bg(t.bg_hover).text_color(t.text_primary)
@@ -225,7 +225,7 @@ pub fn render_network_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
                         .child(
                             div()
                                 .text_xs()
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                 .text_color(t.text_primary)
                                 .child("Validate SSL / TLS Certificates"),
                         )
@@ -256,7 +256,7 @@ pub fn render_network_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
                         .items_center()
                         .gap(px(5.))
                         .text_xs()
-                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .font_weight(gpui_kit::FontWeight::MEDIUM)
                         .hover(|s| {
                             if !cur_tls {
                                 s.bg(t.bg_hover).text_color(t.text_primary)

@@ -1,6 +1,6 @@
 #[cfg(target_os = "macos")]
-use gpui::Point;
-use gpui::{px, size, App, TitlebarOptions, WindowBounds, WindowOptions};
+use gpui_kit::Point;
+use gpui_kit::{px, size, App, TitlebarOptions, WindowBounds, WindowOptions};
 
 pub fn default_window_options(cx: &mut App) -> WindowOptions {
     let mut options = WindowOptions {

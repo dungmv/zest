@@ -1,7 +1,7 @@
 use crate::components::MethodBadge;
 use crate::theme::theme;
-use gpui::{div, px, Context, IntoElement, ParentElement, Render, Styled, Window};
-use gpui_component::Icon;
+use gpui_kit::{div, px, Context, IntoElement, ParentElement, Render, Styled, Window};
+use gpui_kit::component::Icon;
 use gpui_kit::assets::IconName;
 use zest_core::models::HttpMethod;
 
@@ -54,7 +54,7 @@ impl Render for DragRequestItem {
                 div()
                     .text_xs()
                     .font_family(".SystemMonoFont")
-                    .font_weight(gpui::FontWeight::NORMAL)
+                    .font_weight(gpui_kit::FontWeight::NORMAL)
                     .text_color(t.text_primary)
                     .child(self.name.clone()),
             )
@@ -90,7 +90,7 @@ impl Render for DragFolderItem {
                 div()
                     .text_xs()
                     .font_family(".SystemMonoFont")
-                    .font_weight(gpui::FontWeight::NORMAL)
+                    .font_weight(gpui_kit::FontWeight::NORMAL)
                     .text_color(t.text_primary)
                     .child(self.name.clone()),
             )

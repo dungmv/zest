@@ -8,7 +8,7 @@ use crate::app::AppView;
 use crate::state::{
     ComposerSyncScope, EnvironmentEvent, ResponseEvent, SessionEvent, WorkspaceEvent,
 };
-use gpui::{Context, Window};
+use gpui_kit::{Context, Window};
 
 pub fn handle_workspace_event(
     this: &mut AppView,

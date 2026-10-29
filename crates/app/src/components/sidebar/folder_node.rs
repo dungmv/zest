@@ -4,13 +4,13 @@ use super::{SidebarRenderContext, SIDEBAR_ROW_HEIGHT};
 use crate::app::actions::DismissModal;
 use crate::state::ScopeSettingsTarget;
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, AnyElement, AppContext as _, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement, StatefulInteractiveElement as _, Styled,
 };
-use gpui_component::menu::ContextMenuExt as _;
-use gpui_component::{Icon, Sizable as _};
+use gpui_kit::component::menu::ContextMenuExt as _;
+use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::assets::IconName;
 
 pub fn render_folder_row(
@@ -22,8 +22,8 @@ pub fn render_folder_row(
     ctx: &SidebarRenderContext,
 ) -> AnyElement {
     let t = theme();
-    let git_green: gpui::Hsla = gpui::rgb(0x4ade80).into();
-    let git_yellow: gpui::Hsla = gpui::rgb(0xfacc15).into();
+    let git_green: gpui_kit::Hsla = gpui_kit::rgb(0x4ade80).into();
+    let git_yellow: gpui_kit::Hsla = gpui_kit::rgb(0xfacc15).into();
 
     let folder_color = match folder_git_status {
         SidebarGitStatus::New => git_green,
@@ -151,7 +151,7 @@ pub fn render_folder_row(
                 let f_id_d = f_id_del.clone();
 
                 menu.item(
-                    gpui_component::menu::PopupMenuItem::new("New Request").on_click(
+                    gpui_kit::component::menu::PopupMenuItem::new("New Request").on_click(
                         move |_, _, cx| {
                             let req = ws_n.update(cx, |state, cx| {
                                 state.create_request(Some(f_id_n.clone()), cx)
@@ -163,7 +163,7 @@ pub fn render_folder_row(
                     ),
                 )
                 .item(
-                    gpui_component::menu::PopupMenuItem::new("New Folder").on_click(
+                    gpui_kit::component::menu::PopupMenuItem::new("New Folder").on_click(
                         move |_, window, cx| {
                             let ws_c = ws_ns.clone();
                             let created = ws_ns.update(cx, |state, cx| {
@@ -187,7 +187,7 @@ pub fn render_folder_row(
                         },
                     ),
                 )
-                .item(gpui_component::menu::PopupMenuItem::new("Rename").on_click(
+                .item(gpui_kit::component::menu::PopupMenuItem::new("Rename").on_click(
                     move |_, window, cx| {
                         let ws_c = ws_r.clone();
                         sb_r.update(cx, |state, cx| {
@@ -202,7 +202,7 @@ pub fn render_folder_row(
                     },
                 ))
                 .item(
-                    gpui_component::menu::PopupMenuItem::new("Folder Settings...")
+                    gpui_kit::component::menu::PopupMenuItem::new("Folder Settings...")
                         .icon(IconName::Settings)
                         .on_click(move |_, _, cx| {
                             modal_set.update(cx, |state, cx| {
@@ -214,7 +214,7 @@ pub fn render_folder_row(
                         }),
                 )
                 .separator()
-                .item(gpui_component::menu::PopupMenuItem::new("Delete").on_click(
+                .item(gpui_kit::component::menu::PopupMenuItem::new("Delete").on_click(
                     move |_, _, cx| {
                         ws_d.update(cx, |state, cx| {
                             state.delete_folder(&f_id_d, cx);
@@ -280,7 +280,7 @@ pub fn render_folder_row(
                                 });
                             })
                             .child(
-                                gpui_component::input::Input::new(inp)
+                                gpui_kit::component::input::Input::new(inp)
                                     .id(format!("rename-folder-field-{}", folder_id))
                                     .appearance(false)
                                     .bordered(false)
@@ -288,14 +288,14 @@ pub fn render_folder_row(
                                     .cleanable(false)
                                     .xsmall()
                                     .font_family(".SystemMonoFont")
-                                    .font_weight(gpui::FontWeight::NORMAL),
+                                    .font_weight(gpui_kit::FontWeight::NORMAL),
                             )
                             .into_any_element()
                     } else {
                         div()
                             .text_xs()
                             .font_family(".SystemMonoFont")
-                            .font_weight(gpui::FontWeight::NORMAL)
+                            .font_weight(gpui_kit::FontWeight::NORMAL)
                             .text_color(folder_color)
                             .truncate()
                             .child(f_name_str)

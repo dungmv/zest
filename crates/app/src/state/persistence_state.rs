@@ -2,7 +2,7 @@ use super::{
     EnvironmentState, GitState, PersistPayload, PersistTarget, PersistenceCoordinator,
     TargetStatus, WorkspaceDataState, WorkspaceEvent,
 };
-use gpui::{Context, Entity, Task};
+use gpui_kit::{Context, Entity, Task};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;

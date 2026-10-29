@@ -1,12 +1,12 @@
 use crate::state::{ModalState, WorkspaceDataState};
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_component::input::{Input, InputEvent, InputState};
-use gpui_component::Icon;
+use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::Icon;
 use gpui_kit::assets::IconName;
 
 pub fn render_cookies_tab(
@@ -23,7 +23,7 @@ pub fn render_cookies_tab(
     let total_count = all_cookies.len();
 
     let filter_holder = window.use_keyed_state(
-        gpui::SharedString::from("settings-cookie-filter-input"),
+        gpui_kit::SharedString::from("settings-cookie-filter-input"),
         cx,
         |window, cx| {
             let init_q = modal_clone.read(cx).cookie_filter_query.clone();
@@ -89,7 +89,7 @@ pub fn render_cookies_tab(
                         .child(
                             div()
                                 .text_xs()
-                                .font_weight(gpui::FontWeight::BOLD)
+                                .font_weight(gpui_kit::FontWeight::BOLD)
                                 .text_color(t.text_secondary)
                                 .child(format!("WORKSPACE COOKIE JAR ({})", total_count)),
                         )
@@ -119,7 +119,7 @@ pub fn render_cookies_tab(
                             .items_center()
                             .gap(px(5.))
                             .text_xs()
-                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .font_weight(gpui_kit::FontWeight::MEDIUM)
                             .on_click(move |_, _, cx| {
                                 ws_clear.update(cx, |ws, cx| {
                                     ws.clear_cookies(cx);
@@ -184,7 +184,7 @@ pub fn render_cookies_tab(
                 .child(
                     div()
                         .text_xs()
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                         .text_color(t.text_secondary)
                         .child(if total_count == 0 {
                             "No cookies stored in this workspace"
@@ -246,7 +246,7 @@ pub fn render_cookies_tab(
                                             div()
                                                 .text_xs()
                                                 .font_family(".SystemMonoFont")
-                                                .font_weight(gpui::FontWeight::BOLD)
+                                                .font_weight(gpui_kit::FontWeight::BOLD)
                                                 .text_color(t.primary)
                                                 .child(cookie.name.clone()),
                                         )
@@ -290,10 +290,10 @@ pub fn render_cookies_tab(
                                                     .px(px(5.))
                                                     .py(px(1.))
                                                     .rounded(px(3.))
-                                                    .bg(gpui::rgb(0x22c55e).opacity(0.15))
-                                                    .text_color(gpui::rgb(0x22c55e))
+                                                    .bg(gpui_kit::rgb(0x22c55e).opacity(0.15))
+                                                    .text_color(gpui_kit::rgb(0x22c55e))
                                                     .text_size(px(10.))
-                                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                     .child("Secure"),
                                             )
                                         })
@@ -303,10 +303,10 @@ pub fn render_cookies_tab(
                                                     .px(px(5.))
                                                     .py(px(1.))
                                                     .rounded(px(3.))
-                                                    .bg(gpui::rgb(0x3b82f6).opacity(0.15))
-                                                    .text_color(gpui::rgb(0x3b82f6))
+                                                    .bg(gpui_kit::rgb(0x3b82f6).opacity(0.15))
+                                                    .text_color(gpui_kit::rgb(0x3b82f6))
                                                     .text_size(px(10.))
-                                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                     .child("HttpOnly"),
                                             )
                                         })
@@ -337,7 +337,7 @@ pub fn render_cookies_tab(
                                                 })
                                                 .on_click(move |_, _, cx| {
                                                     cx.write_to_clipboard(
-                                                        gpui::ClipboardItem::new_string(
+                                                        gpui_kit::ClipboardItem::new_string(
                                                             val_copy.clone(),
                                                         ),
                                                     );

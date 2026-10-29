@@ -1,5 +1,5 @@
 use super::ResponseEvent;
-use gpui::Context;
+use gpui_kit::Context;
 use std::sync::Arc;
 use zest_core::cache::ResponseCache;
 use zest_core::models::{ConsoleLogEntry, ConsoleLogLevel, HttpResponseRecord, TestResult};
@@ -68,7 +68,7 @@ pub struct ResponseState {
     pub console_logs: Vec<ConsoleLogEntry>,
     pub console_filter: ConsoleFilter,
     pub formatted_body: Option<FormattedResponseBody>,
-    pub scroll_handle: gpui::UniformListScrollHandle,
+    pub scroll_handle: gpui_kit::UniformListScrollHandle,
     pub wrap_lines: bool,
 }
 
@@ -88,7 +88,7 @@ impl ResponseState {
             console_logs: Vec::new(),
             console_filter: ConsoleFilter::All,
             formatted_body: None,
-            scroll_handle: gpui::UniformListScrollHandle::new(),
+            scroll_handle: gpui_kit::UniformListScrollHandle::new(),
             wrap_lines: false,
         }
     }
@@ -110,7 +110,7 @@ impl ResponseState {
             self.console_logs.clear();
             self.current_response = None;
         }
-        self.scroll_handle = gpui::UniformListScrollHandle::new();
+        self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
         self.refresh_formatted_body();
     }
 
@@ -136,7 +136,7 @@ impl ResponseState {
         self.test_results.clear();
         self.show_timing_popover = false;
         self.active_example_name = None;
-        self.scroll_handle = gpui::UniformListScrollHandle::new();
+        self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
     }
 
     pub fn start_sending(&mut self, req_id: Option<&str>, cx: &mut Context<Self>) {
@@ -159,7 +159,7 @@ impl ResponseState {
 
         self.cache.insert(req_id, response.clone());
         self.current_response = Some(response);
-        self.scroll_handle = gpui::UniformListScrollHandle::new();
+        self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
         self.refresh_formatted_body();
         cx.emit(ResponseEvent::ContentChanged {
             sync_sent_preview: true,
@@ -206,7 +206,7 @@ impl ResponseState {
             created_at: chrono::Utc::now(),
         };
         self.current_response = Some(Arc::new(record));
-        self.scroll_handle = gpui::UniformListScrollHandle::new();
+        self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
         self.refresh_formatted_body();
     }
 
@@ -215,7 +215,7 @@ impl ResponseState {
         if let Some(resp) = self.cache.get(&req_id.to_string()).cloned() {
             self.current_response = Some(resp);
         }
-        self.scroll_handle = gpui::UniformListScrollHandle::new();
+        self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
         self.refresh_formatted_body();
         cx.emit(ResponseEvent::ContentChanged {
             sync_sent_preview: true,
@@ -319,7 +319,7 @@ impl ResponseState {
             self.console_logs = r.console_logs.clone();
         }
         self.current_response = response;
-        self.scroll_handle = gpui::UniformListScrollHandle::new();
+        self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
         self.refresh_formatted_body();
         cx.emit(ResponseEvent::ContentChanged {
             sync_sent_preview: true,
@@ -677,7 +677,7 @@ mod tests {
 
     #[test]
     fn test_toolbar_icons_exist_in_all_assets() {
-        use gpui::AssetSource as _;
+        use gpui_kit::AssetSource as _;
         use gpui_kit::assets::{AllAssets, IconName};
 
         let assets = AllAssets;

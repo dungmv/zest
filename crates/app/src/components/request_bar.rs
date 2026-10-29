@@ -7,17 +7,17 @@ use crate::components::env_autocomplete::{
 use crate::components::status_badge::MethodBadge;
 use crate::state::{EnvironmentState, ModalState, RequestSessionState};
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     deferred, div, px, App, AppContext as _, Entity, Focusable as _, FontWeight,
     InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
     StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_component::button::{Button, ButtonVariants as _};
-use gpui_component::input::{Input, InputState};
-use gpui_component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_component::scroll::ScrollableElement as _;
-use gpui_component::Icon;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::input::{Input, InputState};
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::Icon;
 use gpui_kit::assets::IconName;
 use zest_core::models::HttpMethod;
 
@@ -89,14 +89,14 @@ impl RenderOnce for RequestBar {
         };
 
         let auto_state = window.use_keyed_state(
-            gpui::SharedString::from("auto-nav-url-bar"),
+            gpui_kit::SharedString::from("auto-nav-url-bar"),
             cx,
             |_window, _cx| AutocompleteNavState::default(),
         );
         let scroll_handle = window.use_keyed_state(
-            gpui::SharedString::from("auto-scroll-url-bar"),
+            gpui_kit::SharedString::from("auto-scroll-url-bar"),
             cx,
-            |_window, _cx| gpui::ScrollHandle::new(),
+            |_window, _cx| gpui_kit::ScrollHandle::new(),
         );
 
         let current_q = unclosed.as_ref().map(|(_, _, q)| q.clone());
@@ -215,7 +215,7 @@ impl RenderOnce for RequestBar {
                             .rounded(px(4.))
                             .flex()
                             .items_center()
-                            .child(MethodBadge::new(method).font_weight(gpui::FontWeight::SEMIBOLD))
+                            .child(MethodBadge::new(method).font_weight(gpui_kit::FontWeight::SEMIBOLD))
                             .dropdown_menu(move |menu, _window, _cx| {
                                 [
                                     HttpMethod::Get,
@@ -235,7 +235,7 @@ impl RenderOnce for RequestBar {
                                         PopupMenuItem::element(move |_window, _cx| {
                                             div()
                                                 .text_xs()
-                                                .font_weight(gpui::FontWeight::BOLD)
+                                                .font_weight(gpui_kit::FontWeight::BOLD)
                                                 .text_color(theme().method_color(mth))
                                                 .child(mth.as_str().to_string())
                                         })
@@ -288,7 +288,7 @@ impl RenderOnce for RequestBar {
                                             get_variable_kind_and_color(&scope, is_res);
 
                                         div()
-                                            .id(gpui::SharedString::from(format!(
+                                            .id(gpui_kit::SharedString::from(format!(
                                                 "inline-token-{}",
                                                 var_name
                                             )))
@@ -394,7 +394,7 @@ impl RenderOnce for RequestBar {
                             .border_color(t.border)
                             .shadow_2xl()
                             .occlude()
-                            .on_mouse_down(gpui::MouseButton::Left, |_, window, cx| {
+                            .on_mouse_down(gpui_kit::MouseButton::Left, |_, window, cx| {
                                 window.prevent_default();
                                 cx.stop_propagation();
                             })

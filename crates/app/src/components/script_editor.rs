@@ -2,17 +2,17 @@ use crate::components::env_autocomplete::{detect_unclosed_env_var, get_env_compl
 use crate::state::EnvironmentState;
 use crate::theme::theme;
 use anyhow::Result;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, App, Context, Entity, HighlightStyle, InteractiveElement as _, IntoElement,
     ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled, Task, Window,
 };
-use gpui_component::input::{
+use gpui_kit::component::input::{
     CompletionProvider, Editor, EditorState as CodeEditorState, FoldRange, HighlightStyleResolver,
     InputEdit, InputHighlighter, Rope,
 };
-use gpui_component::scroll::{Scrollbar, ScrollbarMode};
-use gpui_component::RopeExt;
+use gpui_kit::component::scroll::{Scrollbar, ScrollbarMode};
+use gpui_kit::component::RopeExt;
 use lsp_types::{
     CompletionContext, CompletionItem, CompletionItemKind, CompletionResponse, CompletionTextEdit,
     Documentation, Position, Range as LspRange, TextEdit,
@@ -197,7 +197,7 @@ impl InputHighlighter for JavaScriptHighlighter {
                     start + comment_start..start + i,
                     HighlightStyle {
                         color: Some(t.text_muted),
-                        font_style: Some(gpui::FontStyle::Italic),
+                        font_style: Some(gpui_kit::FontStyle::Italic),
                         ..Default::default()
                     },
                 ));
@@ -217,7 +217,7 @@ impl InputHighlighter for JavaScriptHighlighter {
                     start + comment_start..start + i,
                     HighlightStyle {
                         color: Some(t.text_muted),
-                        font_style: Some(gpui::FontStyle::Italic),
+                        font_style: Some(gpui_kit::FontStyle::Italic),
                         ..Default::default()
                     },
                 ));
@@ -303,7 +303,7 @@ impl InputHighlighter for JavaScriptHighlighter {
                         start + id_start..start + i,
                         HighlightStyle {
                             color: Some(t.json_boolean),
-                            font_weight: Some(gpui::FontWeight::SEMIBOLD),
+                            font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
                             ..Default::default()
                         },
                     ));
@@ -312,7 +312,7 @@ impl InputHighlighter for JavaScriptHighlighter {
                         start + id_start..start + i,
                         HighlightStyle {
                             color: Some(t.json_null),
-                            font_style: Some(gpui::FontStyle::Italic),
+                            font_style: Some(gpui_kit::FontStyle::Italic),
                             ..Default::default()
                         },
                     ));
@@ -321,7 +321,7 @@ impl InputHighlighter for JavaScriptHighlighter {
                         start + id_start..start + i,
                         HighlightStyle {
                             color: Some(t.json_key),
-                            font_weight: Some(gpui::FontWeight::SEMIBOLD),
+                            font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
                             ..Default::default()
                         },
                     ));
@@ -1164,7 +1164,7 @@ impl RenderOnce for ScriptEditor {
                 ScriptEditorKind::Tests => "snippets-top-scroll-tests",
             }),
             cx,
-            |_window, _cx| gpui::ScrollHandle::new(),
+            |_window, _cx| gpui_kit::ScrollHandle::new(),
         );
         let scr_h = scroll_handle.read(cx).clone();
 
@@ -1252,7 +1252,7 @@ impl RenderOnce for ScriptEditor {
                         Editor::new(&self.editor)
                             .appearance(false)
                             .bordered(false)
-                            .h(gpui::relative(1.)),
+                            .h(gpui_kit::relative(1.)),
                     ),
                 )
                 // Right: Snippets Toolbar (vertical column)
@@ -1271,7 +1271,7 @@ impl RenderOnce for ScriptEditor {
                         .child(
                             div()
                                 .text_xs()
-                                .font_weight(gpui::FontWeight::BOLD)
+                                .font_weight(gpui_kit::FontWeight::BOLD)
                                 .text_color(t.text_secondary)
                                 .mb(px(4.))
                                 .child("SNIPPETS"),
@@ -1304,7 +1304,7 @@ impl RenderOnce for ScriptEditor {
                             div()
                                 .flex_shrink_0()
                                 .text_xs()
-                                .font_weight(gpui::FontWeight::BOLD)
+                                .font_weight(gpui_kit::FontWeight::BOLD)
                                 .text_color(t.text_secondary)
                                 .child("SNIPPETS:"),
                         )
@@ -1340,7 +1340,7 @@ impl RenderOnce for ScriptEditor {
                         Editor::new(&self.editor)
                             .appearance(false)
                             .bordered(false)
-                            .h(gpui::relative(1.)),
+                            .h(gpui_kit::relative(1.)),
                     ),
                 )
         };
@@ -1356,12 +1356,12 @@ impl RenderOnce for ScriptEditor {
                     div()
                         .px(px(12.))
                         .py(px(6.))
-                        .bg(gpui::Hsla {
+                        .bg(gpui_kit::Hsla {
                             a: 0.15,
                             ..t.method_delete
                         })
                         .border_b_1()
-                        .border_color(gpui::Hsla {
+                        .border_color(gpui_kit::Hsla {
                             a: 0.35,
                             ..t.method_delete
                         })
@@ -1534,8 +1534,8 @@ mod tests {
         assert!(!ScriptCompletionProvider::should_trigger("\n"));
     }
 
-    #[gpui::test]
-    fn test_script_editor_split_layout_vertical_builder(cx: &mut gpui::TestAppContext) {
+    #[gpui_kit::test]
+    fn test_script_editor_split_layout_vertical_builder(cx: &mut gpui_kit::TestAppContext) {
         let (editor, _cx) = cx.add_window_view(CodeEditorState::new);
         let pre_editor = ScriptEditor::new(
             editor.clone(),

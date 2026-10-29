@@ -1,6 +1,6 @@
 use super::{FolderMoveOutcome, WorkspaceDataState, WorkspaceEvent};
 use crate::settings::AppSettings;
-use gpui::Context;
+use gpui_kit::Context;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use zest_core::models::{Folder, HttpMethod, HttpRequestItem};

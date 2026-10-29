@@ -4,7 +4,7 @@
 //! instead of polling intermediate state fields on `cx.notify()`.
 
 use super::{EnvironmentState, RequestSessionState, ResponseState, WorkspaceDataState};
-use gpui::EventEmitter;
+use gpui_kit::EventEmitter;
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -207,7 +207,7 @@ impl EventEmitter<EnvironmentEvent> for EnvironmentState {}
 mod tests {
     use super::*;
     use crate::state::ResponseViewMode;
-    use gpui::{AppContext, TestAppContext};
+    use gpui_kit::{AppContext, TestAppContext};
     use std::cell::RefCell;
     use std::rc::Rc;
     use std::sync::Arc;
@@ -228,7 +228,7 @@ mod tests {
         (dir, store, ws)
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn test_rename_request_emits_single_ids_remapped_event(cx: &mut TestAppContext) {
         let (dir, _store, mut ws_raw) = test_workspace("rename-req");
         let req = ws_raw.create_request_internal(None);
@@ -257,7 +257,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn test_move_folder_cycle_emits_crud_failed_event(cx: &mut TestAppContext) {
         let (dir, _store, mut ws_raw) = test_workspace("move-cycle");
         let parent_id = ws_raw
@@ -294,7 +294,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn test_session_events_on_switch_and_repeated_modify(cx: &mut TestAppContext) {
         let session = cx.new(|_| RequestSessionState::new());
         let recorded = Rc::new(RefCell::new(Vec::new()));
@@ -345,7 +345,7 @@ mod tests {
         );
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn test_response_content_changed_emits_only_on_content_or_view_mode(cx: &mut TestAppContext) {
         let resp_state = cx.new(|_| ResponseState::new());
         let recorded = Rc::new(RefCell::new(Vec::new()));
@@ -392,7 +392,7 @@ mod tests {
         );
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn test_environment_active_change_emits_event(cx: &mut TestAppContext) {
         let (dir, store, _ws_raw) = test_workspace("env-ev");
         let env_state = cx.new(|_| EnvironmentState::new(store, "test-ws".to_string(), None));

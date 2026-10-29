@@ -3,12 +3,12 @@ use crate::components::inherited_headers::mask_secret;
 use crate::components::kv_table::render_disabled_input;
 use crate::state::{EnvironmentState, ModalState, RequestSessionState, WorkspaceDataState};
 use crate::theme::{theme, AppTheme};
-use gpui::prelude::FluentBuilder as _;
-use gpui::{div, px, App, Div, Entity, ParentElement, Styled, Window};
-use gpui_component::button::{Button, ButtonVariants as _};
-use gpui_component::input::InputState;
-use gpui_component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_component::Icon;
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{div, px, App, Div, Entity, ParentElement, Styled, Window};
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::input::InputState;
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::Icon;
 use gpui_kit::assets::IconName;
 use zest_core::models::{ApiKeyLocation, Auth};
 
@@ -75,7 +75,7 @@ pub fn render_auth_tab(
                         .w(px(70.))
                         .flex_none()
                         .text_xs()
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                         .text_color(t.text_secondary)
                         .child("Type:"),
                 )
@@ -97,7 +97,7 @@ pub fn render_auth_tab(
                         .child(
                             div()
                                 .text_xs()
-                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .font_weight(gpui_kit::FontWeight::MEDIUM)
                                 .text_color(t.text_primary)
                                 .child(auth_label),
                         )
@@ -248,7 +248,7 @@ pub fn render_auth_tab(
                                 .w(px(70.))
                                 .flex_none()
                                 .text_xs()
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                 .text_color(t.text_secondary)
                                 .child("Token:"),
                         )
@@ -297,7 +297,7 @@ pub fn render_auth_tab(
                                         .w(px(70.))
                                         .flex_none()
                                         .text_xs()
-                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                         .text_color(t.text_secondary)
                                         .child("Username:"),
                                 )
@@ -334,7 +334,7 @@ pub fn render_auth_tab(
                                         .w(px(70.))
                                         .flex_none()
                                         .text_xs()
-                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                         .text_color(t.text_secondary)
                                         .child("Password:"),
                                 )
@@ -395,7 +395,7 @@ pub fn render_auth_tab(
                                         .w(px(70.))
                                         .flex_none()
                                         .text_xs()
-                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                         .text_color(t.text_secondary)
                                         .child("Key:"),
                                 )
@@ -432,7 +432,7 @@ pub fn render_auth_tab(
                                         .w(px(70.))
                                         .flex_none()
                                         .text_xs()
-                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                         .text_color(t.text_secondary)
                                         .child("Value:"),
                                 )
@@ -469,7 +469,7 @@ pub fn render_auth_tab(
                                         .w(px(70.))
                                         .flex_none()
                                         .text_xs()
-                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                         .text_color(t.text_secondary)
                                         .child("Add to:"),
                                 )
@@ -493,7 +493,7 @@ pub fn render_auth_tab(
                                         .child(
                                             div()
                                                 .text_xs()
-                                                .font_weight(gpui::FontWeight::MEDIUM)
+                                                .font_weight(gpui_kit::FontWeight::MEDIUM)
                                                 .text_color(t.text_primary)
                                                 .child(loc_label),
                                         )
@@ -571,7 +571,7 @@ fn disabled_field(label: &str, value: &str, t: &AppTheme) -> Div {
                 .w(px(70.))
                 .flex_none()
                 .text_xs()
-                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                 .text_color(t.text_secondary)
                 .child(label.to_string()),
         )

@@ -1,5 +1,5 @@
 use crate::theme::theme;
-use gpui::{
+use gpui_kit::{
     div, px, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, ParentElement,
     RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
@@ -76,9 +76,9 @@ impl RenderOnce for TabItem {
             .cursor_pointer()
             .text_xs()
             .font_weight(if active {
-                gpui::FontWeight::SEMIBOLD
+                gpui_kit::FontWeight::SEMIBOLD
             } else {
-                gpui::FontWeight::NORMAL
+                gpui_kit::FontWeight::NORMAL
             })
             .text_color(fg)
             .border_b_2()

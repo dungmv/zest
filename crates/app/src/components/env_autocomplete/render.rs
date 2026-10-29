@@ -1,7 +1,7 @@
 use super::{AutocompleteNavState, EnvVarCandidate, EnvVarKind};
 use crate::theme::{hex_alpha_to_hsla, hex_to_hsla, theme};
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, App, Div, Entity, FontWeight, InteractiveElement as _, ParentElement as _,
     SharedString, StatefulInteractiveElement as _, Styled, Window,
 };
@@ -23,7 +23,7 @@ const TYPE_DYNAMIC_COLOR: u32 = 0xf59e0b; // Amber
 /// Two-category type display: all environment variables collapse into a single
 /// "Variable" type, dynamic fake vars keep their own "Dynamic" type.
 /// Returns `(badge label, text/border color, background tint)`.
-pub fn candidate_type_badge(kind: EnvVarKind) -> (&'static str, gpui::Hsla, gpui::Hsla) {
+pub fn candidate_type_badge(kind: EnvVarKind) -> (&'static str, gpui_kit::Hsla, gpui_kit::Hsla) {
     match kind {
         EnvVarKind::Active | EnvVarKind::Global => (
             "Variable",
@@ -54,7 +54,7 @@ pub fn render_candidate_row<F>(
     is_selected: bool,
     nav_state: &Entity<AutocompleteNavState>,
     on_select: F,
-) -> gpui::Stateful<Div>
+) -> gpui_kit::Stateful<Div>
 where
     F: Fn(&EnvVarCandidate, &mut Window, &mut App) + 'static,
 {
@@ -76,7 +76,7 @@ where
         .bg(if is_selected {
             t.bg_selected
         } else {
-            gpui::transparent_black()
+            gpui_kit::transparent_black()
         })
         .hover(|s| s.bg(t.bg_hover))
         .on_hover(move |hovered, _, cx| {

@@ -2,13 +2,13 @@ use super::common::{render_error_banner, render_not_a_repo_view};
 use crate::services::GitService;
 use crate::state::GitState;
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
     RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_component::input::{Input, InputState};
-use gpui_component::scroll::ScrollableElement as _;
+use gpui_kit::component::input::{Input, InputState};
+use gpui_kit::component::scroll::ScrollableElement as _;
 
 #[derive(IntoElement)]
 pub struct GitRemotesModal {
@@ -31,7 +31,7 @@ pub fn render_remotes_view(
     remote_name_input: Entity<InputState>,
     remote_url_input: Entity<InputState>,
     is_loading: bool,
-) -> gpui::AnyElement {
+) -> gpui_kit::AnyElement {
     let t = theme();
 
     div()
@@ -83,7 +83,7 @@ pub fn render_remotes_view(
                                 .child(
                                     div()
                                         .text_xs()
-                                        .font_weight(gpui::FontWeight::BOLD)
+                                        .font_weight(gpui_kit::FontWeight::BOLD)
                                         .font_family(".SystemMonoFont")
                                         .text_color(t.primary)
                                         .child(r.name.clone()),
@@ -170,7 +170,7 @@ pub fn render_remotes_view(
                         .items_center()
                         .justify_center()
                         .text_xs()
-                        .font_weight(gpui::FontWeight::BOLD)
+                        .font_weight(gpui_kit::FontWeight::BOLD)
                         .on_click(move |_, window, cx| {
                             if is_loading {
                                 return;
@@ -209,7 +209,7 @@ impl RenderOnce for GitRemotesModal {
         };
 
         let remote_name_holder = window.use_keyed_state(
-            gpui::SharedString::from("git-remote-name-input"),
+            gpui_kit::SharedString::from("git-remote-name-input"),
             cx,
             |window, cx| {
                 let inp = cx.new(|cx| {
@@ -223,7 +223,7 @@ impl RenderOnce for GitRemotesModal {
         let remote_name_input = remote_name_holder.read(cx).0.clone();
 
         let remote_url_holder = window.use_keyed_state(
-            gpui::SharedString::from("git-remote-url-input"),
+            gpui_kit::SharedString::from("git-remote-url-input"),
             cx,
             |window, cx| {
                 let inp = cx.new(|cx| {
@@ -239,7 +239,7 @@ impl RenderOnce for GitRemotesModal {
             .id("git-remotes-modal-overlay")
             .absolute()
             .inset_0()
-            .bg(gpui::Hsla {
+            .bg(gpui_kit::Hsla {
                 a: 0.65,
                 ..t.bg_app
             })
@@ -308,7 +308,7 @@ impl RenderOnce for GitRemotesModal {
                                     .child(
                                         div()
                                             .text_sm()
-                                            .font_weight(gpui::FontWeight::BOLD)
+                                            .font_weight(gpui_kit::FontWeight::BOLD)
                                             .text_color(t.text_primary)
                                             .child("Manage Remotes"),
                                     ),

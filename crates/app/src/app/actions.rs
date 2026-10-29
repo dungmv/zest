@@ -1,4 +1,4 @@
-use gpui::actions;
+use gpui_kit::actions;
 
 actions!(
     zest,

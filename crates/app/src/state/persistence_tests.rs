@@ -1,5 +1,5 @@
 use super::*;
-use gpui::AppContext;
+use gpui_kit::AppContext;
 use std::time::Duration;
 use zest_core::models::{Auth, Environment, HttpMethod, HttpRequestItem, KeyValuePair};
 use zest_core::storage::models::{FolderFile, LocalState, WorkspaceMeta};
@@ -215,8 +215,8 @@ fn test_coordinator_barrier_take_all_pending() {
     assert_eq!(coord.status(&target2), TargetStatus::Clean);
 }
 
-#[gpui::test]
-fn test_environment_mutations_emit_events_and_update_state(cx: &mut gpui::TestAppContext) {
+#[gpui_kit::test]
+fn test_environment_mutations_emit_events_and_update_state(cx: &mut gpui_kit::TestAppContext) {
     use std::cell::RefCell;
     use std::rc::Rc;
 
@@ -286,8 +286,8 @@ fn test_environment_mutations_emit_events_and_update_state(cx: &mut gpui::TestAp
         .any(|e| matches!(e, EnvironmentEvent::GlobalsModified)));
 }
 
-#[gpui::test]
-fn test_persistence_state_write_behind_flush(cx: &mut gpui::TestAppContext) {
+#[gpui_kit::test]
+fn test_persistence_state_write_behind_flush(cx: &mut gpui_kit::TestAppContext) {
     let (dir, store) = setup_test_workspace("WriteBehindFlush");
     let per_state = cx.new(|_| PersistenceState::new(store.clone(), dir.path().to_path_buf()));
 
@@ -347,8 +347,8 @@ fn test_persistence_state_write_behind_flush(cx: &mut gpui::TestAppContext) {
     );
 }
 
-#[gpui::test]
-fn test_request_persistence_state_and_remap(cx: &mut gpui::TestAppContext) {
+#[gpui_kit::test]
+fn test_request_persistence_state_and_remap(cx: &mut gpui_kit::TestAppContext) {
     let (dir, store) = setup_test_workspace("RequestRemap");
     let ws_state =
         cx.new(|_| WorkspaceDataState::new_for_path(dir.path().to_path_buf(), store.clone()));
@@ -406,8 +406,8 @@ fn test_request_persistence_state_and_remap(cx: &mut gpui::TestAppContext) {
     });
 }
 
-#[gpui::test]
-fn test_fs_batch_recreated_request_not_dropped(cx: &mut gpui::TestAppContext) {
+#[gpui_kit::test]
+fn test_fs_batch_recreated_request_not_dropped(cx: &mut gpui_kit::TestAppContext) {
     use zest_core::storage::FsEvent;
 
     let (dir, store) = setup_test_workspace("WatcherRecreated");
@@ -425,13 +425,13 @@ fn test_fs_batch_recreated_request_not_dropped(cx: &mut gpui::TestAppContext) {
     ws_state.update(cx, |ws, _| ws.reload_tree());
     let req_file_path = dir.path().join("collections").join(&req_id);
     assert!(req_file_path.is_file());
-    let in_memory = |cx: &mut gpui::TestAppContext| {
+    let in_memory = |cx: &mut gpui_kit::TestAppContext| {
         ws_state.read_with(cx, |ws, _| ws.find_request(&req_id).is_some())
     };
     assert!(in_memory(cx));
 
     let git_state = cx.new(|_| GitState::new(dir.path().to_path_buf()));
-    let dispatch = |events: Vec<FsEvent>, cx: &mut gpui::TestAppContext| {
+    let dispatch = |events: Vec<FsEvent>, cx: &mut gpui_kit::TestAppContext| {
         let ws = ws_state.clone();
         let env = env_state.clone();
         let git = git_state.clone();
@@ -464,8 +464,8 @@ fn test_fs_batch_recreated_request_not_dropped(cx: &mut gpui::TestAppContext) {
     assert!(in_memory(cx), "recreated request was not re-added");
 }
 
-#[gpui::test]
-fn test_external_change_reconciles_clean_vs_dirty(cx: &mut gpui::TestAppContext) {
+#[gpui_kit::test]
+fn test_external_change_reconciles_clean_vs_dirty(cx: &mut gpui_kit::TestAppContext) {
     use zest_core::storage::FsEvent;
 
     let (dir, store) = setup_test_workspace("test_reconcile");

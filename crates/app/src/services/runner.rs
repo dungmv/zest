@@ -3,7 +3,7 @@ use crate::state::{
     EnvironmentState, ModalState, RequestSessionState, ResponseState, ToastState,
     WorkspaceDataState,
 };
-use gpui::{App, Entity};
+use gpui_kit::{App, Entity};
 use std::sync::Arc;
 use tokio::sync::oneshot;
 use zest_core::models::EnvironmentVariable;

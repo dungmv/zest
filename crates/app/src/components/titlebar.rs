@@ -3,15 +3,15 @@ use crate::state::{
     SidebarState, WorkspaceDataState,
 };
 use crate::theme::{hex_to_hsla, theme};
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, img, px, App, Context, Entity, Image, ImageFormat, InteractiveElement as _, IntoElement,
     MouseButton, ParentElement, Render, RenderOnce, StatefulInteractiveElement as _, Styled,
     Window, WindowControlArea,
 };
-use gpui_component::button::{Button, ButtonVariants as _};
-use gpui_component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_component::{Icon, InteractiveElementExt as _};
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::{Icon, InteractiveElementExt as _};
 use gpui_kit::assets::IconName;
 use std::sync::{Arc, OnceLock};
 
@@ -191,7 +191,7 @@ impl RenderOnce for AppTitleBar {
                     .bg(if !sidebar_collapsed {
                         t.bg_hover
                     } else {
-                        gpui::transparent_black()
+                        gpui_kit::transparent_black()
                     })
                     .hover(|s| s.bg(t.bg_hover))
                     .text_color(if !sidebar_collapsed {
@@ -228,7 +228,7 @@ impl RenderOnce for AppTitleBar {
                     .child(
                         div()
                             .text_xs()
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                             .text_color(t.text_primary)
                             .child(ws_name.clone()),
                     )
@@ -387,7 +387,7 @@ impl RenderOnce for AppTitleBar {
                     .child(
                         div()
                             .text_xs()
-                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .font_weight(gpui_kit::FontWeight::MEDIUM)
                             .text_color(t.text_primary)
                             .child(env_name),
                     )

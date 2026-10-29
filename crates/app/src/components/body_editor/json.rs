@@ -1,7 +1,7 @@
 use super::{clamp_char_boundary_left, clamp_char_boundary_right};
 use crate::theme::theme;
-use gpui::{Context, HighlightStyle, SharedString, Window};
-use gpui_component::input::{
+use gpui_kit::{Context, HighlightStyle, SharedString, Window};
+use gpui_kit::component::input::{
     EditorState as CodeEditorState, FoldRange, HighlightStyleResolver, InputEdit, InputHighlighter,
     Rope,
 };
@@ -131,7 +131,7 @@ impl InputHighlighter for JsonHighlighter {
                                 start + tok_start + abs_open..start + tok_start + abs_close,
                                 HighlightStyle {
                                     color: Some(t.var_resolved),
-                                    font_weight: Some(gpui::FontWeight::SEMIBOLD),
+                                    font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
                                     ..Default::default()
                                 },
                             ));
@@ -191,7 +191,7 @@ impl InputHighlighter for JsonHighlighter {
                     start + i..start + i + 4,
                     HighlightStyle {
                         color: Some(t.json_boolean),
-                        font_weight: Some(gpui::FontWeight::SEMIBOLD),
+                        font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
                         ..Default::default()
                     },
                 ));
@@ -204,7 +204,7 @@ impl InputHighlighter for JsonHighlighter {
                     start + i..start + i + 5,
                     HighlightStyle {
                         color: Some(t.json_boolean),
-                        font_weight: Some(gpui::FontWeight::SEMIBOLD),
+                        font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
                         ..Default::default()
                     },
                 ));
@@ -217,7 +217,7 @@ impl InputHighlighter for JsonHighlighter {
                     start + i..start + i + 4,
                     HighlightStyle {
                         color: Some(t.json_null),
-                        font_style: Some(gpui::FontStyle::Italic),
+                        font_style: Some(gpui_kit::FontStyle::Italic),
                         ..Default::default()
                     },
                 ));

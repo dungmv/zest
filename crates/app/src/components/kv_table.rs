@@ -2,16 +2,16 @@ use crate::components::env_autocomplete::{build_tokenized_content, detect_unclos
 use crate::components::env_input::render_env_input;
 use crate::state::{EnvironmentState, ModalState};
 use crate::theme::{theme, AppTheme};
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, App, AppContext as _, Div, Entity, InteractiveElement as _, IntoElement,
     ParentElement, Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled,
     Subscription, Window,
 };
-use gpui_component::button::{Button, ButtonVariants as _};
-use gpui_component::input::{InputEvent, InputState};
-use gpui_component::popover::Popover;
-use gpui_component::{Icon, Sizable as _};
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::input::{InputEvent, InputState};
+use gpui_kit::component::popover::Popover;
+use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::assets::IconName;
 use std::rc::Rc;
 use zest_core::models::KeyValuePair;
@@ -67,7 +67,7 @@ impl KvTableState {
         env_state: Option<&Entity<EnvironmentState>>,
         on_update: KvUpdateCallback,
         window: &mut Window,
-        cx: &mut gpui::Context<Self>,
+        cx: &mut gpui_kit::Context<Self>,
     ) -> KvRowInputs {
         let init_k = if let Some(env_m) = env_state {
             build_tokenized_content(&pair.key, env_m.read(cx))
@@ -155,7 +155,7 @@ impl KvTableState {
         env_state: Option<&Entity<EnvironmentState>>,
         on_update: &KvUpdateCallback,
         window: &mut Window,
-        cx: &mut gpui::Context<Self>,
+        cx: &mut gpui_kit::Context<Self>,
     ) {
         if self.rows.len() > pairs.len() {
             self.rows.truncate(pairs.len());
@@ -346,7 +346,7 @@ impl RenderOnce for KvTable {
             // Editable rows
             .child({
                 let table_state = window.use_keyed_state(
-                    gpui::SharedString::from(format!("{}-table-inputs", id_prefix)),
+                    gpui_kit::SharedString::from(format!("{}-table-inputs", id_prefix)),
                     cx,
                     |_window, _cx| KvTableState { rows: Vec::new() },
                 );
@@ -434,7 +434,7 @@ impl RenderOnce for KvTable {
                                 let key_in_chk = key_input.clone();
                                 let val_in_chk = val_input.clone();
                                 div()
-                                    .id(gpui::SharedString::from(format!("{}-check", row_prefix)))
+                                    .id(gpui_kit::SharedString::from(format!("{}-check", row_prefix)))
                                     .w(px(20.))
                                     .h(px(20.))
                                     .rounded(px(4.))
@@ -501,7 +501,7 @@ impl RenderOnce for KvTable {
                                 let ts_del = table_state.clone();
                                 let key_in_del = key_input.clone();
                                 div()
-                                    .id(gpui::SharedString::from(format!("{}-del", row_prefix)))
+                                    .id(gpui_kit::SharedString::from(format!("{}-del", row_prefix)))
                                     .w(px(24.))
                                     .h(px(24.))
                                     .rounded(px(4.))
@@ -534,7 +534,7 @@ impl RenderOnce for KvTable {
                 this.child(
                     div().pt(px(6.)).flex().items_center().gap(px(8.)).child(
                         div()
-                            .id(gpui::SharedString::from(format!("{}-btn-add", id_prefix)))
+                            .id(gpui_kit::SharedString::from(format!("{}-btn-add", id_prefix)))
                             .px(px(10.))
                             .py(px(4.))
                             .rounded(px(4.))
@@ -547,7 +547,7 @@ impl RenderOnce for KvTable {
                             .items_center()
                             .justify_center()
                             .text_xs()
-                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .font_weight(gpui_kit::FontWeight::MEDIUM)
                             .text_color(t.text_secondary)
                             .on_click(move |_, window, cx| {
                                 on_add_cb(window, cx);

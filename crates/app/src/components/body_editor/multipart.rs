@@ -2,15 +2,15 @@ use crate::components::env_autocomplete::{build_tokenized_content, detect_unclos
 use crate::components::env_input::render_env_input;
 use crate::state::{EnvironmentState, ModalState, RequestSessionState, WorkspaceDataState};
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, AnyElement, App, AppContext as _, Entity, InteractiveElement as _, IntoElement,
     ParentElement, StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_component::button::{Button, ButtonVariants as _};
-use gpui_component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_component::scroll::ScrollableElement as _;
-use gpui_component::{Icon, Sizable as _};
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::assets::IconName;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -26,20 +26,20 @@ pub struct MultipartContext<'a> {
 
 #[derive(Clone)]
 struct MpRowSnapshot {
-    key_input: Entity<gpui_component::input::InputState>,
-    val_input: Entity<gpui_component::input::InputState>,
+    key_input: Entity<gpui_kit::component::input::InputState>,
+    val_input: Entity<gpui_kit::component::input::InputState>,
     is_file: bool,
     file_path: Option<String>,
     enabled: bool,
 }
 
 struct MpRowInputs {
-    key_input: Entity<gpui_component::input::InputState>,
-    val_input: Entity<gpui_component::input::InputState>,
+    key_input: Entity<gpui_kit::component::input::InputState>,
+    val_input: Entity<gpui_kit::component::input::InputState>,
     is_file: bool,
     file_path: Option<String>,
     enabled: bool,
-    _subscriptions: Vec<gpui::Subscription>,
+    _subscriptions: Vec<gpui_kit::Subscription>,
 }
 
 struct MpTableState {
@@ -51,12 +51,12 @@ impl MpTableState {
         item: &MultipartItem,
         ctx: &MultipartContext<'_>,
         window: &mut Window,
-        cx: &mut gpui::Context<Self>,
+        cx: &mut gpui_kit::Context<Self>,
     ) -> MpRowInputs {
         let init_k = item.key.clone();
         let init_v = item.value.clone();
         let key_input = cx.new(|cx| {
-            let mut s = gpui_component::input::InputState::new(window, cx).placeholder("Key...");
+            let mut s = gpui_kit::component::input::InputState::new(window, cx).placeholder("Key...");
             if let Some(env_ent) = ctx.env_state {
                 let content = build_tokenized_content(&init_k, env_ent.read(cx));
                 s.set_value(content, window, cx);
@@ -66,7 +66,7 @@ impl MpTableState {
             s
         });
         let val_input = cx.new(|cx| {
-            let mut s = gpui_component::input::InputState::new(window, cx).placeholder("Value...");
+            let mut s = gpui_kit::component::input::InputState::new(window, cx).placeholder("Value...");
             if let Some(env_ent) = ctx.env_state {
                 let content = build_tokenized_content(&init_v, env_ent.read(cx));
                 s.set_value(content, window, cx);
@@ -84,7 +84,7 @@ impl MpTableState {
         let env_sub1 = ctx.env_state.cloned();
 
         let sub1 = cx.subscribe_in(&key_input, window, move |this, inp, event, window, cx| {
-            if let gpui_component::input::InputEvent::Change = event {
+            if let gpui_kit::component::input::InputEvent::Change = event {
                 let k = inp.read(cx).value().to_string();
                 let v = val_ent.read(cx).value().to_string();
                 let (current_idx, is_file, file_path, enabled) = {
@@ -134,7 +134,7 @@ impl MpTableState {
         let env_sub2 = ctx.env_state.cloned();
 
         let sub2 = cx.subscribe_in(&val_input, window, move |this, inp, event, window, cx| {
-            if let gpui_component::input::InputEvent::Change = event {
+            if let gpui_kit::component::input::InputEvent::Change = event {
                 let v = inp.read(cx).value().to_string();
                 let k = key_ent2.read(cx).value().to_string();
                 let (current_idx, is_file, file_path, enabled) = {
@@ -191,7 +191,7 @@ impl MpTableState {
         items: &[MultipartItem],
         ctx: &MultipartContext<'_>,
         window: &mut Window,
-        cx: &mut gpui::Context<Self>,
+        cx: &mut gpui_kit::Context<Self>,
     ) {
         if self.rows.len() > items.len() {
             self.rows.truncate(items.len());
@@ -256,7 +256,7 @@ pub fn render_multipart_editor(
         // Multipart Rows
         .child({
             let table_state = window.use_keyed_state(
-                gpui::SharedString::from(format!("mp-table-inputs-{}", req_id_str)),
+                gpui_kit::SharedString::from(format!("mp-table-inputs-{}", req_id_str)),
                 cx,
                 |_window, _cx| MpTableState { rows: Vec::new() },
             );
@@ -291,7 +291,7 @@ pub fn render_multipart_editor(
                     let id_row = req_id_str.clone();
                     let id_del = id_row.clone();
                     let snapshot = row_inputs.get(idx).cloned().unwrap_or_else(|| {
-                        let dummy = cx.new(|cx| gpui_component::input::InputState::new(window, cx));
+                        let dummy = cx.new(|cx| gpui_kit::component::input::InputState::new(window, cx));
                         MpRowSnapshot {
                             key_input: dummy.clone(),
                             val_input: dummy,
@@ -490,7 +490,7 @@ pub fn render_multipart_editor(
                                         .child(
                                             div()
                                                 .text_xs()
-                                                .font_weight(gpui::FontWeight::MEDIUM)
+                                                .font_weight(gpui_kit::FontWeight::MEDIUM)
                                                 .text_color(t.text_primary)
                                                 .child(cur_type_label),
                                         )
@@ -675,7 +675,7 @@ pub fn render_multipart_editor(
                                     .gap(px(6.))
                                     .when_some(tip_path, |this, path| {
                                         this.tooltip(move |window, cx| {
-                                            gpui_component::tooltip::Tooltip::new(path.clone())
+                                            gpui_kit::component::tooltip::Tooltip::new(path.clone())
                                                 .build(window, cx)
                                         })
                                     })

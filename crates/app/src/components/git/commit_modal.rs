@@ -6,14 +6,14 @@ use super::diff_view::{render_diff_content, render_diff_view_toggle, DiffViewMod
 use crate::services::GitService;
 use crate::state::{GitState, WorkspaceDataState};
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
     RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_component::input::{Input, InputState};
-use gpui_component::scroll::ScrollableElement as _;
-use gpui_component::Icon;
+use gpui_kit::component::input::{Input, InputState};
+use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::Icon;
 use gpui_kit::assets::IconName;
 use std::collections::HashSet;
 use zest_core::git::GitStatusResult;
@@ -54,7 +54,7 @@ pub struct ChangesViewProps {
     pub is_loading: bool,
 }
 
-pub fn render_changes_view(props: ChangesViewProps) -> gpui::AnyElement {
+pub fn render_changes_view(props: ChangesViewProps) -> gpui_kit::AnyElement {
     let t = theme();
     let ChangesViewProps {
         git_clone,
@@ -131,7 +131,7 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui::AnyElement {
                                 .child(
                                     div()
                                         .text_xs()
-                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                         .text_color(t.text_secondary)
                                         .child("Changes"),
                                 ),
@@ -313,7 +313,7 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui::AnyElement {
                                             s.bg(t.bg_hover).text_color(t.text_muted)
                                         })
                                         .text_xs()
-                                        .font_weight(gpui::FontWeight::BOLD)
+                                        .font_weight(gpui_kit::FontWeight::BOLD)
                                         .on_click(move |_, window, cx| {
                                             if !can_commit {
                                                 return;
@@ -378,7 +378,7 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui::AnyElement {
                                     let (tag_text, tag_color) = if *staged {
                                         ("staged", t.primary)
                                     } else if is_untracked {
-                                        ("untracked", gpui::rgb(0x4ade80).into())
+                                        ("untracked", gpui_kit::rgb(0x4ade80).into())
                                     } else {
                                         ("working tree", t.text_secondary)
                                     };
@@ -399,7 +399,7 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui::AnyElement {
                                         div()
                                             .text_xs()
                                             .font_family(".SystemMonoFont")
-                                            .font_weight(gpui::FontWeight::MEDIUM)
+                                            .font_weight(gpui_kit::FontWeight::MEDIUM)
                                             .text_color(t.text_primary)
                                             .child(p.clone()),
                                     )
@@ -464,7 +464,7 @@ impl RenderOnce for GitCommitModal {
             .unwrap_or(0);
 
         let commit_input_holder = window.use_keyed_state(
-            gpui::SharedString::from("git-commit-msg-input"),
+            gpui_kit::SharedString::from("git-commit-msg-input"),
             cx,
             |window, cx| {
                 let inp = cx.new(|cx| {
@@ -477,7 +477,7 @@ impl RenderOnce for GitCommitModal {
         let commit_input = commit_input_holder.read(cx).0.clone();
 
         let view_mode_holder = window.use_keyed_state(
-            gpui::SharedString::from("git-diff-view-mode"),
+            gpui_kit::SharedString::from("git-diff-view-mode"),
             cx,
             |_window, cx| {
                 let st = cx.new(|_cx| DiffViewMode::Split);
@@ -491,7 +491,7 @@ impl RenderOnce for GitCommitModal {
             .id("git-commit-modal-overlay")
             .absolute()
             .inset_0()
-            .bg(gpui::Hsla {
+            .bg(gpui_kit::Hsla {
                 a: 0.65,
                 ..t.bg_app
             })
@@ -560,7 +560,7 @@ impl RenderOnce for GitCommitModal {
                                     .child(
                                         div()
                                             .text_sm()
-                                            .font_weight(gpui::FontWeight::BOLD)
+                                            .font_weight(gpui_kit::FontWeight::BOLD)
                                             .text_color(t.text_primary)
                                             .child("Git Commit"),
                                     )

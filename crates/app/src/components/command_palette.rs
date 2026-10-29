@@ -4,14 +4,14 @@ use crate::state::{
     RequestSessionState, SettingsTab, SidebarState, WorkspaceDataState,
 };
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
     RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_component::input::{Input, InputEvent, InputState};
-use gpui_component::scroll::ScrollableElement as _;
-use gpui_component::Icon;
+use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::Icon;
 use gpui_kit::assets::IconName;
 
 #[allow(clippy::type_complexity)]
@@ -64,7 +64,7 @@ impl RenderOnce for CommandPalette {
         let on_send = self.on_send.clone();
 
         let cmd_holder = window.use_keyed_state(
-            gpui::SharedString::from("cmd-palette-search-holder"),
+            gpui_kit::SharedString::from("cmd-palette-search-holder"),
             cx,
             |window, cx| {
                 let inp = cx.new(|cx| {
@@ -122,7 +122,7 @@ impl RenderOnce for CommandPalette {
             .id("cmd-palette-overlay")
             .absolute()
             .inset_0()
-            .bg(gpui::Hsla { a: 0.6, ..t.bg_app })
+            .bg(gpui_kit::Hsla { a: 0.6, ..t.bg_app })
             .flex()
             .items_start()
             .justify_center()
@@ -257,7 +257,7 @@ impl RenderOnce for CommandPalette {
                                             .child(
                                                 div()
                                                     .text_sm()
-                                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                     .text_color(t.text_primary)
                                                     .child("Send Active Request"),
                                             ),
@@ -293,7 +293,7 @@ impl RenderOnce for CommandPalette {
                                                 .child(
                                                     div()
                                                         .text_sm()
-                                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                         .text_color(t.text_primary)
                                                         .child("Open Settings"),
                                                 ),
@@ -330,7 +330,7 @@ impl RenderOnce for CommandPalette {
                                                 .child(
                                                     div()
                                                         .text_sm()
-                                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                         .text_color(t.text_primary)
                                                         .child("Settings: Manage Cookies"),
                                                 ),
@@ -371,7 +371,7 @@ impl RenderOnce for CommandPalette {
                                                 .child(
                                                     div()
                                                         .text_sm()
-                                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                         .text_color(t.text_primary)
                                                         .child("Git: Open Source Control (Commit & Diff)"),
                                                 ),
@@ -412,7 +412,7 @@ impl RenderOnce for CommandPalette {
                                                 .child(
                                                     div()
                                                         .text_sm()
-                                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                         .text_color(t.text_primary)
                                                         .child("Git: Switch Branch / Checkout"),
                                                 ),
@@ -449,7 +449,7 @@ impl RenderOnce for CommandPalette {
                                                 .child(
                                                     div()
                                                         .text_sm()
-                                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                         .text_color(t.text_primary)
                                                         .child("Import: OpenAPI (YAML/JSON) or Postman"),
                                                 ),
@@ -490,7 +490,7 @@ impl RenderOnce for CommandPalette {
                                                 .child(
                                                     div()
                                                         .text_sm()
-                                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                         .text_color(t.text_primary)
                                                         .child("Git: View Commit History"),
                                                 ),
@@ -504,7 +504,7 @@ impl RenderOnce for CommandPalette {
                                     .px(px(8.))
                                     .pt(px(4.))
                                     .text_xs()
-                                    .font_weight(gpui::FontWeight::BOLD)
+                                    .font_weight(gpui_kit::FontWeight::BOLD)
                                     .text_color(t.text_muted)
                                     .child("SWITCH REQUEST"),
                             )
@@ -552,7 +552,7 @@ impl RenderOnce for CommandPalette {
                                     .px(px(8.))
                                     .pt(px(6.))
                                     .text_xs()
-                                    .font_weight(gpui::FontWeight::BOLD)
+                                    .font_weight(gpui_kit::FontWeight::BOLD)
                                     .text_color(t.text_muted)
                                     .child("SWITCH ENVIRONMENT"),
                             )

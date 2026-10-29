@@ -1,6 +1,6 @@
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{div, px, IntoElement, ParentElement, Styled};
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{div, px, IntoElement, ParentElement, Styled};
 
 pub fn render_shortcuts_tab() -> impl IntoElement {
     let t = theme();
@@ -68,7 +68,7 @@ pub fn render_shortcuts_tab() -> impl IntoElement {
                 .child(
                     div()
                         .text_xs()
-                        .font_weight(gpui::FontWeight::BOLD)
+                        .font_weight(gpui_kit::FontWeight::BOLD)
                         .text_color(t.text_secondary)
                         .child("KEYBOARD SHORTCUTS"),
                 )
@@ -112,7 +112,7 @@ pub fn render_shortcuts_tab() -> impl IntoElement {
                                     .child(
                                         div()
                                             .text_xs()
-                                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                                            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                             .text_color(t.text_primary)
                                             .child(title),
                                     )
@@ -129,7 +129,7 @@ pub fn render_shortcuts_tab() -> impl IntoElement {
                                     .border_color(t.border)
                                     .text_xs()
                                     .font_family(".SystemMonoFont")
-                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                    .font_weight(gpui_kit::FontWeight::MEDIUM)
                                     .text_color(t.text_primary)
                                     .child(keybinding),
                             )

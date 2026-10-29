@@ -3,18 +3,18 @@ use crate::state::{
     RequestSessionState, ResponseState, ResponseTabKind, ResponseViewMode, WorkspaceState,
 };
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, uniform_list, AnyElement, App, Entity, InteractiveElement as _, IntoElement,
     ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_component::button::{Button, ButtonVariants as _};
-use gpui_component::input::{Editor, EditorState as CodeEditorState};
-use gpui_component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_component::scroll::ScrollableElement as _;
-use gpui_component::spinner::Spinner;
-use gpui_component::text::TextView;
-use gpui_component::{Icon, Sizable as _};
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::input::{Editor, EditorState as CodeEditorState};
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::spinner::Spinner;
+use gpui_kit::component::text::TextView;
+use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::assets::IconName;
 use zest_core::models::HttpResponseRecord;
 use zest_core::storage::models::{RequestExampleFile, RequestFile, RequestKvItem};
@@ -100,11 +100,11 @@ impl RenderOnce for ResponseInspector {
                                         .px(px(8.))
                                         .py(px(3.))
                                         .rounded(px(4.))
-                                        .bg(gpui::Hsla { a: 0.12, ..t.primary })
+                                        .bg(gpui_kit::Hsla { a: 0.12, ..t.primary })
                                         .border_1()
-                                        .border_color(gpui::Hsla { a: 0.3, ..t.primary })
+                                        .border_color(gpui_kit::Hsla { a: 0.3, ..t.primary })
                                         .text_xs()
-                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                         .text_color(t.primary)
                                         .child(
                                             Spinner::new()
@@ -127,11 +127,11 @@ impl RenderOnce for ResponseInspector {
                                         .px(px(6.))
                                         .py(px(2.))
                                         .rounded(px(4.))
-                                        .bg(gpui::Hsla { a: 0.12, ..status_color })
+                                        .bg(gpui_kit::Hsla { a: 0.12, ..status_color })
                                         .border_1()
-                                        .border_color(gpui::Hsla { a: 0.3, ..status_color })
+                                        .border_color(gpui_kit::Hsla { a: 0.3, ..status_color })
                                         .text_xs()
-                                        .font_weight(gpui::FontWeight::NORMAL)
+                                        .font_weight(gpui_kit::FontWeight::NORMAL)
                                         .text_color(status_color)
                                         .child(format!("● {} {}", resp.status_code, resp.status_text)),
                                 )
@@ -245,13 +245,13 @@ impl RenderOnce for ResponseInspector {
                                     .justify_between()
                                     .child(
                                         div()
-                                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                                            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                             .text_color(t.text_primary)
                                             .child("High-Precision Timing Breakdown"),
                                     )
                                     .child(
                                         div()
-                                            .font_weight(gpui::FontWeight::BOLD)
+                                            .font_weight(gpui_kit::FontWeight::BOLD)
                                             .text_color(t.primary)
                                             .child(format!("Total: {} ms", timing.total_ms)),
                                     ),
@@ -265,11 +265,11 @@ impl RenderOnce for ResponseInspector {
                                     .bg(t.bg_input)
                                     .overflow_hidden()
                                     .flex()
-                                    .child(div().w(px(dns_pct * 2.5)).bg(gpui::rgb(0x06b6d4))) // Cyan for DNS
-                                    .child(div().w(px(tcp_pct * 2.5)).bg(gpui::rgb(0x3b82f6))) // Blue for TCP
-                                    .child(div().w(px(tls_pct * 2.5)).bg(gpui::rgb(0xa855f7))) // Purple for TLS
-                                    .child(div().w(px(ttfb_pct * 2.5)).bg(gpui::rgb(0xeab308))) // Yellow for TTFB
-                                    .child(div().w(px(dl_pct * 2.5)).bg(gpui::rgb(0x22c55e))), // Green for Download
+                                    .child(div().w(px(dns_pct * 2.5)).bg(gpui_kit::rgb(0x06b6d4))) // Cyan for DNS
+                                    .child(div().w(px(tcp_pct * 2.5)).bg(gpui_kit::rgb(0x3b82f6))) // Blue for TCP
+                                    .child(div().w(px(tls_pct * 2.5)).bg(gpui_kit::rgb(0xa855f7))) // Purple for TLS
+                                    .child(div().w(px(ttfb_pct * 2.5)).bg(gpui_kit::rgb(0xeab308))) // Yellow for TTFB
+                                    .child(div().w(px(dl_pct * 2.5)).bg(gpui_kit::rgb(0x22c55e))), // Green for Download
                             )
                             // Detail rows
                             .child(
@@ -277,7 +277,7 @@ impl RenderOnce for ResponseInspector {
                                     .flex()
                                     .justify_between()
                                     .text_color(t.text_secondary)
-                                    .child(div().flex().gap(px(4.)).child("● DNS Lookup:").text_color(gpui::rgb(0x06b6d4)))
+                                    .child(div().flex().gap(px(4.)).child("● DNS Lookup:").text_color(gpui_kit::rgb(0x06b6d4)))
                                     .child(format!("{} ms", timing.dns_ms.unwrap_or(0))),
                             )
                             .child(
@@ -285,7 +285,7 @@ impl RenderOnce for ResponseInspector {
                                     .flex()
                                     .justify_between()
                                     .text_color(t.text_secondary)
-                                    .child(div().flex().gap(px(4.)).child("● TCP Connect:").text_color(gpui::rgb(0x3b82f6)))
+                                    .child(div().flex().gap(px(4.)).child("● TCP Connect:").text_color(gpui_kit::rgb(0x3b82f6)))
                                     .child(format!("{} ms", timing.connect_ms.unwrap_or(0))),
                             )
                             .child(
@@ -293,7 +293,7 @@ impl RenderOnce for ResponseInspector {
                                     .flex()
                                     .justify_between()
                                     .text_color(t.text_secondary)
-                                    .child(div().flex().gap(px(4.)).child("● TLS Handshake:").text_color(gpui::rgb(0xa855f7)))
+                                    .child(div().flex().gap(px(4.)).child("● TLS Handshake:").text_color(gpui_kit::rgb(0xa855f7)))
                                     .child(format!("{} ms", timing.tls_ms.unwrap_or(0))),
                             )
                             .child(
@@ -301,7 +301,7 @@ impl RenderOnce for ResponseInspector {
                                     .flex()
                                     .justify_between()
                                     .text_color(t.text_secondary)
-                                    .child(div().flex().gap(px(4.)).child("● TTFB (Wait):").text_color(gpui::rgb(0xeab308)))
+                                    .child(div().flex().gap(px(4.)).child("● TTFB (Wait):").text_color(gpui_kit::rgb(0xeab308)))
                                     .child(format!("{} ms", timing.ttfb_ms.unwrap_or(0))),
                             )
                             .child(
@@ -309,7 +309,7 @@ impl RenderOnce for ResponseInspector {
                                     .flex()
                                     .justify_between()
                                     .text_color(t.text_secondary)
-                                    .child(div().flex().gap(px(4.)).child("● Content Download:").text_color(gpui::rgb(0x22c55e)))
+                                    .child(div().flex().gap(px(4.)).child("● Content Download:").text_color(gpui_kit::rgb(0x22c55e)))
                                     .child(format!("{} ms", timing.download_ms.unwrap_or(0))),
                             )
                             .when(timing.connection_reused, |this| {
@@ -437,7 +437,7 @@ impl RenderOnce for ResponseInspector {
                                                 .w(px(56.))
                                                 .h(px(56.))
                                                 .rounded_full()
-                                                .bg(gpui::Hsla { a: 0.1, ..t.primary })
+                                                .bg(gpui_kit::Hsla { a: 0.1, ..t.primary })
                                                 .text_color(t.primary)
                                                 .child(
                                                     Spinner::new()
@@ -455,7 +455,7 @@ impl RenderOnce for ResponseInspector {
                                                 .child(
                                                     div()
                                                         .text_base()
-                                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                         .text_color(t.text_primary)
                                                         .child("Sending request..."),
                                                 )
@@ -478,7 +478,7 @@ impl RenderOnce for ResponseInspector {
                                                 .border_1()
                                                 .border_color(t.border)
                                                 .text_xs()
-                                                .font_weight(gpui::FontWeight::MEDIUM)
+                                                .font_weight(gpui_kit::FontWeight::MEDIUM)
                                                 .text_color(t.status_5xx)
                                                 .hover(|s| s.bg(t.bg_hover))
                                                 .on_click(move |_, _, cx| {
@@ -509,7 +509,7 @@ impl RenderOnce for ResponseInspector {
                                         .child(
                                             div()
                                                 .text_sm()
-                                                .font_weight(gpui::FontWeight::MEDIUM)
+                                                .font_weight(gpui_kit::FontWeight::MEDIUM)
                                                 .text_color(t.text_secondary)
                                                 .child("Waiting for response..."),
                                         )
@@ -594,7 +594,7 @@ impl RenderOnce for ResponseInspector {
                                                             .bg(if is_pretty { t.bg_selected } else { t.transparent })
                                                             .text_color(if is_pretty { t.text_primary } else { t.text_secondary })
                                                             .text_xs()
-                                                            .font_weight(if is_pretty { gpui::FontWeight::SEMIBOLD } else { gpui::FontWeight::NORMAL })
+                                                            .font_weight(if is_pretty { gpui_kit::FontWeight::SEMIBOLD } else { gpui_kit::FontWeight::NORMAL })
                                                             .cursor_pointer()
                                                             .hover(|s| if is_pretty { s } else { s.text_color(t.text_primary).bg(t.bg_hover) })
                                                             .on_click(move |_, _, cx| {
@@ -618,7 +618,7 @@ impl RenderOnce for ResponseInspector {
                                                             .bg(if is_raw { t.bg_selected } else { t.transparent })
                                                             .text_color(if is_raw { t.text_primary } else { t.text_secondary })
                                                             .text_xs()
-                                                            .font_weight(if is_raw { gpui::FontWeight::SEMIBOLD } else { gpui::FontWeight::NORMAL })
+                                                            .font_weight(if is_raw { gpui_kit::FontWeight::SEMIBOLD } else { gpui_kit::FontWeight::NORMAL })
                                                             .cursor_pointer()
                                                             .hover(|s| if is_raw { s } else { s.text_color(t.text_primary).bg(t.bg_hover) })
                                                             .on_click(move |_, _, cx| {
@@ -645,7 +645,7 @@ impl RenderOnce for ResponseInspector {
                                                             div()
                                                                 .id("btn-save-example")
                                                                 .tooltip(move |window, cx| {
-                                                                    gpui_component::tooltip::Tooltip::new("Save as Example").build(window, cx)
+                                                                    gpui_kit::component::tooltip::Tooltip::new("Save as Example").build(window, cx)
                                                                 })
                                                                 .cursor_pointer()
                                                                 .px(px(6.))
@@ -692,7 +692,7 @@ impl RenderOnce for ResponseInspector {
                                                             .id("btn-toggle-wrap")
                                                             .tooltip(move |window, cx| {
                                                                     let tip = if wrap_lines { "Line Wrap: Enabled" } else { "Line Wrap: Disabled" };
-                                                                gpui_component::tooltip::Tooltip::new(tip).build(window, cx)
+                                                                gpui_kit::component::tooltip::Tooltip::new(tip).build(window, cx)
                                                             })
                                                             .px(px(6.))
                                                             .py(px(2.))
@@ -724,7 +724,7 @@ impl RenderOnce for ResponseInspector {
                                                         div()
                                                             .id("btn-copy-response")
                                                             .tooltip(move |window, cx| {
-                                                                gpui_component::tooltip::Tooltip::new("Copy Response").build(window, cx)
+                                                                gpui_kit::component::tooltip::Tooltip::new("Copy Response").build(window, cx)
                                                             })
                                                             .px(px(6.))
                                                             .py(px(2.))
@@ -747,7 +747,7 @@ impl RenderOnce for ResponseInspector {
                                                                             .map(|r| String::from_utf8_lossy(&r.body).to_string())
                                                                     })
                                                                     .unwrap_or_default();
-                                                                cx.write_to_clipboard(gpui::ClipboardItem::new_string(copy_text));
+                                                                cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(copy_text));
                                                             })
                                                             .child(Icon::new(IconName::Copy).size(px(14.)))
                                                     })
@@ -757,7 +757,7 @@ impl RenderOnce for ResponseInspector {
                                                         div()
                                                             .id("btn-save-response")
                                                             .tooltip(move |window, cx| {
-                                                                gpui_component::tooltip::Tooltip::new("Save to File").build(window, cx)
+                                                                gpui_kit::component::tooltip::Tooltip::new("Save to File").build(window, cx)
                                                             })
                                                             .px(px(6.))
                                                             .py(px(2.))
@@ -880,7 +880,7 @@ impl RenderOnce for ResponseInspector {
                                                         .readonly(true)
                                                         .appearance(false)
                                                         .bordered(false)
-                                                        .h(gpui::relative(1.))
+                                                        .h(gpui_kit::relative(1.))
                                                 )
                                         }
                                     })
@@ -958,10 +958,10 @@ impl RenderOnce for ResponseInspector {
                                                                     .px(px(6.))
                                                                     .py(px(2.))
                                                                     .rounded(px(4.))
-                                                                    .bg(gpui::Hsla { a: 0.15, ..t.method_color(sent.method) })
+                                                                    .bg(gpui_kit::Hsla { a: 0.15, ..t.method_color(sent.method) })
                                                                     .border_1()
-                                                                    .border_color(gpui::Hsla { a: 0.3, ..t.method_color(sent.method) })
-                                                                    .font_weight(gpui::FontWeight::BOLD)
+                                                                    .border_color(gpui_kit::Hsla { a: 0.3, ..t.method_color(sent.method) })
+                                                                    .font_weight(gpui_kit::FontWeight::BOLD)
                                                                     .text_xs()
                                                                     .text_color(t.method_color(sent.method))
                                                                     .child(sent.method.as_str()),
@@ -969,7 +969,7 @@ impl RenderOnce for ResponseInspector {
                                                             .child(
                                                                 div()
                                                                     .text_xs()
-                                                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                                     .text_color(t.text_secondary)
                                                                     .child("Request URL"),
                                                             ),
@@ -1000,7 +1000,7 @@ impl RenderOnce for ResponseInspector {
                                                     .child(
                                                         div()
                                                             .text_xs()
-                                                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                             .text_color(t.text_muted)
                                                             .child(format!("Headers Sent ({}):", sent.headers.len())),
                                                     )
@@ -1031,7 +1031,7 @@ impl RenderOnce for ResponseInspector {
                                                         .child(
                                                             div()
                                                                 .text_xs()
-                                                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                                .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                                 .text_color(t.text_muted)
                                                                 .child(format!("Body Sent ({} bytes):", sent.body_size_bytes)),
                                                         )
@@ -1048,7 +1048,7 @@ impl RenderOnce for ResponseInspector {
                                                                         .readonly(true)
                                                                         .appearance(false)
                                                                         .bordered(false)
-                                                                        .h(gpui::relative(1.))
+                                                                        .h(gpui_kit::relative(1.))
                                                                 ),
                                                         ),
                                                 )
@@ -1102,7 +1102,7 @@ impl RenderOnce for ResponseInspector {
                                                 .border_color(t.border_subtle)
                                                 .text_xs()
                                                 .font_family(".SystemMonoFont")
-                                                .child(div().w(px(200.)).font_weight(gpui::FontWeight::SEMIBOLD).text_color(t.primary).child(k.clone()))
+                                                .child(div().w(px(200.)).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(t.primary).child(k.clone()))
                                                 .child(div().flex_1().text_color(t.text_primary).child(v.clone()))
                                                 .child(
                                                     div()
@@ -1111,7 +1111,7 @@ impl RenderOnce for ResponseInspector {
                                                         .text_color(t.text_muted)
                                                         .hover(|s| s.text_color(t.text_primary))
                                                         .on_click(move |_, _, cx| {
-                                                            cx.write_to_clipboard(gpui::ClipboardItem::new_string(val_copy.clone()));
+                                                            cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(val_copy.clone()));
                                                         })
                                                         .child(Icon::new(IconName::Copy).size(px(14.))),
                                                 )
@@ -1172,7 +1172,7 @@ impl RenderOnce for ResponseInspector {
                                                             .justify_between()
                                                             .child(
                                                                 div()
-                                                                    .font_weight(gpui::FontWeight::BOLD)
+                                                                    .font_weight(gpui_kit::FontWeight::BOLD)
                                                                     .text_color(t.primary)
                                                                     .child(cookie.name.clone()),
                                                             )
@@ -1181,10 +1181,10 @@ impl RenderOnce for ResponseInspector {
                                                                     .flex()
                                                                     .gap(px(4.))
                                                                     .when(cookie.secure, |this| {
-                                                                        this.child(div().px(px(4.)).rounded(px(2.)).bg(gpui::rgb(0x22c55e)).text_color(t.primary_foreground).text_xs().child("Secure"))
+                                                                        this.child(div().px(px(4.)).rounded(px(2.)).bg(gpui_kit::rgb(0x22c55e)).text_color(t.primary_foreground).text_xs().child("Secure"))
                                                                     })
                                                                     .when(cookie.http_only, |this| {
-                                                                        this.child(div().px(px(4.)).rounded(px(2.)).bg(gpui::rgb(0x3b82f6)).text_color(t.primary_foreground).text_xs().child("HttpOnly"))
+                                                                        this.child(div().px(px(4.)).rounded(px(2.)).bg(gpui_kit::rgb(0x3b82f6)).text_color(t.primary_foreground).text_xs().child("HttpOnly"))
                                                                     }),
                                                             ),
                                                     )
@@ -1247,7 +1247,7 @@ impl RenderOnce for ResponseInspector {
     }
 }
 
-pub fn highlight_json_line(line: &str, t: &crate::theme::AppTheme) -> gpui::StyledText {
+pub fn highlight_json_line(line: &str, t: &crate::theme::AppTheme) -> gpui_kit::StyledText {
     let mut highlights = Vec::new();
     let bytes = line.as_bytes();
     let len = bytes.len();
@@ -1285,7 +1285,7 @@ pub fn highlight_json_line(line: &str, t: &crate::theme::AppTheme) -> gpui::Styl
             let color = if is_key { t.json_key } else { t.json_string };
             highlights.push((
                 start..end,
-                gpui::HighlightStyle {
+                gpui_kit::HighlightStyle {
                     color: Some(color),
                     ..Default::default()
                 },
@@ -1293,7 +1293,7 @@ pub fn highlight_json_line(line: &str, t: &crate::theme::AppTheme) -> gpui::Styl
         } else if matches!(b, b'{' | b'}' | b'[' | b']' | b':' | b',') {
             highlights.push((
                 i..i + 1,
-                gpui::HighlightStyle {
+                gpui_kit::HighlightStyle {
                     color: Some(t.json_punctuation),
                     ..Default::default()
                 },
@@ -1310,7 +1310,7 @@ pub fn highlight_json_line(line: &str, t: &crate::theme::AppTheme) -> gpui::Styl
             }
             highlights.push((
                 start..i,
-                gpui::HighlightStyle {
+                gpui_kit::HighlightStyle {
                     color: Some(t.json_number),
                     ..Default::default()
                 },
@@ -1320,9 +1320,9 @@ pub fn highlight_json_line(line: &str, t: &crate::theme::AppTheme) -> gpui::Styl
         {
             highlights.push((
                 i..i + 4,
-                gpui::HighlightStyle {
+                gpui_kit::HighlightStyle {
                     color: Some(t.json_boolean),
-                    font_weight: Some(gpui::FontWeight::SEMIBOLD),
+                    font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
                     ..Default::default()
                 },
             ));
@@ -1332,9 +1332,9 @@ pub fn highlight_json_line(line: &str, t: &crate::theme::AppTheme) -> gpui::Styl
         {
             highlights.push((
                 i..i + 5,
-                gpui::HighlightStyle {
+                gpui_kit::HighlightStyle {
                     color: Some(t.json_boolean),
-                    font_weight: Some(gpui::FontWeight::SEMIBOLD),
+                    font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
                     ..Default::default()
                 },
             ));
@@ -1344,9 +1344,9 @@ pub fn highlight_json_line(line: &str, t: &crate::theme::AppTheme) -> gpui::Styl
         {
             highlights.push((
                 i..i + 4,
-                gpui::HighlightStyle {
+                gpui_kit::HighlightStyle {
                     color: Some(t.json_null),
-                    font_style: Some(gpui::FontStyle::Italic),
+                    font_style: Some(gpui_kit::FontStyle::Italic),
                     ..Default::default()
                 },
             ));
@@ -1357,5 +1357,5 @@ pub fn highlight_json_line(line: &str, t: &crate::theme::AppTheme) -> gpui::Styl
         }
     }
 
-    gpui::StyledText::new(line.to_string()).with_highlights(highlights)
+    gpui_kit::StyledText::new(line.to_string()).with_highlights(highlights)
 }

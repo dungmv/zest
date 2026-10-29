@@ -1,15 +1,15 @@
 use crate::app::actions::DismissModal;
 use crate::state::{EnvironmentState, ModalState, SidebarState};
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, AnyElement, App, AppContext as _, Entity, InteractiveElement as _, IntoElement,
     MouseButton, ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_component::input::{Input, InputEvent, InputState};
-use gpui_component::menu::{ContextMenuExt as _, PopupMenuItem};
-use gpui_component::scroll::ScrollableElement as _;
-use gpui_component::{Icon, Sizable as _};
+use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenuItem};
+use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::assets::IconName;
 use zest_core::models::{Environment, EnvironmentVariable};
 
@@ -32,7 +32,7 @@ struct EnvVarRowInputs {
     init_input: Entity<InputState>,
     curr_input: Entity<InputState>,
     secret: bool,
-    _subscriptions: Vec<gpui::Subscription>,
+    _subscriptions: Vec<gpui_kit::Subscription>,
 }
 
 struct EnvVarTableState {
@@ -44,7 +44,7 @@ impl EnvVarTableState {
         var: &EnvironmentVariable,
         ctx: &EnvVarTableContext<'_>,
         window: &mut Window,
-        cx: &mut gpui::Context<Self>,
+        cx: &mut gpui_kit::Context<Self>,
     ) -> EnvVarRowInputs {
         let init_k = var.key.clone();
         let init_val_init = var.initial_value.clone();
@@ -143,7 +143,7 @@ impl EnvVarTableState {
         vars: &[EnvironmentVariable],
         ctx: &EnvVarTableContext<'_>,
         window: &mut Window,
-        cx: &mut gpui::Context<Self>,
+        cx: &mut gpui_kit::Context<Self>,
     ) {
         if self.rows.len() > vars.len() {
             self.rows.truncate(vars.len());
@@ -236,7 +236,7 @@ impl RenderOnce for EnvironmentModal {
             .id("env-modal-overlay")
             .absolute()
             .inset_0()
-            .bg(gpui::Hsla { a: 0.65, ..t.bg_app })
+            .bg(gpui_kit::Hsla { a: 0.65, ..t.bg_app })
             .flex()
             .items_center()
             .justify_center()
@@ -301,7 +301,7 @@ impl RenderOnce for EnvironmentModal {
                                     .child(
                                         div()
                                             .text_sm()
-                                            .font_weight(gpui::FontWeight::BOLD)
+                                            .font_weight(gpui_kit::FontWeight::BOLD)
                                             .text_color(t.text_primary)
                                             .child("Environments & Variables"),
                                     ),
@@ -354,7 +354,7 @@ impl RenderOnce for EnvironmentModal {
                                                     .px(px(6.))
                                                     .py(px(2.))
                                                     .text_xs()
-                                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                     .text_color(t.text_muted)
                                                     .child("GLOBAL"),
                                             )
@@ -368,7 +368,7 @@ impl RenderOnce for EnvironmentModal {
                                                     .py(px(6.))
                                                     .rounded(px(5.))
                                                     .cursor_pointer()
-                                                    .bg(if is_sel { t.bg_selected } else { gpui::transparent_black() })
+                                                    .bg(if is_sel { t.bg_selected } else { gpui_kit::transparent_black() })
                                                     .hover(|s| s.bg(if is_sel { t.bg_selected } else { t.bg_hover }))
                                                     .flex()
                                                     .items_center()
@@ -387,7 +387,7 @@ impl RenderOnce for EnvironmentModal {
                                                             .child(
                                                                 div()
                                                                     .text_xs()
-                                                                    .font_weight(if is_sel { gpui::FontWeight::SEMIBOLD } else { gpui::FontWeight::NORMAL })
+                                                                    .font_weight(if is_sel { gpui_kit::FontWeight::SEMIBOLD } else { gpui_kit::FontWeight::NORMAL })
                                                                     .text_color(if is_sel { t.text_primary } else { t.text_secondary })
                                                                     .child("Global Variables"),
                                                             ),
@@ -418,7 +418,7 @@ impl RenderOnce for EnvironmentModal {
                                             .child(
                                                 div()
                                                     .text_xs()
-                                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                     .text_color(t.text_muted)
                                                     .child(format!("ENVIRONMENTS ({})", envs.len())),
                                             )
@@ -474,12 +474,12 @@ impl RenderOnce for EnvironmentModal {
                                                 let ws_sel = ws_clone.clone();
 
                                                 div()
-                                                    .id(gpui::SharedString::from(format!("env-sidebar-item-{}", env.id)))
+                                                    .id(gpui_kit::SharedString::from(format!("env-sidebar-item-{}", env.id)))
                                                     .px(px(8.))
                                                     .py(px(6.))
                                                     .rounded(px(5.))
                                                     .cursor_pointer()
-                                                    .bg(if is_sel { t.bg_selected } else { gpui::transparent_black() })
+                                                    .bg(if is_sel { t.bg_selected } else { gpui_kit::transparent_black() })
                                                     .hover(|s| s.bg(if is_sel { t.bg_selected } else { t.bg_hover }))
                                                     .flex()
                                                     .items_center()
@@ -590,14 +590,14 @@ impl RenderOnce for EnvironmentModal {
                                                                             .focus_bordered(false)
                                                                             .cleanable(false)
                                                                             .xsmall()
-                                                                            .font_weight(if is_sel { gpui::FontWeight::SEMIBOLD } else { gpui::FontWeight::NORMAL }),
+                                                                            .font_weight(if is_sel { gpui_kit::FontWeight::SEMIBOLD } else { gpui_kit::FontWeight::NORMAL }),
                                                                     )
                                                                     .into_any_element()
                                                             } else {
                                                                 div()
                                                                     .truncate()
                                                                     .text_xs()
-                                                                    .font_weight(if is_sel { gpui::FontWeight::SEMIBOLD } else { gpui::FontWeight::NORMAL })
+                                                                    .font_weight(if is_sel { gpui_kit::FontWeight::SEMIBOLD } else { gpui_kit::FontWeight::NORMAL })
                                                                     .text_color(if is_sel { t.text_primary } else { t.text_secondary })
                                                                     .child(env_name)
                                                                     .into_any_element()
@@ -669,7 +669,7 @@ impl RenderOnce for EnvironmentModal {
                                                                 .child(
                                                                     div()
                                                                         .text_sm()
-                                                                        .font_weight(gpui::FontWeight::BOLD)
+                                                                        .font_weight(gpui_kit::FontWeight::BOLD)
                                                                         .text_color(t.text_primary)
                                                                         .child(div().flex().items_center().gap(px(4.)).child(Icon::new(IconName::Globe).size(px(14.))).child("Global Variables")),
                                                                 )
@@ -691,7 +691,7 @@ impl RenderOnce for EnvironmentModal {
                                                                     .child(
                                                                         div()
                                                                             .text_sm()
-                                                                            .font_weight(gpui::FontWeight::BOLD)
+                                                                            .font_weight(gpui_kit::FontWeight::BOLD)
                                                                             .text_color(t.text_primary)
                                                                             .child(custom.name.clone()),
                                                                     ),
@@ -722,7 +722,7 @@ impl RenderOnce for EnvironmentModal {
                                                             .text_color(t.primary_foreground)
                                                             .hover(|s| s.bg(t.primary_hover))
                                                             .text_xs()
-                                                            .font_weight(gpui::FontWeight::MEDIUM)
+                                                            .font_weight(gpui_kit::FontWeight::MEDIUM)
                                                             .on_click(move |_, _, cx| {
                                                                 ws_add.update(cx, |state, cx| {
                                                                     state.add_variable(
@@ -754,7 +754,7 @@ impl RenderOnce for EnvironmentModal {
                                                     .items_center()
                                                     .gap(px(8.))
                                                     .text_xs()
-                                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                     .text_color(t.text_muted)
                                                     .child(div().w(px(180.)).child("VARIABLE NAME"))
                                                     .child(div().flex_1().child("INITIAL VALUE (GIT)"))
@@ -794,7 +794,7 @@ impl RenderOnce for EnvironmentModal {
                                                     })
                                                     .child({
                                                         let table_state = window.use_keyed_state(
-                                                            gpui::SharedString::from(format!("env-var-table-state-{}", selected_id)),
+                                                            gpui_kit::SharedString::from(format!("env-var-table-state-{}", selected_id)),
                                                             cx,
                                                             |_window, _cx| EnvVarTableState { rows: Vec::new() },
                                                         );
@@ -879,7 +879,7 @@ impl RenderOnce for EnvironmentModal {
                                                                         .items_center()
                                                                         .child(
                                                                             Input::new(&k_input)
-                                                                                .id(gpui::SharedString::from(format!("{}-key", row_id)))
+                                                                                .id(gpui_kit::SharedString::from(format!("{}-key", row_id)))
                                                                                 .appearance(false)
                                                                                 .bordered(false)
                                                                                 .focus_bordered(false)
@@ -902,7 +902,7 @@ impl RenderOnce for EnvironmentModal {
                                                                         .items_center()
                                                                         .child(
                                                                             Input::new(&init_input)
-                                                                                .id(gpui::SharedString::from(format!("{}-init-val", row_id)))
+                                                                                .id(gpui_kit::SharedString::from(format!("{}-init-val", row_id)))
                                                                                 .appearance(false)
                                                                                 .bordered(false)
                                                                                 .focus_bordered(false)
@@ -925,7 +925,7 @@ impl RenderOnce for EnvironmentModal {
                                                                         .items_center()
                                                                         .child(
                                                                             Input::new(&curr_input)
-                                                                                .id(gpui::SharedString::from(format!("{}-curr-val", row_id)))
+                                                                                .id(gpui_kit::SharedString::from(format!("{}-curr-val", row_id)))
                                                                                 .appearance(false)
                                                                                 .bordered(false)
                                                                                 .focus_bordered(false)
@@ -938,11 +938,11 @@ impl RenderOnce for EnvironmentModal {
                                                                 .child({
                                                                     let cur_id_s = cur_id.clone();
                                                                     div()
-                                                                        .id(gpui::SharedString::from(format!("{}-secret", row_id)))
+                                                                        .id(gpui_kit::SharedString::from(format!("{}-secret", row_id)))
                                                                         .w(px(64.))
                                                                         .h(px(24.))
                                                                         .rounded(px(4.))
-                                                                        .bg(if secret { gpui::Hsla { a: 0.15, ..t.status_4xx } } else { gpui::transparent_black() })
+                                                                        .bg(if secret { gpui_kit::Hsla { a: 0.15, ..t.status_4xx } } else { gpui_kit::transparent_black() })
                                                                         .hover(|s| s.bg(t.bg_card))
                                                                         .cursor_pointer()
                                                                         .flex()
@@ -981,7 +981,7 @@ impl RenderOnce for EnvironmentModal {
                                                                 .child({
                                                                     let cur_id_d = cur_id.clone();
                                                                     div()
-                                                                        .id(gpui::SharedString::from(format!("{}-del", row_id)))
+                                                                        .id(gpui_kit::SharedString::from(format!("{}-del", row_id)))
                                                                         .w(px(24.))
                                                                         .h(px(24.))
                                                                         .rounded(px(4.))

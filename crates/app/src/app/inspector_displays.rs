@@ -1,10 +1,10 @@
 use crate::state::ResponseState;
-use gpui::{App, AppContext as _, Entity, Window};
-use gpui_component::input::EditorState as CodeEditorState;
+use gpui_kit::{App, AppContext as _, Entity, Window};
+use gpui_kit::component::input::EditorState as CodeEditorState;
 use std::rc::Rc;
 
 type HighlighterFactory =
-    Rc<dyn Fn(&str) -> Option<Box<dyn gpui_component::input::InputHighlighter>>>;
+    Rc<dyn Fn(&str) -> Option<Box<dyn gpui_kit::component::input::InputHighlighter>>>;
 
 pub struct InspectorDisplays {
     pub response_editor: Entity<CodeEditorState>,

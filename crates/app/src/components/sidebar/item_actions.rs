@@ -1,5 +1,5 @@
 use crate::state::{RequestSessionState, WorkspaceState};
-use gpui::{App, Entity};
+use gpui_kit::{App, Entity};
 
 pub fn delete_request_item(
     ws_entity: &Entity<WorkspaceState>,

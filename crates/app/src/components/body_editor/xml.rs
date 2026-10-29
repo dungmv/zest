@@ -1,7 +1,7 @@
 use super::{clamp_char_boundary_left, clamp_char_boundary_right};
 use crate::theme::theme;
-use gpui::{Context, HighlightStyle, SharedString, Window};
-use gpui_component::input::{
+use gpui_kit::{Context, HighlightStyle, SharedString, Window};
+use gpui_kit::component::input::{
     EditorState as CodeEditorState, FoldRange, HighlightStyleResolver, InputEdit, InputHighlighter,
     Rope,
 };
@@ -91,7 +91,7 @@ impl InputHighlighter for XmlHighlighter {
                     start + c_start..start + i,
                     HighlightStyle {
                         color: Some(t.text_muted),
-                        font_style: Some(gpui::FontStyle::Italic),
+                        font_style: Some(gpui_kit::FontStyle::Italic),
                         ..Default::default()
                     },
                 ));
@@ -128,7 +128,7 @@ impl InputHighlighter for XmlHighlighter {
                     start + d_start..start + i,
                     HighlightStyle {
                         color: Some(t.json_null),
-                        font_style: Some(gpui::FontStyle::Italic),
+                        font_style: Some(gpui_kit::FontStyle::Italic),
                         ..Default::default()
                     },
                 ));
@@ -162,7 +162,7 @@ impl InputHighlighter for XmlHighlighter {
                         start + name_start..start + i,
                         HighlightStyle {
                             color: Some(t.primary),
-                            font_weight: Some(gpui::FontWeight::SEMIBOLD),
+                            font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
                             ..Default::default()
                         },
                     ));
@@ -251,7 +251,7 @@ impl InputHighlighter for XmlHighlighter {
                                         start + val_start + abs_open..start + val_start + abs_close,
                                         HighlightStyle {
                                             color: Some(t.var_resolved),
-                                            font_weight: Some(gpui::FontWeight::SEMIBOLD),
+                                            font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
                                             ..Default::default()
                                         },
                                     ));
@@ -304,7 +304,7 @@ impl InputHighlighter for XmlHighlighter {
                         start + v_start..start + v_end,
                         HighlightStyle {
                             color: Some(t.var_resolved),
-                            font_weight: Some(gpui::FontWeight::SEMIBOLD),
+                            font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
                             ..Default::default()
                         },
                     ));

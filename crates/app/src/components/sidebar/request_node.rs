@@ -6,13 +6,13 @@ use crate::app::actions::DismissModal;
 use crate::components::{MethodBadge, StatusCodeBadge};
 use crate::services::GitService;
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, AnyElement, AppContext as _, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement, StatefulInteractiveElement as _, Styled,
 };
-use gpui_component::menu::{ContextMenuExt as _, PopupMenuItem};
-use gpui_component::{Icon, Sizable as _};
+use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenuItem};
+use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::assets::IconName;
 use zest_core::models::HttpMethod;
 use zest_core::storage::models::RequestFile;
@@ -72,8 +72,8 @@ pub fn render_request_inner_pill(
     let target_req_id = req.id.clone();
     let is_pinned_row = id_prefix != "req-item";
 
-    let git_green: gpui::Hsla = gpui::rgb(0x4ade80).into();
-    let git_yellow: gpui::Hsla = gpui::rgb(0xfacc15).into();
+    let git_green: gpui_kit::Hsla = gpui_kit::rgb(0x4ade80).into();
+    let git_yellow: gpui_kit::Hsla = gpui_kit::rgb(0xfacc15).into();
 
     let req_name_color = match req_git_status {
         SidebarGitStatus::New => git_green,
@@ -186,7 +186,7 @@ pub fn render_request_inner_pill(
                             if let Some(r) = ws_yaml.read(cx).find_request(&r_id_yaml) {
                                 let rf = RequestFile::from_item(r);
                                 if let Ok(yaml) = to_yaml_string(&rf) {
-                                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(yaml));
+                                    cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(yaml));
                                 }
                             }
                         }),
@@ -200,7 +200,7 @@ pub fn render_request_inner_pill(
                                 r_clone.headers = resolved_h;
                                 r_clone.auth = resolved_a;
                                 let curl = zest_core::curl::request_to_curl(&r_clone, None);
-                                cx.write_to_clipboard(gpui::ClipboardItem::new_string(curl));
+                                cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(curl));
                             }
                         }),
                     )
@@ -413,7 +413,7 @@ pub fn render_request_inner_pill(
                             });
                         })
                         .child(
-                            gpui_component::input::Input::new(inp)
+                            gpui_kit::component::input::Input::new(inp)
                                 .id(format!("rename-input-field-{}", req.id))
                                 .appearance(false)
                                 .bordered(false)
@@ -421,14 +421,14 @@ pub fn render_request_inner_pill(
                                 .cleanable(false)
                                 .xsmall()
                                 .font_family(".SystemMonoFont")
-                                .font_weight(gpui::FontWeight::NORMAL),
+                                .font_weight(gpui_kit::FontWeight::NORMAL),
                         )
                         .into_any_element()
                 } else {
                     div()
                         .text_xs()
                         .font_family(".SystemMonoFont")
-                        .font_weight(gpui::FontWeight::NORMAL)
+                        .font_weight(gpui_kit::FontWeight::NORMAL)
                         .text_color(req_name_color)
                         .truncate()
                         .child(req.display_name.clone())

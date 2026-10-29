@@ -1,6 +1,6 @@
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled,
 };
@@ -224,7 +224,7 @@ pub fn parse_side_by_side_diff(diff: &str) -> Vec<SideBySideRow> {
 pub fn render_diff_view_toggle(
     view_mode: DiffViewMode,
     view_mode_entity: Entity<DiffViewMode>,
-) -> gpui::AnyElement {
+) -> gpui_kit::AnyElement {
     let t = theme();
     div()
         .flex()
@@ -247,7 +247,7 @@ pub fn render_diff_view_toggle(
                 .when(view_mode == DiffViewMode::Split, |s| {
                     s.bg(t.bg_card)
                         .text_color(t.text_primary)
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                 })
                 .when(view_mode != DiffViewMode::Split, |s| {
                     s.text_color(t.text_muted)
@@ -273,7 +273,7 @@ pub fn render_diff_view_toggle(
                 .when(view_mode == DiffViewMode::Unified, |s| {
                     s.bg(t.bg_card)
                         .text_color(t.text_primary)
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                 })
                 .when(view_mode != DiffViewMode::Unified, |s| {
                     s.text_color(t.text_muted)
@@ -293,25 +293,25 @@ pub fn render_diff_view_toggle(
 pub fn render_diff_content(
     diff_content: Option<String>,
     view_mode: DiffViewMode,
-) -> gpui::AnyElement {
+) -> gpui_kit::AnyElement {
     let t = theme();
 
     match diff_content {
         Some(diff) if !diff.trim().is_empty() => {
-            let green_bg = gpui::Hsla {
+            let green_bg = gpui_kit::Hsla {
                 h: 142.0 / 360.0,
                 s: 0.7,
                 l: 0.45,
                 a: 0.15,
             };
-            let green_text: gpui::Hsla = gpui::rgb(0x4ade80).into();
-            let red_bg = gpui::Hsla {
+            let green_text: gpui_kit::Hsla = gpui_kit::rgb(0x4ade80).into();
+            let red_bg = gpui_kit::Hsla {
                 h: 0.0,
                 s: 0.7,
                 l: 0.45,
                 a: 0.15,
             };
-            let red_text: gpui::Hsla = gpui::rgb(0xef4444).into();
+            let red_text: gpui_kit::Hsla = gpui_kit::rgb(0xef4444).into();
             let gray_text = t.text_muted;
 
             match view_mode {
@@ -340,7 +340,7 @@ pub fn render_diff_content(
                                     .bg(t.bg_sidebar)
                                     .border_y_1()
                                     .border_color(t.border)
-                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                     .text_color(t.text_primary)
                                     .child(format!("📄 {}", file)),
                                 SideBySideRow::Diff { left, right } => {
@@ -348,7 +348,7 @@ pub fn render_diff_content(
                                         .w_full()
                                         .flex()
                                         .border_b_1()
-                                        .border_color(gpui::Hsla {
+                                        .border_color(gpui_kit::Hsla {
                                             a: 0.25,
                                             ..t.border
                                         })
@@ -375,7 +375,7 @@ pub fn render_diff_content(
                                                     )
                                                 }
                                                 None => (
-                                                    Some(gpui::Hsla {
+                                                    Some(gpui_kit::Hsla {
                                                         a: 0.15,
                                                         ..t.bg_card
                                                     }),
@@ -440,7 +440,7 @@ pub fn render_diff_content(
                                                     )
                                                 }
                                                 None => (
-                                                    Some(gpui::Hsla {
+                                                    Some(gpui_kit::Hsla {
                                                         a: 0.15,
                                                         ..t.bg_card
                                                     }),
@@ -485,7 +485,7 @@ pub fn render_diff_content(
                 }
                 DiffViewMode::Unified => {
                     let multi_file = diff.matches("diff --git").count() > 1;
-                    let elements: Vec<gpui::Div> = diff
+                    let elements: Vec<gpui_kit::Div> = diff
                         .lines()
                         .filter_map(|line| {
                             if line.starts_with("index ")
@@ -521,7 +521,7 @@ pub fn render_diff_content(
                                         .bg(t.bg_sidebar)
                                         .border_y_1()
                                         .border_color(t.border)
-                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                         .text_color(t.text_primary)
                                         .child(format!("📄 {}", file_name)),
                                 );

@@ -1,13 +1,13 @@
 use crate::state::{ModalState, ToastState, WorkspaceDataState};
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, App, AppContext as _, Context, Entity, FontWeight, InteractiveElement as _,
     IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_component::input::{Input, InputState};
-use gpui_component::scroll::ScrollableElement as _;
-use gpui_component::Icon;
+use gpui_kit::component::input::{Input, InputState};
+use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::Icon;
 use gpui_kit::assets::IconName;
 use std::path::PathBuf;
 use zest_core::importers::{parse_content, ImportFormat, ImportOptions, ImportResult};
@@ -130,7 +130,7 @@ impl RenderOnce for ImportModal {
 
         let modal_entity = window
             .use_keyed_state(
-                gpui::SharedString::from("import-modal-state-key"),
+                gpui_kit::SharedString::from("import-modal-state-key"),
                 cx,
                 |window, cx| cx.new(|cx| ImportModalState::new(window, cx)),
             )
@@ -164,7 +164,7 @@ impl RenderOnce for ImportModal {
             .id("import-modal-overlay")
             .absolute()
             .inset_0()
-            .bg(gpui::Hsla { a: 0.65, ..t.bg_app })
+            .bg(gpui_kit::Hsla { a: 0.65, ..t.bg_app })
             .flex()
             .items_center()
             .justify_center()
@@ -549,7 +549,7 @@ fn render_format_button<F>(
     t: &crate::theme::AppTheme,
 ) -> impl IntoElement
 where
-    F: Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
+    F: Fn(&gpui_kit::ClickEvent, &mut Window, &mut App) + 'static,
 {
     div()
         .id(id)
@@ -588,7 +588,7 @@ fn render_tab_header<F>(
     t: &crate::theme::AppTheme,
 ) -> impl IntoElement
 where
-    F: Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
+    F: Fn(&gpui_kit::ClickEvent, &mut Window, &mut App) + 'static,
 {
     div()
         .id(id)
@@ -861,7 +861,7 @@ fn render_preview_card(res: &ImportResult, t: &crate::theme::AppTheme) -> impl I
         )
 }
 
-fn render_badge(label: &str, color: gpui::Hsla) -> impl IntoElement {
+fn render_badge(label: &str, color: gpui_kit::Hsla) -> impl IntoElement {
     div()
         .px(px(6.))
         .py(px(2.))
@@ -906,7 +906,7 @@ fn render_checkbox<F>(
     t: &crate::theme::AppTheme,
 ) -> impl IntoElement
 where
-    F: Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
+    F: Fn(&gpui_kit::ClickEvent, &mut Window, &mut App) + 'static,
 {
     div()
         .id(id)

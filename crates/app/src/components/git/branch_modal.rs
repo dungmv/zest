@@ -2,12 +2,12 @@ use super::common::{render_error_banner, render_not_a_repo_view};
 use crate::services::GitService;
 use crate::state::GitState;
 use crate::theme::theme;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
     RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
-use gpui_component::input::{Input, InputState};
+use gpui_kit::component::input::{Input, InputState};
 
 #[derive(IntoElement)]
 pub struct GitBranchModal {
@@ -30,7 +30,7 @@ pub fn render_new_branch_view(
     current_branch: String,
     branch_input: Entity<InputState>,
     is_loading: bool,
-) -> gpui::AnyElement {
+) -> gpui_kit::AnyElement {
     let t = theme();
     let git_cancel = git_clone.clone();
     let svc_create = git_service;
@@ -50,7 +50,7 @@ pub fn render_new_branch_view(
                 .child(
                     div()
                         .text_xs()
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                         .text_color(t.text_primary)
                         .child("Branch Name"),
                 )
@@ -84,7 +84,7 @@ pub fn render_new_branch_view(
                         .border_color(t.border)
                         .cursor_pointer()
                         .text_xs()
-                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .font_weight(gpui_kit::FontWeight::MEDIUM)
                         .text_color(t.text_primary)
                         .hover(|s| s.bg(t.bg_hover))
                         .on_click(move |_, _, cx| {
@@ -108,7 +108,7 @@ pub fn render_new_branch_view(
                         })
                         .when(is_loading, |s| s.bg(t.bg_hover).text_color(t.text_muted))
                         .text_xs()
-                        .font_weight(gpui::FontWeight::BOLD)
+                        .font_weight(gpui_kit::FontWeight::BOLD)
                         .on_click(move |_, window, cx| {
                             if is_loading {
                                 return;
@@ -146,7 +146,7 @@ impl RenderOnce for GitBranchModal {
         };
 
         let branch_input_holder = window.use_keyed_state(
-            gpui::SharedString::from("git-new-branch-input"),
+            gpui_kit::SharedString::from("git-new-branch-input"),
             cx,
             |window, cx| {
                 let inp = cx.new(|cx| {
@@ -161,7 +161,7 @@ impl RenderOnce for GitBranchModal {
             .id("git-branch-modal-overlay")
             .absolute()
             .inset_0()
-            .bg(gpui::Hsla {
+            .bg(gpui_kit::Hsla {
                 a: 0.65,
                 ..t.bg_app
             })
@@ -229,7 +229,7 @@ impl RenderOnce for GitBranchModal {
                                     .child(
                                         div()
                                             .text_sm()
-                                            .font_weight(gpui::FontWeight::BOLD)
+                                            .font_weight(gpui_kit::FontWeight::BOLD)
                                             .text_color(t.text_primary)
                                             .child("Create New Branch"),
                                     ),

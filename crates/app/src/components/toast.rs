@@ -1,6 +1,6 @@
 use crate::state::{ToastKind, ToastState};
 use crate::theme::theme;
-use gpui::{
+use gpui_kit::{
     div, px, App, Entity, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
     StatefulInteractiveElement as _, Styled, Window,
 };
@@ -74,7 +74,7 @@ impl RenderOnce for ToastContainer {
                                 .child(
                                     div()
                                         .text_sm()
-                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                         .text_color(t.text_primary)
                                         .child(item.title.clone()),
                                 ),

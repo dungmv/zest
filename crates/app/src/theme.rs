@@ -1,4 +1,4 @@
-use gpui::{App, Hsla, Rgba, WindowAppearance};
+use gpui_kit::{App, Hsla, Rgba, WindowAppearance};
 use serde::{Deserialize, Serialize};
 use zest_core::models::HttpMethod;
 
@@ -184,7 +184,7 @@ impl AppTheme {
             json_null: hex_to_hsla(0xf87171),        // Soft coral red
             json_punctuation: hex_to_hsla(0x94a3b8), // Slate / Muted gray
 
-            transparent: gpui::transparent_black(),
+            transparent: gpui_kit::transparent_black(),
         }
     }
 
@@ -246,7 +246,7 @@ impl AppTheme {
             json_null: hex_to_hsla(0xe11d48),        // Rose Red
             json_punctuation: hex_to_hsla(0x64748b), // Slate gray
 
-            transparent: gpui::transparent_black(),
+            transparent: gpui_kit::transparent_black(),
         }
     }
 }
@@ -306,15 +306,15 @@ pub fn set_theme(preference: ThemePreference, resolved_mode: ThemeMode) {
 /// Switch the gpui-component theme to `mode` and align its popover surface with
 /// the app card background, so dropdown menus match the app palette instead of
 /// the library's near-black default. Call this after [`set_theme`] and in place
-/// of every `gpui_component::Theme::change` call.
+/// of every `gpui_kit::component::Theme::change` call.
 pub fn sync_component_theme(mode: ThemeMode, cx: &mut App) {
     let gpui_mode = match mode {
-        ThemeMode::Dark => gpui_component::ThemeMode::Dark,
-        ThemeMode::Light => gpui_component::ThemeMode::Light,
+        ThemeMode::Dark => gpui_kit::component::ThemeMode::Dark,
+        ThemeMode::Light => gpui_kit::component::ThemeMode::Light,
     };
-    gpui_component::Theme::change(gpui_mode, None, cx);
+    gpui_kit::component::Theme::change(gpui_mode, None, cx);
     let t = theme();
-    gpui_component::Theme::update(cx, |component_theme| {
+    gpui_kit::component::Theme::update(cx, |component_theme| {
         component_theme.colors.popover = t.bg_card;
         component_theme.colors.popover_foreground = t.text_primary;
     });

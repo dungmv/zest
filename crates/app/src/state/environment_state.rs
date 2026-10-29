@@ -1,5 +1,5 @@
 use super::EnvironmentEvent;
-use gpui::{Context, Task};
+use gpui_kit::{Context, Task};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use zest_core::models::Environment;

@@ -2,7 +2,7 @@ use crate::state::{
     EnvironmentState, GitState, ModalState, PersistenceState, RequestSessionState, ResponseState,
     SidebarState, ToastState, WorkspaceDataState,
 };
-use gpui::{App, AppContext as _, Entity};
+use gpui_kit::{App, AppContext as _, Entity};
 
 pub struct AppState {
     pub workspace: Entity<WorkspaceDataState>,
