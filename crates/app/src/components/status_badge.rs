@@ -1,4 +1,5 @@
 use crate::theme::theme;
+use gpui_kit::component::tag::Tag;
 use gpui_kit::{div, px, App, IntoElement, ParentElement, RenderOnce, Styled, Window};
 use zest_core::models::HttpMethod;
 
@@ -28,16 +29,17 @@ impl RenderOnce for MethodBadge {
         let color = t.method_color(self.method);
         let bg_color = gpui_kit::Hsla { a: 0.15, ..color };
 
-        div()
+        Tag::custom(bg_color, color, gpui_kit::transparent_black())
             .flex_shrink_0()
+            .rounded(px(4.))
             .px(px(6.))
             .py(px(1.5))
-            .rounded(px(4.))
-            .bg(bg_color)
-            .text_color(color)
-            .text_xs()
-            .font_weight(self.font_weight)
-            .child(self.method.as_str())
+            .child(
+                div()
+                    .text_xs()
+                    .font_weight(self.font_weight)
+                    .child(self.method.as_str()),
+            )
     }
 }
 
@@ -69,16 +71,17 @@ impl RenderOnce for StatusCodeBadge {
         let color = t.status_color(self.status_code);
         let bg_color = gpui_kit::Hsla { a: 0.15, ..color };
 
-        div()
+        Tag::custom(bg_color, color, gpui_kit::transparent_black())
             .flex_shrink_0()
+            .rounded(px(3.))
             .px(px(5.))
             .py(px(1.))
-            .rounded(px(3.))
-            .bg(bg_color)
-            .text_color(color)
-            .text_xs()
-            .font_weight(self.font_weight)
-            .child(format!("{}", self.status_code))
+            .child(
+                div()
+                    .text_xs()
+                    .font_weight(self.font_weight)
+                    .child(format!("{}", self.status_code)),
+            )
     }
 }
 

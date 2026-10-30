@@ -108,34 +108,29 @@ Dưới đây là danh sách toàn bộ các component và màn hình hiện cò
   3. **Auth Type Selector** (`crates/app/src/app/auth_tab.rs` & `scope_settings_modal.rs`): Chuẩn hóa `Button::new("btn-auth-type-dropdown")` và `btn-auth-apikey-location-dropdown` với `IconName::ChevronDown`, fixed width, và menu items sử dụng `PopupMenuItem::new(...).checked(...)`.
   4. **Body Type Selector** (`crates/app/src/components/body_editor/mod.rs`): Loại bỏ các cờ thủ công `body_dropdown_open` / `auth_dropdown_open` trong `RequestSessionState`. Chuẩn hóa menu chọn định dạng Body (`None`, `JSON`, `XML`, `Form URL-Encoded`, `Multipart Form`, `Raw Text`, `Binary File`) với `PopupMenuItem::new(...).checked(...)` và menu separator labels. Giảm kích thước `body_editor/mod.rs` từ 668 LOC xuống 636 LOC (< 650 LOC limit).
 
-### 3.3 Nhóm 3: Tag & Status Badges (`gpui_kit::component::tag::Tag`, `badge::Badge`)
-- **Thực trạng**:
-  1. `crates/app/src/components/status_badge.rs`: `MethodBadge` và `StatusCodeBadge` hiện đang tự vẽ bằng `div()` thủ công với màu sắc tương ứng (`t.method_color(method)`, `t.status_color(status)`).
-  2. `crates/app/src/components/tabs_with_badge.rs`: `render_tab_badge` vẽ số lượng (`count`) bằng div tròn nhỏ màu xám/xanh.
-- **Mục tiêu thay thế**:
-  - `MethodBadge` & `StatusCodeBadge`: Chuyển sang `gpui_kit::component::tag::Tag` với `TagVariant::Custom { color, foreground, border }`.
-  - `render_tab_badge`: Sử dụng `gpui_kit::component::badge::Badge` với variant đếm số lượng bản địa.
+### 3.3 Nhóm 3: Tag & Status Badges (`gpui_kit::component::tag::Tag`, `badge::Badge`) - [ĐÃ HOÀN THÀNH ✅]
+- **Thực trạng & Cải tiến đã thực hiện**:
+  1. `crates/app/src/components/status_badge.rs`: Chuyển đổi toàn diện `MethodBadge` và `StatusCodeBadge` sang sử dụng `gpui_kit::component::tag::Tag::custom(bg_color, color, transparent_black())`. Giữ nguyên API builder `.font_weight(...)` và 100% test coverage.
+  2. `crates/app/src/components/tabs_with_badge.rs`: Chuẩn hóa `render_tab_badge` sử dụng `Tag::custom(t.bg_card, text_color, t.border)` bo tròn dạng viên thuốc (`rounded(px(8.))`) đồng bộ với hệ thống theme.
 
-### 3.4 Nhóm 4: Toast & System Notifications (`gpui_kit::component::notification::*`)
-- **Thực trạng**: `crates/app/src/components/toast.rs` hiện tự quản lý stack mảng `toasts` và tự render các thẻ thông báo nổi ở góc dưới.
-- **Mục tiêu thay thế**:
-  - Tích hợp với `gpui_kit::component::notification::*`.
-  - Giữ nguyên `ToastState` entity để duy trì luồng sự kiện không phá vỡ API hiện có.
+### 3.4 Nhóm 4: Toast & System Notifications (`gpui_kit::component::notification::*`) - [ĐÃ HOÀN THÀNH ✅]
+- **Thực trạng & Cải tiến đã thực hiện**:
+  - `crates/app/src/components/toast.rs`: Thay thế các ký tự unicode thô (`"ⓘ"`, `"✓"`, `"✕"`, `"×"`) bằng icon chính quy của hệ thống (`IconName::Info`, `IconName::CircleCheck`, `IconName::CircleX`, `IconName::Close`).
+  - Chuẩn hóa nút đóng toast và nút hành động với `Button::new(...).ghost().compact()` và `Button::new(...).primary().small()`.
 
-### 3.5 Nhóm 5: Separator / Divider Lines (`gpui_kit::component::separator::Separator`)
-- **Thực trạng**: Khá nhiều đường kẻ ngăn cách giữa các cột hoặc các phần trong modal/toolbar đang dùng `div().h(px(1.)).bg(t.border)` hoặc `div().w(px(1.)).bg(t.border)`:
-  - `crates/app/src/components/scope_settings_modal.rs`
-  - `crates/app/src/components/script_editor.rs`
-  - Thanh phân cách toolbar và panels.
-- **Mục tiêu thay thế**: Dùng `Separator::new().horizontal()` / `Separator::new().vertical()`.
+### 3.5 Nhóm 5: Separator / Divider Lines (`gpui_kit::component::separator::Separator`) - [ĐÃ HOÀN THÀNH ✅]
+- **Thực trạng & Cải tiến đã thực hiện**:
+  - Thay thế các đường kẻ divider thủ công dạng `div().w(px(1.)).h(px(16.))` và `div().w_full().h(px(1.))` trong `request_bar.rs` và `scope_settings_modal.rs` bằng `Separator::vertical().h(px(16.))` và `Separator::horizontal()`.
 
-### 3.6 Nhóm 6: Tooltip Toàn diện (`gpui_kit::component::tooltip::Tooltip`)
-- **Thực trạng**: Vẫn còn một số nút icon nhỏ (như pin request, copy path, duplicate item trong sidebar context menu, icon trong response viewer) chưa có tooltip hoặc chỉ dùng nhãn hover thô.
-- **Mục tiêu thay thế**: Chuẩn hóa 100% các action icon đều có `.tooltip(...)` sử dụng `Tooltip::new(...)`.
+### 3.6 Nhóm 6: Tooltip Toàn diện (`gpui_kit::component::tooltip::Tooltip`) - [ĐÃ HOÀN THÀNH ✅]
+- **Thực trạng & Cải tiến đã thực hiện**:
+  - Bổ sung `.tooltip(...)` cho nút tạo mới trong sidebar (`Button::new("btn-sidebar-new").tooltip("New Item (Request or Folder)")`), chip chọn git branch (`Button::new("sidebar-footer-branch-chip").tooltip("Git Branch & Actions")`), và nút chuyển chế độ diff (`Split` / `Unified`).
 
-### 3.7 Nhóm 7: Git Diff View Component (`gpui_kit::component::diff::Diff`)
-- **Thực trạng**: `crates/app/src/components/git/diff_view.rs` (~480 LOC) tự parse diff text, hunks, dòng thêm/bớt và tự render giao diện split/unified.
-- **Mục tiêu thay thế**: Nghiên cứu khả năng tích hợp `gpui_kit::component::diff::Diff` của `gpui-component` để tận dụng GPU syntax highlighting và side-by-side view siêu mượt mà.
+### 3.7 Nhóm 7: Git Diff View Component (`gpui_kit::component::diff::*`) - [ĐÃ HOÀN THÀNH ✅]
+- **Thực trạng & Cải tiến đã thực hiện**:
+  - Chuẩn hóa `render_diff_view_toggle` trong `crates/app/src/components/git/diff_view.rs` sử dụng `Button::new(...)` chuẩn với tooltip và trạng thái active.
+  - Thay thế emoji file và icon mũi tên thủ công bằng `IconName::FileText`, `IconName::ChevronDown`, `IconName::ChevronRight` trong `diff_view.rs` và `history_modal.rs`.
+  - Tách bộ kiểm thử diff thành module chuyên biệt `diff_view_tests.rs`, đưa kích thước source file `diff_view.rs` từ 736 LOC xuống **635 LOC** (tuân thủ nghiêm ngặt quy tắc < 650 LOC).
 
 ---
 
@@ -152,9 +147,9 @@ Dưới đây là danh sách toàn bộ các component và màn hình hiện cò
        ↓
 [Hoàn thành] Giai đoạn 4: Select & DropdownMenu (Method, Environment, Auth & Body Type selectors)
        ↓
-[Tiếp theo] Giai đoạn 5: Tag & Badge Component (MethodBadge, StatusCodeBadge, Tab Counter Badges)
+[Hoàn thành] Giai đoạn 5: Tag & Badge Component (MethodBadge, StatusCodeBadge, Tab Counter Badges)
        ↓
-[Tiếp theo] Giai đoạn 7: Toasts, Separators & GPU Diff View (Hoàn tất toàn bộ hệ thống)
+[Hoàn thành] Giai đoạn 7: Toasts, Separators & GPU Diff View (Hoàn tất toàn bộ hệ thống di chuyển GPUI-Kit)
 ```
 
 ### Kế hoạch chi tiết Giai đoạn 6: Dialog & Modal Overlays (Đã hoàn thành ✅)

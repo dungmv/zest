@@ -9,6 +9,7 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::separator::Separator;
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -736,7 +737,7 @@ impl RenderOnce for ScopeSettingsModal {
                                                         ),
                                                 )
                                                 // Separator
-                                                .child(div().w_full().h(px(1.)).bg(t.border_subtle))
+                                                .child(Separator::horizontal())
                                                 // Storage Directory
                                                 .child(
                                                     div()

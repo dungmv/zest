@@ -262,10 +262,18 @@ pub fn render_history_view(
                                                     .items_center()
                                                     .gap(px(8.))
                                                     .child(
-                                                        div()
-                                                            .text_xs()
-                                                            .text_color(t.text_muted)
-                                                            .child(if is_expanded { "▼" } else { "▶" }),
+                                                        Icon::new(if is_expanded {
+                                                            IconName::ChevronDown
+                                                        } else {
+                                                            IconName::ChevronRight
+                                                        })
+                                                        .size(px(12.))
+                                                        .text_color(t.text_muted),
+                                                    )
+                                                    .child(
+                                                        Icon::new(IconName::FileText)
+                                                            .size(px(13.))
+                                                            .text_color(t.text_secondary),
                                                     )
                                                     .child(
                                                         div()
@@ -273,7 +281,7 @@ pub fn render_history_view(
                                                             .font_family(".SystemMonoFont")
                                                             .font_weight(gpui_kit::FontWeight::MEDIUM)
                                                             .text_color(t.text_primary)
-                                                            .child(format!("📄 {}", file_path)),
+                                                            .child(file_path),
                                                     ),
                                             ),
                                     )

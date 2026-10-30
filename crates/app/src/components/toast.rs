@@ -1,9 +1,10 @@
 use crate::state::{ToastKind, ToastState};
 use crate::theme::theme;
-use gpui_kit::{
-    div, px, App, Entity, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
-    StatefulInteractiveElement as _, Styled, Window,
-};
+use gpui_kit::assets::IconName;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::Icon;
+use gpui_kit::component::Sizable as _;
+use gpui_kit::{div, px, App, Entity, IntoElement, ParentElement, RenderOnce, Styled, Window};
 
 #[derive(IntoElement)]
 pub struct ToastContainer {
@@ -38,15 +39,10 @@ impl RenderOnce for ToastContainer {
         for item in toasts {
             let ts = toast_state.clone();
             let item_id = item.id.clone();
-            let icon_char = match item.kind {
-                ToastKind::Info => "ⓘ",
-                ToastKind::Success => "✓",
-                ToastKind::Error => "✕",
-            };
-            let icon_color = match item.kind {
-                ToastKind::Info => t.primary,
-                ToastKind::Success => t.status_2xx,
-                ToastKind::Error => t.status_5xx,
+            let (icon_name, icon_color) = match item.kind {
+                ToastKind::Info => (IconName::Info, t.primary),
+                ToastKind::Success => (IconName::CircleCheck, t.status_2xx),
+                ToastKind::Error => (IconName::CircleX, t.status_5xx),
             };
 
             let mut card = div()
@@ -70,7 +66,7 @@ impl RenderOnce for ToastContainer {
                                 .flex()
                                 .items_center()
                                 .gap(px(8.))
-                                .child(div().text_sm().text_color(icon_color).child(icon_char))
+                                .child(Icon::new(icon_name).size(px(16.)).text_color(icon_color))
                                 .child(
                                     div()
                                         .text_sm()
@@ -80,17 +76,20 @@ impl RenderOnce for ToastContainer {
                                 ),
                         )
                         .child(
-                            div()
-                                .id(format!("dismiss-{}", item.id))
-                                .cursor_pointer()
-                                .text_color(t.text_muted)
-                                .hover(|s| s.text_color(t.text_primary))
+                            Button::new(format!("dismiss-{}", item.id))
+                                .ghost()
+                                .compact()
+                                .p(px(2.))
+                                .child(
+                                    Icon::new(IconName::Close)
+                                        .size(px(12.))
+                                        .text_color(t.text_muted),
+                                )
                                 .on_click(move |_, _, cx| {
                                     ts.update(cx, |state, cx| {
                                         state.dismiss_toast(&item_id, cx);
                                     });
-                                })
-                                .child("×"),
+                                }),
                         ),
                 );
 
@@ -110,16 +109,10 @@ impl RenderOnce for ToastContainer {
 
                 card = card.child(
                     div().flex().gap(px(8.)).child(
-                        div()
-                            .id(format!("act-{}", item.id))
-                            .px(px(12.))
-                            .py(px(4.))
-                            .rounded(px(4.))
-                            .bg(t.primary)
-                            .text_color(t.primary_foreground)
-                            .text_xs()
-                            .cursor_pointer()
-                            .hover(|s| s.bg(t.primary_hover))
+                        Button::new(format!("act-{}", item.id))
+                            .primary()
+                            .small()
+                            .label(label)
                             .on_click(move |_, _, cx| {
                                 if let Some(cb) = &action_cb {
                                     cb();
@@ -127,8 +120,7 @@ impl RenderOnce for ToastContainer {
                                 ts_close.update(cx, |state, cx| {
                                     state.dismiss_toast(&close_id, cx);
                                 });
-                            })
-                            .child(label),
+                            }),
                     ),
                 );
             }

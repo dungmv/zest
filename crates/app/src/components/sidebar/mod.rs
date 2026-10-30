@@ -335,6 +335,7 @@ impl RenderOnce for SidebarTree {
                             .compact()
                             .w(px(28.))
                             .h(px(28.))
+                            .tooltip("New Item (Request or Folder)")
                             .child(
                                 Icon::new(IconName::Plus)
                                     .size(px(15.))

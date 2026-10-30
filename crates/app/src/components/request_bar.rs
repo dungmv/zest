@@ -12,6 +12,7 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::separator::Separator;
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -260,7 +261,7 @@ impl RenderOnce for RequestBar {
                             })
                     })
                     // Subtle vertical separator
-                    .child(div().w(px(1.)).h(px(16.)).bg(t.border))
+                    .child(Separator::vertical().h(px(16.)))
                     // URL Input Box - with inline tokens for environment variables
                     .child(
                         div()
@@ -320,7 +321,7 @@ impl RenderOnce for RequestBar {
                             }),
                     )
                     // Subtle vertical separator
-                    .child(div().w(px(1.)).h(px(16.)).bg(t.border))
+                    .child(Separator::vertical().h(px(16.)))
                     // Send / Cancel Action Button
                     .child({
                         let ed_s = ed_clone.clone();

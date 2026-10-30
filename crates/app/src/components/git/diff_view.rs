@@ -1,5 +1,6 @@
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::empty::{
     Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyMediaVariant, EmptyTitle,
 };
@@ -231,6 +232,9 @@ pub fn render_diff_view_toggle(
     view_mode_entity: Entity<DiffViewMode>,
 ) -> gpui_kit::AnyElement {
     let t = theme();
+    let is_split = view_mode == DiffViewMode::Split;
+    let is_unified = view_mode == DiffViewMode::Unified;
+
     div()
         .flex()
         .items_center()
@@ -242,55 +246,89 @@ pub fn render_diff_view_toggle(
         .border_color(t.border)
         .child({
             let st = view_mode_entity.clone();
-            div()
-                .id("btn-diff-split")
+            Button::new("btn-diff-split")
+                .ghost()
+                .compact()
                 .px(px(6.))
                 .py(px(2.))
+                .h(px(22.))
                 .rounded(px(3.))
-                .cursor_pointer()
-                .text_xs()
-                .when(view_mode == DiffViewMode::Split, |s| {
-                    s.bg(t.bg_card)
-                        .text_color(t.text_primary)
-                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
+                .bg(if is_split {
+                    t.bg_card
+                } else {
+                    gpui_kit::transparent_black()
                 })
-                .when(view_mode != DiffViewMode::Split, |s| {
-                    s.text_color(t.text_muted)
-                        .hover(|h| h.text_color(t.text_secondary))
+                .border_1()
+                .border_color(if is_split {
+                    t.border
+                } else {
+                    gpui_kit::transparent_black()
                 })
+                .tooltip("Split (Side-by-Side) Diff")
                 .on_click(move |_, _, cx| {
                     st.update(cx, |m, cx| {
                         *m = DiffViewMode::Split;
                         cx.notify();
                     });
                 })
-                .child("◫ Split")
+                .child(
+                    div()
+                        .text_xs()
+                        .font_weight(if is_split {
+                            gpui_kit::FontWeight::SEMIBOLD
+                        } else {
+                            gpui_kit::FontWeight::NORMAL
+                        })
+                        .text_color(if is_split {
+                            t.text_primary
+                        } else {
+                            t.text_muted
+                        })
+                        .child("Split"),
+                )
         })
         .child({
             let st = view_mode_entity.clone();
-            div()
-                .id("btn-diff-unified")
+            Button::new("btn-diff-unified")
+                .ghost()
+                .compact()
                 .px(px(6.))
                 .py(px(2.))
+                .h(px(22.))
                 .rounded(px(3.))
-                .cursor_pointer()
-                .text_xs()
-                .when(view_mode == DiffViewMode::Unified, |s| {
-                    s.bg(t.bg_card)
-                        .text_color(t.text_primary)
-                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
+                .bg(if is_unified {
+                    t.bg_card
+                } else {
+                    gpui_kit::transparent_black()
                 })
-                .when(view_mode != DiffViewMode::Unified, |s| {
-                    s.text_color(t.text_muted)
-                        .hover(|h| h.text_color(t.text_secondary))
+                .border_1()
+                .border_color(if is_unified {
+                    t.border
+                } else {
+                    gpui_kit::transparent_black()
                 })
+                .tooltip("Unified Diff")
                 .on_click(move |_, _, cx| {
                     st.update(cx, |m, cx| {
                         *m = DiffViewMode::Unified;
                         cx.notify();
                     });
                 })
-                .child("▤ Unified")
+                .child(
+                    div()
+                        .text_xs()
+                        .font_weight(if is_unified {
+                            gpui_kit::FontWeight::SEMIBOLD
+                        } else {
+                            gpui_kit::FontWeight::NORMAL
+                        })
+                        .text_color(if is_unified {
+                            t.text_primary
+                        } else {
+                            t.text_muted
+                        })
+                        .child("Unified"),
+                )
         })
         .into_any_element()
 }
@@ -347,7 +385,15 @@ pub fn render_diff_content(
                                     .border_color(t.border)
                                     .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                     .text_color(t.text_primary)
-                                    .child(format!("📄 {}", file)),
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(6.))
+                                    .child(
+                                        Icon::new(IconName::FileText)
+                                            .size(px(13.))
+                                            .text_color(t.text_secondary),
+                                    )
+                                    .child(file),
                                 SideBySideRow::Diff { left, right } => {
                                     div()
                                         .w_full()
@@ -528,7 +574,15 @@ pub fn render_diff_content(
                                         .border_color(t.border)
                                         .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                         .text_color(t.text_primary)
-                                        .child(format!("📄 {}", file_name)),
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(6.))
+                                        .child(
+                                            Icon::new(IconName::FileText)
+                                                .size(px(13.))
+                                                .text_color(t.text_secondary),
+                                        )
+                                        .child(file_name.to_string()),
                                 );
                             }
 
@@ -607,130 +661,5 @@ pub fn render_diff_content(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_diff_filters_new_file_mode_and_initial_hunk() {
-        let raw_diff = r#"diff --git a/collections/speedtest/new/new-request.yaml b/collections/speedtest/new/new-request.yaml
-new file mode 100644
-index 0000000..c221a93
---- /dev/null
-+++ b/collections/speedtest/new/new-request.yaml
-@@ -0,0 +1,3 @@
-+name: New Request
-+method: GET
-+url: https://example.com"#;
-
-        let rows = parse_side_by_side_diff(raw_diff);
-
-        // Should NOT have new file mode as code row
-        for r in &rows {
-            if let SideBySideRow::Diff { left, right } = r {
-                if let Some(l) = left {
-                    assert!(!l.content.contains("new file mode"));
-                    assert!(!l.content.contains("@@"));
-                }
-                if let Some(r) = right {
-                    assert!(!r.content.contains("new file mode"));
-                    assert!(!r.content.contains("@@"));
-                }
-            }
-        }
-
-        // Must have 3 added lines
-        assert_eq!(rows.len(), 3);
-        if let SideBySideRow::Diff {
-            left: None,
-            right: Some(r),
-        } = &rows[0]
-        {
-            assert_eq!(r.content, "name: New Request");
-            assert_eq!(r.kind, DiffLineKind::Added);
-            assert_eq!(r.line_no, Some(1));
-        } else {
-            panic!("Expected added diff row at index 0");
-        }
-    }
-
-    #[test]
-    fn test_parse_diff_suppresses_hunk_headers_and_numbers_accurately() {
-        let raw_diff = r#"diff --git a/file.txt b/file.txt
-index 1111111..2222222 100644
---- a/file.txt
-+++ b/file.txt
-@@ -10,3 +10,3 @@
- normal line
--old line
-+new line"#;
-
-        let rows = parse_side_by_side_diff(raw_diff);
-        // Hunk header @@ -10,3 is suppressed: only 2 code rows (1 normal line + 1 modified row)
-        assert_eq!(rows.len(), 2);
-        if let SideBySideRow::Diff {
-            left: Some(l),
-            right: Some(r),
-        } = &rows[0]
-        {
-            assert_eq!(l.content, "normal line");
-            assert_eq!(l.line_no, Some(10));
-            assert_eq!(r.line_no, Some(10));
-        } else {
-            panic!("Expected normal diff row at index 0");
-        }
-    }
-
-    #[test]
-    fn test_parse_multi_file_diff_inserts_file_headers() {
-        let raw_diff = r#"diff --git a/file1.txt b/file1.txt
-index 1111111..2222222 100644
---- a/file1.txt
-+++ b/file1.txt
-@@ -1,1 +1,1 @@
--a
-+b
-diff --git a/file2.txt b/file2.txt
-index 3333333..4444444 100644
---- a/file2.txt
-+++ b/file2.txt
-@@ -1,1 +1,1 @@
--c
-+d"#;
-
-        let rows = parse_side_by_side_diff(raw_diff);
-        let file_headers: Vec<_> = rows
-            .iter()
-            .filter_map(|r| match r {
-                SideBySideRow::FileHeader(f) => Some(f.as_str()),
-                _ => None,
-            })
-            .collect();
-
-        assert_eq!(file_headers, vec!["file1.txt", "file2.txt"]);
-    }
-
-    #[test]
-    fn test_split_diff_into_files() {
-        let diff = r#"diff --git a/file1.txt b/file1.txt
-index 1111111..2222222 100644
---- a/file1.txt
-+++ b/file1.txt
-@@ -1,1 +1,1 @@
--a
-+b
-diff --git a/dir/file2.rs b/dir/file2.rs
-index 3333333..4444444 100644
---- a/dir/file2.rs
-+++ b/dir/file2.rs
-@@ -1,1 +1,1 @@
--c
-+d"#;
-
-        let files = split_diff_into_files(diff);
-        assert_eq!(files.len(), 2);
-        assert_eq!(files[0].0, "file1.txt");
-        assert!(files[0].1.contains("-a"));
-        assert_eq!(files[1].0, "dir/file2.rs");
-        assert!(files[1].1.contains("+d"));
-    }
-}
+#[path = "diff_view_tests.rs"]
+mod diff_view_tests;
