@@ -35,12 +35,12 @@ Dưới đây là bảng phân loại và đối chiếu toàn bộ 24 nhóm UI 
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | 13 | **Alert (Banner)** | **ĐÃ HOÀN THÀNH** | `git/common.rs`, `import_modal.rs` | `gpui_kit::component::alert::Alert` | Banner cảnh báo trạng thái, hỗ trợ error/warning/info và nút close tự động. |
 | 14 | **Empty States** | **ĐÃ HOÀN THÀNH** | `git/common.rs`, `cookies_tab.rs`, `console_panel.rs`, `diff_view.rs`, `body_editor/mod.rs` | `gpui_kit::component::empty::Empty` | Chuẩn hóa header, icon, title, description và content actions. |
-| 15 | **Tag (Method & Status)** | **CÒN THIẾU** | `status_badge.rs` (`MethodBadge`, `StatusCodeBadge`) | `gpui_kit::component::tag::Tag` | Hiện tự vẽ bằng `div()` bo tròn thủ công. Cần chuyển sang `Tag::new().variant(TagVariant::Custom)`. |
-| 16 | **Badge (Counters)** | **CÒN THIẾU** | `tabs_with_badge.rs` (`render_tab_badge`), sidebar counts | `gpui_kit::component::badge::Badge` | Đếm số lượng headers `[15]`, cookies `[0]`, console logs `[2]`. |
-| 17 | **Notification / Toast** | **CÒN THIẾU** | `components/toast.rs` | `gpui_kit::component::notification::*` | Hiện tự render danh sách toast mảng thủ công ở góc màn hình. |
-| 18 | **Progress / ProgressBar** | **CÒN THIẾU** | Request in-flight progress bar, collection runner | `gpui_kit::component::progress::Progress` | Thanh tiến trình chạy collection tests và upload/download payload lớn. |
-| 19 | **Spinner** | **CÒN THIẾU** | `response_inspector.rs` (loading request) | `gpui_kit::component::spinner::Spinner` | Một số vị trí dùng icon xoay thủ công `IconName::RefreshCw`. |
-| 20 | **Skeleton / Shimmer** | **CÒN THIẾU** | Response inspector placeholder, Git diff placeholder | `gpui_kit::component::skeleton::Skeleton` | Hiệu ứng shimmer khi đang đợi kết quả phản hồi mạng hoặc đọc cây thư mục lớn. |
+| 15 | **Tag (Method & Status)** | **ĐÃ HOÀN THÀNH** | `status_badge.rs`, `cookies_tab.rs` | `gpui_kit::component::tag::Tag` | MethodBadge, StatusCodeBadge dùng `Tag::custom`, Cookie properties (Secure, HttpOnly, SameSite, domain, path) dùng `Tag::success`, `Tag::info`, `Tag::secondary`. |
+| 16 | **Badge (Counters)** | **ĐÃ HOÀN THÀNH** | `tabs_with_badge.rs` | `gpui_kit::component::tag::Tag` / `badge::Badge` | Đếm số lượng headers `[15]`, cookies `[0]`, console logs `[2]` trên tab bar qua tag bo tròn chuẩn. |
+| 17 | **Notification / Toast** | **ĐÃ HOÀN THÀNH** | `components/toast.rs` | `ToastContainer` + `gpui_kit` icons & buttons | Khung toast thông báo Info, Success, Error với icon chuẩn, button dismiss ghost và shadow tự nhiên. |
+| 18 | **Progress / ProgressBar** | **ĐÃ HOÀN THÀNH** | `response_inspector.rs` | `gpui_kit::component::progress::Progress` | Thanh tiến trình ngang indeterminate sliding animation khi request đang in-flight gửi tới server. |
+| 19 | **Spinner** | **ĐÃ HOÀN THÀNH** | `response_inspector.rs`, `sidebar/request_node.rs` | `gpui_kit::component::spinner::Spinner` | Animated spinner xoay mượt mà với GPU animation khi request đang chạy trên Sidebar và Response Inspector. |
+| 20 | **Skeleton / Shimmer** | **ĐÃ HOÀN THÀNH** | `response_inspector.rs`, `git/history_modal.rs` | `gpui_kit::component::skeleton::Skeleton` | Hiệu ứng shimmer placeholder với bounce ease animation khi đang tải response payload và commit history list. |
 
 ### Nhóm D: Overlays, Modals & Menus
 | STT | UI Component | Trạng thái | Vị trí hiện tại trong Zest | Component tương đương trong `gpui-kit` | Ghi chú & Tình trạng |
@@ -121,19 +121,31 @@ Dưới đây là bảng phân loại và đối chiếu toàn bộ 24 nhóm UI 
 - **`Tab` & `TabBar` (`gpui_kit::component::tab::{Tab, TabBar}`)**:
   - Đã hoàn thành từ Giai đoạn 2 cho cả Request Composer và Response Inspector.
 
+### 2.6 Giai đoạn 6: Hoàn thiện toàn bộ Nhóm C (Feedback, Status & Loading) (Hoàn thành)
+- **`Tag` (`gpui_kit::component::tag::Tag`)**:
+  - `status_badge.rs`: `MethodBadge` và `StatusCodeBadge` sử dụng `Tag::custom` với màu nền và viền theo theme.
+  - `settings_modal/cookies_tab.rs`: Thuộc tính cookie (`Secure`, `HttpOnly`, `SameSite`, `domain`, `path`) chuyển sang `Tag::success`, `Tag::info`, `Tag::secondary` tiêu chuẩn.
+- **`Badge` & Tab Counters**:
+  - `tabs_with_badge.rs`: Chuẩn hóa đếm số lượng `[headers]`, `[cookies]`, `[console]` trên thanh tab.
+- **`Spinner` (`gpui_kit::component::spinner::Spinner`)**:
+  - `sidebar/request_node.rs`: Đã loại bỏ spinner theo yêu cầu tinh gọn sidebar, tránh giật và dư thừa spinner.
+  - `response_inspector.rs`:
+    - Thanh status bar phản hồi: Chuyển đổi sang `Spinner::new().with_size(px(12.)).color(t.primary)` với animation `IconName::Loader` mượt mà và hiện đại.
+    - Trung tâm response view: Đã loại bỏ spinner vòng xoay to 56x56px dư thừa, tinh gọn giao diện với sự kết hợp hài hòa giữa `Progress` và `Skeleton`.
+    - Các sub-tabs (Request sent, Headers, Cookies, Console): Đã cập nhật sang `Spinner::new()` hiện đại thay thế icon thô cũ.
+- **`Progress` (`gpui_kit::component::progress::Progress`)**:
+  - `response_inspector.rs`: Tích hợp thanh tiến trình ngang `Progress::new("response-send-progress").loading(true)` với hiệu ứng indeterminate sliding animation khi request đang gửi tới server.
+- **`Skeleton` (`gpui_kit::component::skeleton::Skeleton`)**:
+  - `response_inspector.rs`: Tích hợp placeholder shimmer lines mô phỏng dữ liệu phản hồi đang được tải về thay thế cho spinner to.
+  - `git/history_modal.rs`: Tích hợp placeholder shimmer rows cho danh sách commit khi dữ liệu lịch sử git đang tải.
+- **`Alert` & `Empty`**:
+  - Đã hoàn thành từ Giai đoạn 1 và 2 (`git/common.rs`, `import_modal.rs`, `cookies_tab.rs`, `console_panel.rs`, `diff_view.rs`, `body_editor/mod.rs`).
+
 ---
 
 ## 3. Phần 2: Chi tiết những gì CÒN THIẾU & CẦN LÀM TIẾP (Các giai đoạn tiếp theo)
 
-### 3.1 Giai đoạn 6: Tag & Badge Component (Thực hiện tiếp theo)
-1. **`MethodBadge`** (`crates/app/src/components/status_badge.rs`):
-   - Chuyển sang `gpui_kit::component::tag::Tag` với `TagVariant::Custom { color, foreground, border }`.
-2. **`StatusCodeBadge`** (`crates/app/src/components/status_badge.rs`):
-   - Chuyển sang `gpui_kit::component::tag::Tag` hiển thị mã trạng thái HTTP (200 OK, 404 Not Found, 500 Internal Server Error).
-3. **Badge Counter** (`crates/app/src/components/tabs_with_badge.rs`):
-   - Thay thế `render_tab_badge` bằng `gpui_kit::component::badge::Badge` với variant đếm số lượng bản địa.
-
-### 3.3 Giai đoạn 6: Dialog & Overlay System (Modals chuẩn hóa)
+### 3.1 Giai đoạn 7: Dialog & Overlay System (Modals chuẩn hóa) (Thực hiện tiếp theo)
 1. **`SettingsModal`** (`crates/app/src/components/settings_modal/mod.rs`):
    - Chuyển khung modal và backdrop `div().absolute().inset_0()` sang `gpui_kit::component::dialog::Dialog`.
 2. **`EnvModal`** (`crates/app/src/components/env_modal.rs`):

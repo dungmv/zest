@@ -10,6 +10,7 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::collapsible::Collapsible;
 use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::skeleton::Skeleton;
 use gpui_kit::component::Icon;
 use gpui_kit::component::Sizable as _;
 use gpui_kit::prelude::FluentBuilder as _;
@@ -41,6 +42,7 @@ pub fn render_history_view(
     view_mode: DiffViewMode,
     mode_entity: Entity<DiffViewMode>,
     expanded_files: HashSet<String>,
+    is_loading: bool,
 ) -> gpui_kit::AnyElement {
     let t = theme();
 
@@ -64,6 +66,32 @@ pub fn render_history_view(
                     div()
                         .flex_1()
                         .overflow_y_scrollbar()
+                        .when(history.is_empty(), |this| {
+                            if is_loading {
+                                this.children((0..5).map(|i| {
+                                    div()
+                                        .id(format!("history-skeleton-{}", i))
+                                        .px(px(12.))
+                                        .py(px(10.))
+                                        .border_b_1()
+                                        .border_color(t.border)
+                                        .flex()
+                                        .flex_col()
+                                        .gap(px(6.))
+                                        .child(Skeleton::new().w(px(160.)).h(px(10.)).rounded(px(3.)))
+                                        .child(Skeleton::new().w(px(100.)).h(px(8.)).rounded(px(3.)))
+                                }))
+                            } else {
+                                this.child(
+                                    div()
+                                        .py(px(24.))
+                                        .text_center()
+                                        .text_xs()
+                                        .text_color(t.text_muted)
+                                        .child("No commits found."),
+                                )
+                            }
+                        })
                         .children(history.into_iter().map(|item| {
                             let git_sel = git_clone.clone();
                             let h = item.hash.clone();
@@ -440,6 +468,7 @@ impl RenderOnce for GitHistoryModal {
                     view_mode,
                     view_mode_entity,
                     expanded_files,
+                    is_loading,
                 )
             }))
             .into_any_element()

@@ -446,14 +446,6 @@ pub fn render_request_inner_pill(
                 .when(ctx.parse_errors.contains_key(&req.id), |this| {
                     this.child(div().text_xs().text_color(t.status_5xx).child("!"))
                 })
-                .when(ctx.running_request_id == Some(req.id.as_str()), |this| {
-                    this.child(
-                        div()
-                            .text_xs()
-                            .text_color(t.primary)
-                            .child(Icon::new(IconName::RefreshCw).size(px(12.))),
-                    )
-                })
                 .when_some(req.last_status_code, |this, code| {
                     this.child(StatusCodeBadge::new(code))
                 }),

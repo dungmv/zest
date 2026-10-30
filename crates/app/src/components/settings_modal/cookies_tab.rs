@@ -5,6 +5,7 @@ use gpui_kit::component::empty::{
     Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyMediaVariant, EmptyTitle,
 };
 use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::tag::Tag;
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -238,31 +239,29 @@ pub fn render_cookies_tab(
                                         )
                                         .when(!cookie.domain.is_empty(), |this| {
                                             this.child(
-                                                div()
-                                                    .px(px(6.))
-                                                    .py(px(1.))
+                                                Tag::secondary()
                                                     .rounded(px(3.))
-                                                    .bg(t.bg_card)
-                                                    .border_1()
-                                                    .border_color(t.border)
-                                                    .text_size(px(10.))
-                                                    .font_family(".SystemMonoFont")
-                                                    .text_color(t.text_secondary)
-                                                    .child(cookie.domain.clone()),
+                                                    .px(px(6.))
+                                                    .py(px(0.5))
+                                                    .child(
+                                                        div()
+                                                            .text_size(px(10.))
+                                                            .font_family(".SystemMonoFont")
+                                                            .child(cookie.domain.clone()),
+                                                    ),
                                             )
                                         })
                                         .child(
-                                            div()
-                                                .px(px(5.))
-                                                .py(px(1.))
+                                            Tag::secondary()
                                                 .rounded(px(3.))
-                                                .bg(t.bg_card)
-                                                .border_1()
-                                                .border_color(t.border_subtle)
-                                                .text_size(px(10.))
-                                                .font_family(".SystemMonoFont")
-                                                .text_color(t.text_muted)
-                                                .child(cookie.path.clone()),
+                                                .px(px(5.))
+                                                .py(px(0.5))
+                                                .child(
+                                                    div()
+                                                        .text_size(px(10.))
+                                                        .font_family(".SystemMonoFont")
+                                                        .child(cookie.path.clone()),
+                                                ),
                                         ),
                                 )
                                 .child(
@@ -272,42 +271,43 @@ pub fn render_cookies_tab(
                                         .gap(px(4.))
                                         .when(cookie.secure, |this| {
                                             this.child(
-                                                div()
-                                                    .px(px(5.))
-                                                    .py(px(1.))
+                                                Tag::success()
                                                     .rounded(px(3.))
-                                                    .bg(gpui_kit::rgb(0x22c55e).opacity(0.15))
-                                                    .text_color(gpui_kit::rgb(0x22c55e))
-                                                    .text_size(px(10.))
-                                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                                                    .child("Secure"),
+                                                    .px(px(5.))
+                                                    .py(px(0.5))
+                                                    .child(
+                                                        div()
+                                                            .text_size(px(10.))
+                                                            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
+                                                            .child("Secure"),
+                                                    ),
                                             )
                                         })
                                         .when(cookie.http_only, |this| {
                                             this.child(
-                                                div()
-                                                    .px(px(5.))
-                                                    .py(px(1.))
+                                                Tag::info()
                                                     .rounded(px(3.))
-                                                    .bg(gpui_kit::rgb(0x3b82f6).opacity(0.15))
-                                                    .text_color(gpui_kit::rgb(0x3b82f6))
-                                                    .text_size(px(10.))
-                                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                                                    .child("HttpOnly"),
+                                                    .px(px(5.))
+                                                    .py(px(0.5))
+                                                    .child(
+                                                        div()
+                                                            .text_size(px(10.))
+                                                            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
+                                                            .child("HttpOnly"),
+                                                    ),
                                             )
                                         })
                                         .when_some(cookie.same_site.clone(), |this, ss| {
                                             this.child(
-                                                div()
-                                                    .px(px(5.))
-                                                    .py(px(1.))
+                                                Tag::secondary()
                                                     .rounded(px(3.))
-                                                    .bg(t.bg_card)
-                                                    .border_1()
-                                                    .border_color(t.border)
-                                                    .text_color(t.text_muted)
-                                                    .text_size(px(10.))
-                                                    .child(format!("SameSite={}", ss)),
+                                                    .px(px(5.))
+                                                    .py(px(0.5))
+                                                    .child(
+                                                        div()
+                                                            .text_size(px(10.))
+                                                            .child(format!("SameSite={}", ss)),
+                                                    ),
                                             )
                                         })
                                         // Copy cookie value

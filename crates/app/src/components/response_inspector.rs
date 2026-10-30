@@ -7,7 +7,9 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Editor, EditorState as CodeEditorState};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::progress::Progress;
 use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::skeleton::Skeleton;
 use gpui_kit::component::spinner::Spinner;
 use gpui_kit::component::tab::{Tab, TabBar};
 use gpui_kit::component::text::TextView;
@@ -110,7 +112,6 @@ impl RenderOnce for ResponseInspector {
                                         .text_color(t.primary)
                                         .child(
                                             Spinner::new()
-                                                .icon(IconName::RefreshCw)
                                                 .with_size(px(12.))
                                                 .color(t.primary),
                                         )
@@ -413,23 +414,6 @@ impl RenderOnce for ResponseInspector {
                                         .child(
                                             div()
                                                 .flex()
-                                                .items_center()
-                                                .justify_center()
-                                                .w(px(56.))
-                                                .h(px(56.))
-                                                .rounded_full()
-                                                .bg(gpui_kit::Hsla { a: 0.1, ..t.primary })
-                                                .text_color(t.primary)
-                                                .child(
-                                                    Spinner::new()
-                                                        .icon(IconName::RefreshCw)
-                                                        .with_size(px(26.))
-                                                        .color(t.primary),
-                                                ),
-                                        )
-                                        .child(
-                                            div()
-                                                .flex()
                                                 .flex_col()
                                                 .items_center()
                                                 .gap(px(4.))
@@ -446,6 +430,23 @@ impl RenderOnce for ResponseInspector {
                                                         .text_color(t.text_secondary)
                                                         .child(progress_text),
                                                 ),
+                                        )
+                                        .child(
+                                            Progress::new("response-send-progress")
+                                                .loading(true)
+                                                .w(px(240.))
+                                                .color(t.primary),
+                                        )
+                                        .child(
+                                            div()
+                                                .w(px(240.))
+                                                .flex()
+                                                .flex_col()
+                                                .gap(px(6.))
+                                                .py(px(4.))
+                                                .child(Skeleton::new().h(px(8.)).rounded(px(4.)))
+                                                .child(Skeleton::new().w(px(180.)).h(px(8.)).rounded(px(4.)))
+                                                .child(Skeleton::new().w(px(210.)).h(px(8.)).rounded(px(4.))),
                                         )
                                         .child(
                                             Button::new("btn-cancel-in-response-view")
@@ -819,7 +820,6 @@ impl RenderOnce for ResponseInspector {
                                         .gap(px(8.))
                                         .child(
                                             Spinner::new()
-                                                .icon(IconName::RefreshCw)
                                                 .with_size(px(20.))
                                                 .color(t.primary),
                                         )
@@ -993,7 +993,6 @@ impl RenderOnce for ResponseInspector {
                                         .gap(px(8.))
                                         .child(
                                             Spinner::new()
-                                                .icon(IconName::RefreshCw)
                                                 .with_size(px(20.))
                                                 .color(t.primary),
                                         )
@@ -1053,7 +1052,6 @@ impl RenderOnce for ResponseInspector {
                                         .gap(px(8.))
                                         .child(
                                             Spinner::new()
-                                                .icon(IconName::RefreshCw)
                                                 .with_size(px(20.))
                                                 .color(t.primary),
                                         )
@@ -1144,7 +1142,6 @@ impl RenderOnce for ResponseInspector {
                                         .gap(px(8.))
                                         .child(
                                             Spinner::new()
-                                                .icon(IconName::RefreshCw)
                                                 .with_size(px(20.))
                                                 .color(t.primary),
                                         )
