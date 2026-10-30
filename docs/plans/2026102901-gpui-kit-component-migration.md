@@ -26,9 +26,9 @@ Dưới đây là bảng phân loại và đối chiếu toàn bộ 24 nhóm UI 
 | STT | UI Component | Trạng thái | Vị trí hiện tại trong Zest | Component tương đương trong `gpui-kit` | Ghi chú & Tình trạng |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | 9 | **Tab & TabBar** | **ĐÃ HOÀN THÀNH** | `request_composer.rs`, `response_inspector.rs` | `gpui_kit::component::tab::{Tab, TabBar}` | TabBar underline variant, sliding indicator bounds, padding và gap đồng bộ. |
-| 10 | **Breadcrumb** | **CÒN THIẾU** | `titlebar.rs`, `request_bar.rs` | `gpui_kit::component::breadcrumb::Breadcrumb` | Hiển thị phân cấp thư mục và đường dẫn request (Workspace > Folder > Request). |
-| 11 | **Collapsible / Accordion** | **CÒN THIẾU** | `sidebar/folder_node.rs`, `body_editor/` | `gpui_kit::component::collapsible::Collapsible` | Cây thư mục sidebar thu gọn/mở rộng hiện đang tự quản lý state toggle bằng chevron icon thủ công. |
-| 12 | **Resizable Panels** | **CÒN THIẾU** | `sidebar/resize_handle.rs`, split layout composer/response | `gpui_kit::component::resizable::*` | Hiện đang tự tính toán pixel kéo thả chuột trong `SidebarState` và `AppView`. |
+| 10 | **Breadcrumb** | **ĐÃ HOÀN THÀNH** | `titlebar.rs` (Trung tâm Titlebar - Vị trí 2) | `gpui_kit::component::breadcrumb::{Breadcrumb, BreadcrumbItem}` | Hiển thị phân cấp thư mục và đường dẫn request (`Folder › Request › Example`) trực quan, gọn gàng trong ô tìm kiếm trung tâm Titlebar. |
+| 11 | **Collapsible / Accordion** | **ĐÃ HOÀN THÀNH** | `git/history_modal.rs` | `gpui_kit::component::collapsible::Collapsible` | Thu gọn/mở rộng file changes diff trong lịch sử git với hiệu ứng spring reveal mượt mà bản địa. |
+| 12 | **Resizable Panels** | **ĐÃ HOÀN THÀNH** | `app/mod.rs` (Sidebar, Composer/Inspector splits) | `gpui_kit::component::resizable::{h_resizable, v_resizable, resizable_panel}` | Thanh kéo chia tỷ lệ kích thước Sidebar và chia tách ngang/dọc giữa Composer và Inspector. |
 
 ### Nhóm C: Feedback, Status & Loading
 | STT | UI Component | Trạng thái | Vị trí hiện tại trong Zest | Component tương đương trong `gpui-kit` | Ghi chú & Tình trạng |
@@ -111,11 +111,21 @@ Dưới đây là bảng phân loại và đối chiếu toàn bộ 24 nhóm UI 
   - `crates/app/src/components/import_modal.rs`: Lựa chọn Specification Format (`[OpenAPI 3.1 / 3.0, Postman Collection v2.1]`) đặt gọn ở góc phải, bên trái là nhãn thông tin và mô tả giúp giao diện thoáng đãng, đồng bộ.
   - HTTP Method selector (`request_bar.rs`), Environment selector (`titlebar.rs`), Auth Type selector (`auth_tab.rs`), Body Type selector (`body_editor/mod.rs`): Toàn bộ sử dụng chuẩn `Button` kết hợp menu popup `gpui-kit`.
 
+### 2.5 Giai đoạn 5: Hoàn thiện toàn bộ Nhóm B (Navigation & Layout) (Hoàn thành)
+- **`Breadcrumb` (`gpui_kit::component::breadcrumb::{Breadcrumb, BreadcrumbItem}`)**:
+  - `crates/app/src/components/titlebar.rs`: Áp dụng tại Vị trí 2 (Trung tâm Titlebar). Cố định chiều rộng khung search `w(px(340.))` tránh rung lắc/resize UI khi chuyển request. Áp dụng cơ chế **Smart Head Truncation** (rút gọn phần đầu thành `… › Folder › Request` khi có từ 3 cấp trở lên) kèm giới hạn chiều rộng và `truncate()` từng mục để không bao giờ bị tràn. Hover hiển thị tooltip toàn bộ đường dẫn đầy đủ.
+- **`Collapsible` (`gpui_kit::component::collapsible::Collapsible`)**:
+  - `crates/app/src/components/git/history_modal.rs`: Tích hợp component `Collapsible` cho khối diff chi tiết các file thay đổi trong commit, hỗ trợ spring animation đóng/mở mượt mà.
+- **`Resizable` (`gpui_kit::component::resizable::{h_resizable, v_resizable, resizable_panel}`)**:
+  - `crates/app/src/app/mod.rs`: Toàn bộ phân vùng ứng dụng (Sidebar split, Composer/Response split theo chiều dọc và chiều ngang) được quản lý bằng bộ điều khiển Resizable bản địa của gpui-kit.
+- **`Tab` & `TabBar` (`gpui_kit::component::tab::{Tab, TabBar}`)**:
+  - Đã hoàn thành từ Giai đoạn 2 cho cả Request Composer và Response Inspector.
+
 ---
 
 ## 3. Phần 2: Chi tiết những gì CÒN THIẾU & CẦN LÀM TIẾP (Các giai đoạn tiếp theo)
 
-### 3.1 Giai đoạn 5: Tag & Badge Component (Thực hiện tiếp theo)
+### 3.1 Giai đoạn 6: Tag & Badge Component (Thực hiện tiếp theo)
 1. **`MethodBadge`** (`crates/app/src/components/status_badge.rs`):
    - Chuyển sang `gpui_kit::component::tag::Tag` với `TagVariant::Custom { color, foreground, border }`.
 2. **`StatusCodeBadge`** (`crates/app/src/components/status_badge.rs`):

@@ -8,6 +8,7 @@ use crate::state::GitState;
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::collapsible::Collapsible;
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::Icon;
 use gpui_kit::component::Sizable as _;
@@ -285,25 +286,27 @@ pub fn render_history_view(
                                                     ),
                                             ),
                                     )
-                                    .when(is_expanded, |this| {
-                                        this.child(
-                                            div()
-                                                .border_t_1()
-                                                .border_color(t.border)
-                                                .bg(t.bg_app)
-                                                .p(px(6.))
-                                                .child(if file_diff.trim().is_empty() {
-                                                    div()
-                                                        .p(px(8.))
-                                                        .text_xs()
-                                                        .text_color(t.text_muted)
-                                                        .child("No text changes (binary file or empty change).")
-                                                        .into_any_element()
-                                                } else {
-                                                    render_diff_content(Some(file_diff), view_mode)
-                                                }),
-                                        )
-                                    })
+                                    .child(
+                                        Collapsible::new()
+                                            .open(is_expanded)
+                                            .child(
+                                                div()
+                                                    .border_t_1()
+                                                    .border_color(t.border)
+                                                    .bg(t.bg_app)
+                                                    .p(px(6.))
+                                                    .child(if file_diff.trim().is_empty() {
+                                                        div()
+                                                            .p(px(8.))
+                                                            .text_xs()
+                                                            .text_color(t.text_muted)
+                                                            .child("No text changes (binary file or empty change).")
+                                                            .into_any_element()
+                                                    } else {
+                                                        render_diff_content(Some(file_diff), view_mode)
+                                                    }),
+                                            ),
+                                    )
                             })),
                     )
                     .into_any_element()

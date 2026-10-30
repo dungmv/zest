@@ -4,6 +4,7 @@ use crate::state::{
 };
 use crate::theme::{hex_to_hsla, theme};
 use gpui_kit::assets::IconName;
+use gpui_kit::component::breadcrumb::{Breadcrumb, BreadcrumbItem};
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::{Icon, InteractiveElementExt as _};
@@ -458,18 +459,68 @@ impl RenderOnce for AppTitleBar {
             .child({
                 let _ws_s = ws_clone.clone();
                 let has_title = !current_title.trim().is_empty();
-                let label = if has_title {
-                    current_title.clone()
+                let (breadcrumb_items, full_path) = if has_title {
+                    let mut segments = Vec::new();
+                    if let Some(req) = ws.find_request(active_id) {
+                        let mut curr_fid = req.folder_id.clone();
+                        let mut folder_names = Vec::new();
+                        while let Some(fid) = curr_fid {
+                            if let Some(f) = ws.folders.iter().find(|f| f.id == fid) {
+                                folder_names.push(f.name.clone());
+                                curr_fid = f.parent_id.clone();
+                            } else {
+                                break;
+                            }
+                        }
+                        folder_names.reverse();
+                        segments.extend(folder_names);
+                        segments.push(crate::state::effective_request_name(req));
+                    }
+                    if let Some(ex_name) = &resp.active_example_name {
+                        segments.push(ex_name.clone());
+                    }
+
+                    let full_path = segments.join(" / ");
+                    let total = segments.len();
+
+                    let items = if total > 2 {
+                        vec![
+                            BreadcrumbItem::new("…"),
+                            BreadcrumbItem::new(segments[total - 2].clone())
+                                .max_w(px(90.))
+                                .truncate(),
+                            BreadcrumbItem::new(segments[total - 1].clone())
+                                .max_w(px(160.))
+                                .truncate(),
+                        ]
+                    } else if total == 2 {
+                        vec![
+                            BreadcrumbItem::new(segments[0].clone())
+                                .max_w(px(100.))
+                                .truncate(),
+                            BreadcrumbItem::new(segments[1].clone())
+                                .max_w(px(160.))
+                                .truncate(),
+                        ]
+                    } else if total == 1 {
+                        vec![BreadcrumbItem::new(segments[0].clone())
+                            .max_w(px(240.))
+                            .truncate()]
+                    } else {
+                        Vec::new()
+                    };
+
+                    (items, full_path)
                 } else {
-                    "Search requests, commands...".to_string()
+                    (Vec::new(), String::new())
                 };
 
                 div()
                     .id("btn-titlebar-search")
                     .occlude()
                     .h(px(26.))
-                    .w(px(320.))
-                    .max_w(px(420.))
+                    .w(px(340.))
+                    .flex_shrink_0()
                     .px(px(8.))
                     .rounded(px(5.))
                     .bg(t.bg_card)
@@ -478,7 +529,7 @@ impl RenderOnce for AppTitleBar {
                     .flex()
                     .items_center()
                     .justify_between()
-                    .gap(px(6.))
+                    .gap(px(8.))
                     .cursor_pointer()
                     .hover(|s| s.bg(t.bg_hover).border_color(t.border_focus))
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
@@ -488,25 +539,34 @@ impl RenderOnce for AppTitleBar {
                             state.toggle_command_palette(cx);
                         });
                     })
+                    .when(!full_path.is_empty(), |this| {
+                        this.tooltip(move |window, cx| {
+                            gpui_kit::component::tooltip::Tooltip::new(full_path.clone())
+                                .build(window, cx)
+                        })
+                    })
                     .child(
                         div()
                             .flex()
                             .items_center()
                             .min_w(px(0.))
                             .flex_1()
-                            .overflow_hidden()
-                            .child(
+                            .overflow_x_hidden()
+                            .child(if !breadcrumb_items.is_empty() {
+                                Breadcrumb::new()
+                                    .text_xs()
+                                    .items_center()
+                                    .children(breadcrumb_items)
+                                    .into_any_element()
+                            } else {
                                 div()
                                     .truncate()
                                     .text_xs()
                                     .font_family(".SystemMonoFont")
-                                    .text_color(if has_title {
-                                        t.text_primary
-                                    } else {
-                                        t.text_muted
-                                    })
-                                    .child(label),
-                            ),
+                                    .text_color(t.text_muted)
+                                    .child("Search requests, commands...")
+                                    .into_any_element()
+                            }),
                     )
                     .child(
                         div()
