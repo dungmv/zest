@@ -194,27 +194,27 @@ fn render_log_card(idx: usize, entry: ConsoleLogEntry) -> gpui_kit::Div {
     let msg_copy = entry.message.clone();
 
     let (src_label, src_color) = match entry.source {
-        ConsoleLogSource::PreRequest => ("Pre-request", crate::theme::hex_to_hsla(0x06b6d4)),
-        ConsoleLogSource::PostResponse => ("Post-response", crate::theme::hex_to_hsla(0xa855f7)),
+        ConsoleLogSource::PreRequest => ("Pre-request", t.log_pre_request),
+        ConsoleLogSource::PostResponse => ("Post-response", t.log_post_response),
         ConsoleLogSource::System => ("System", t.text_secondary),
     };
 
     let (lvl_label, lvl_color) = match entry.level {
         ConsoleLogLevel::Log => ("LOG", t.text_secondary),
-        ConsoleLogLevel::Info => ("INFO", crate::theme::hex_to_hsla(0x3b82f6)),
-        ConsoleLogLevel::Warn => ("WARN", crate::theme::hex_to_hsla(0xf59e0b)),
-        ConsoleLogLevel::Error => ("ERROR", t.method_delete),
+        ConsoleLogLevel::Info => ("INFO", t.log_info),
+        ConsoleLogLevel::Warn => ("WARN", t.log_warn),
+        ConsoleLogLevel::Error => ("ERROR", t.log_error),
     };
 
     let card_border = if is_err {
         gpui_kit::Hsla {
             a: 0.35,
-            ..t.method_delete
+            ..t.log_error
         }
     } else if is_warn {
         gpui_kit::Hsla {
             a: 0.35,
-            ..crate::theme::hex_to_hsla(0xf59e0b)
+            ..t.log_warn
         }
     } else {
         t.border
@@ -223,12 +223,12 @@ fn render_log_card(idx: usize, entry: ConsoleLogEntry) -> gpui_kit::Div {
     let card_bg = if is_err {
         gpui_kit::Hsla {
             a: 0.08,
-            ..t.method_delete
+            ..t.log_error
         }
     } else if is_warn {
         gpui_kit::Hsla {
             a: 0.06,
-            ..crate::theme::hex_to_hsla(0xf59e0b)
+            ..t.log_warn
         }
     } else {
         t.bg_card
@@ -319,11 +319,11 @@ fn render_log_card(idx: usize, entry: ConsoleLogEntry) -> gpui_kit::Div {
                 .text_xs()
                 .font_family(".SystemMonoFont")
                 .text_color(if is_err {
-                    t.method_delete
+                    t.log_error
                 } else if is_warn {
-                    crate::theme::hex_to_hsla(0xf59e0b)
+                    t.log_warn
                 } else if is_info {
-                    crate::theme::hex_to_hsla(0x38bdf8)
+                    t.log_info
                 } else {
                     t.text_primary
                 })

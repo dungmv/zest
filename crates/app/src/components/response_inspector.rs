@@ -260,11 +260,11 @@ impl RenderOnce for ResponseInspector {
                                     .bg(t.bg_input)
                                     .overflow_hidden()
                                     .flex()
-                                    .child(div().w(px(dns_pct * 2.5)).bg(gpui_kit::rgb(0x06b6d4))) // Cyan for DNS
-                                    .child(div().w(px(tcp_pct * 2.5)).bg(gpui_kit::rgb(0x3b82f6))) // Blue for TCP
-                                    .child(div().w(px(tls_pct * 2.5)).bg(gpui_kit::rgb(0xa855f7))) // Purple for TLS
-                                    .child(div().w(px(ttfb_pct * 2.5)).bg(gpui_kit::rgb(0xeab308))) // Yellow for TTFB
-                                    .child(div().w(px(dl_pct * 2.5)).bg(gpui_kit::rgb(0x22c55e))), // Green for Download
+                                    .child(div().w(px(dns_pct * 2.5)).bg(t.timing_dns)) // Cyan for DNS
+                                    .child(div().w(px(tcp_pct * 2.5)).bg(t.timing_tcp)) // Blue for TCP
+                                    .child(div().w(px(tls_pct * 2.5)).bg(t.timing_tls)) // Purple for TLS
+                                    .child(div().w(px(ttfb_pct * 2.5)).bg(t.timing_ttfb)) // Yellow for TTFB
+                                    .child(div().w(px(dl_pct * 2.5)).bg(t.timing_download)), // Green for Download
                             )
                             // Detail rows
                             .child(
@@ -272,7 +272,7 @@ impl RenderOnce for ResponseInspector {
                                     .flex()
                                     .justify_between()
                                     .text_color(t.text_secondary)
-                                    .child(div().flex().gap(px(4.)).child("● DNS Lookup:").text_color(gpui_kit::rgb(0x06b6d4)))
+                                    .child(div().flex().gap(px(4.)).child("● DNS Lookup:").text_color(t.timing_dns))
                                     .child(format!("{} ms", timing.dns_ms.unwrap_or(0))),
                             )
                             .child(
@@ -280,7 +280,7 @@ impl RenderOnce for ResponseInspector {
                                     .flex()
                                     .justify_between()
                                     .text_color(t.text_secondary)
-                                    .child(div().flex().gap(px(4.)).child("● TCP Connect:").text_color(gpui_kit::rgb(0x3b82f6)))
+                                    .child(div().flex().gap(px(4.)).child("● TCP Connect:").text_color(t.timing_tcp))
                                     .child(format!("{} ms", timing.connect_ms.unwrap_or(0))),
                             )
                             .child(
@@ -288,7 +288,7 @@ impl RenderOnce for ResponseInspector {
                                     .flex()
                                     .justify_between()
                                     .text_color(t.text_secondary)
-                                    .child(div().flex().gap(px(4.)).child("● TLS Handshake:").text_color(gpui_kit::rgb(0xa855f7)))
+                                    .child(div().flex().gap(px(4.)).child("● TLS Handshake:").text_color(t.timing_tls))
                                     .child(format!("{} ms", timing.tls_ms.unwrap_or(0))),
                             )
                             .child(
@@ -296,7 +296,7 @@ impl RenderOnce for ResponseInspector {
                                     .flex()
                                     .justify_between()
                                     .text_color(t.text_secondary)
-                                    .child(div().flex().gap(px(4.)).child("● TTFB (Wait):").text_color(gpui_kit::rgb(0xeab308)))
+                                    .child(div().flex().gap(px(4.)).child("● TTFB (Wait):").text_color(t.timing_ttfb))
                                     .child(format!("{} ms", timing.ttfb_ms.unwrap_or(0))),
                             )
                             .child(
@@ -304,7 +304,7 @@ impl RenderOnce for ResponseInspector {
                                     .flex()
                                     .justify_between()
                                     .text_color(t.text_secondary)
-                                    .child(div().flex().gap(px(4.)).child("● Content Download:").text_color(gpui_kit::rgb(0x22c55e)))
+                                    .child(div().flex().gap(px(4.)).child("● Content Download:").text_color(t.timing_download))
                                     .child(format!("{} ms", timing.download_ms.unwrap_or(0))),
                             )
                             .when(timing.connection_reused, |this| {
@@ -1100,10 +1100,10 @@ impl RenderOnce for ResponseInspector {
                                                                     .flex()
                                                                     .gap(px(4.))
                                                                     .when(cookie.secure, |this| {
-                                                                        this.child(div().px(px(4.)).rounded(px(2.)).bg(gpui_kit::rgb(0x22c55e)).text_color(t.primary_foreground).text_xs().child("Secure"))
+                                                                        this.child(div().px(px(4.)).rounded(px(2.)).bg(t.success).text_color(t.primary_foreground).text_xs().child("Secure"))
                                                                     })
                                                                     .when(cookie.http_only, |this| {
-                                                                        this.child(div().px(px(4.)).rounded(px(2.)).bg(gpui_kit::rgb(0x3b82f6)).text_color(t.primary_foreground).text_xs().child("HttpOnly"))
+                                                                        this.child(div().px(px(4.)).rounded(px(2.)).bg(t.primary).text_color(t.primary_foreground).text_xs().child("HttpOnly"))
                                                                     }),
                                                             ),
                                                     )

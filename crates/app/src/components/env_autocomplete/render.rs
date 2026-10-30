@@ -1,5 +1,5 @@
 use super::{AutocompleteNavState, EnvVarCandidate, EnvVarKind};
-use crate::theme::{hex_alpha_to_hsla, hex_to_hsla, theme};
+use crate::theme::theme;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, App, Div, Entity, FontWeight, InteractiveElement as _, ParentElement as _,
@@ -17,29 +17,36 @@ pub const CANDIDATE_DETAIL_GAP: f32 = 8.;
 /// stays shorter than the list; its height otherwise hugs the content.
 const CANDIDATE_DETAIL_MAX_HEIGHT: f32 = 160.;
 
-const TYPE_VARIABLE_COLOR: u32 = 0x38bdf8; // Sky blue
-const TYPE_DYNAMIC_COLOR: u32 = 0xf59e0b; // Amber
-
 /// Two-category type display: all environment variables collapse into a single
 /// "Variable" type, dynamic fake vars keep their own "Dynamic" type.
 /// Returns `(badge label, text/border color, background tint)`.
 pub fn candidate_type_badge(kind: EnvVarKind) -> (&'static str, gpui_kit::Hsla, gpui_kit::Hsla) {
+    let t = theme();
     match kind {
         EnvVarKind::Active | EnvVarKind::Global => (
             "Variable",
-            hex_to_hsla(TYPE_VARIABLE_COLOR),
-            hex_alpha_to_hsla(TYPE_VARIABLE_COLOR, 0.14),
+            t.tag_variable,
+            gpui_kit::Hsla {
+                a: 0.14,
+                ..t.tag_variable
+            },
         ),
         EnvVarKind::Dynamic => (
             "Dynamic",
-            hex_to_hsla(TYPE_DYNAMIC_COLOR),
-            hex_alpha_to_hsla(TYPE_DYNAMIC_COLOR, 0.14),
+            t.tag_dynamic,
+            gpui_kit::Hsla {
+                a: 0.14,
+                ..t.tag_dynamic
+            },
         ),
         // Never produced by `get_env_completions`; kept for exhaustiveness.
         EnvVarKind::Unresolved => (
             "Unresolved",
-            hex_to_hsla(0xef4444),
-            hex_alpha_to_hsla(0xef4444, 0.14),
+            t.var_unresolved,
+            gpui_kit::Hsla {
+                a: 0.14,
+                ..t.var_unresolved
+            },
         ),
     }
 }

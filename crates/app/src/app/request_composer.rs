@@ -3,12 +3,11 @@ use super::AppView;
 use crate::components::*;
 use crate::state::*;
 use crate::theme::theme;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::tab::{Tab, TabBar};
+use gpui_kit::component::Sizable as _;
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{
-    div, px, AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement,
-    StatefulInteractiveElement as _, Styled, Window,
-};
+use gpui_kit::{div, px, AnyElement, Context, IntoElement, ParentElement, Styled, Window};
 use zest_core::models::Auth;
 
 impl AppView {
@@ -99,14 +98,10 @@ impl AppView {
                                 .items_center()
                                 .gap(px(6.))
                                 .child(
-                                    div()
-                                        .id("btn-conflict-reload")
-                                        .cursor_pointer()
-                                        .px(px(8.))
-                                        .py(px(2.))
-                                        .rounded(px(4.))
-                                        .bg(t.primary)
-                                        .text_color(t.primary_foreground)
+                                    Button::new("btn-conflict-reload")
+                                        .primary()
+                                        .small()
+                                        .label("Reload")
                                         .on_click(move |_, _, cx| {
                                             per_rel.update(cx, |per, cx| {
                                                 per.resolve_conflict_reload(
@@ -115,20 +110,13 @@ impl AppView {
                                                     cx,
                                                 );
                                             });
-                                        })
-                                        .child("Reload"),
+                                        }),
                                 )
                                 .child(
-                                    div()
-                                        .id("btn-conflict-keep")
-                                        .cursor_pointer()
-                                        .px(px(8.))
-                                        .py(px(2.))
-                                        .rounded(px(4.))
-                                        .bg(t.bg_card)
-                                        .border_1()
-                                        .border_color(t.border)
-                                        .text_color(t.text_primary)
+                                    Button::new("btn-conflict-keep")
+                                        .secondary()
+                                        .small()
+                                        .label("Keep mine")
                                         .on_click(move |_, _, cx| {
                                             per_keep.update(cx, |per, cx| {
                                                 per.resolve_conflict_keep(
@@ -137,8 +125,7 @@ impl AppView {
                                                     cx,
                                                 );
                                             });
-                                        })
-                                        .child("Keep mine"),
+                                        }),
                                 ),
                         ),
                 )

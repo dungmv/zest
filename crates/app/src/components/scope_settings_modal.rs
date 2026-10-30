@@ -940,16 +940,13 @@ impl RenderOnce for ScopeSettingsModal {
                                                     let tgt_drop = tgt.clone();
 
                                                     Button::new("btn-scope-auth-type-dropdown")
-                                                        .ghost()
+                                                        .secondary()
                                                         .compact()
                                                         .w(px(140.))
                                                         .px(px(8.))
                                                         .py(px(4.))
                                                         .h(px(28.))
                                                         .rounded(px(4.))
-                                                        .bg(t.bg_card)
-                                                        .border_1()
-                                                        .border_color(t.border)
                                                         .child(
                                                             div()
                                                                 .w_full()
@@ -1392,16 +1389,13 @@ impl RenderOnce for ScopeSettingsModal {
                                                                     let v_input = api_val_input.clone();
 
                                                                     Button::new("btn-scope-auth-apikey-location-dropdown")
-                                                                        .ghost()
+                                                                        .secondary()
                                                                         .compact()
                                                                         .min_w(px(120.))
                                                                         .px(px(8.))
                                                                         .py(px(4.))
                                                                         .h(px(28.))
                                                                         .rounded(px(4.))
-                                                                        .bg(t.bg_card)
-                                                                        .border_1()
-                                                                        .border_color(t.border)
                                                                         .child(
                                                                             div()
                                                                                 .text_xs()

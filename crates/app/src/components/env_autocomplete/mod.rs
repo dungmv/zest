@@ -237,33 +237,46 @@ pub fn get_variable_kind_and_color(
     scope: &str,
     is_res: bool,
 ) -> (EnvVarKind, gpui_kit::Hsla, gpui_kit::Hsla) {
+    let t = crate::theme::theme();
     if !is_res {
         // Red / Unresolved
         (
             EnvVarKind::Unresolved,
-            crate::theme::hex_to_hsla(0xef4444),
-            crate::theme::hex_alpha_to_hsla(0xef4444, 0.14),
+            t.var_unresolved,
+            gpui_kit::Hsla {
+                a: 0.14,
+                ..t.var_unresolved
+            },
         )
     } else if scope.starts_with("Active") {
         // Sky Blue / Active Env
         (
             EnvVarKind::Active,
-            crate::theme::hex_to_hsla(0x38bdf8),
-            crate::theme::hex_alpha_to_hsla(0x38bdf8, 0.14),
+            t.tag_variable,
+            gpui_kit::Hsla {
+                a: 0.14,
+                ..t.tag_variable
+            },
         )
     } else if scope == "Global" {
         // Purple / Global Env
         (
             EnvVarKind::Global,
-            crate::theme::hex_to_hsla(0xc084fc),
-            crate::theme::hex_alpha_to_hsla(0xc084fc, 0.14),
+            t.json_boolean,
+            gpui_kit::Hsla {
+                a: 0.14,
+                ..t.json_boolean
+            },
         )
     } else {
         // Amber / Dynamic ($uuid, $timestamp, etc.)
         (
             EnvVarKind::Dynamic,
-            crate::theme::hex_to_hsla(0xf59e0b),
-            crate::theme::hex_alpha_to_hsla(0xf59e0b, 0.14),
+            t.tag_dynamic,
+            gpui_kit::Hsla {
+                a: 0.14,
+                ..t.tag_dynamic
+            },
         )
     }
 }

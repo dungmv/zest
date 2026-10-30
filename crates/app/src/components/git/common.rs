@@ -58,21 +58,19 @@ pub fn collect_unified_changes(status: &GitStatusResult) -> Vec<UnifiedChangeIte
 }
 
 pub fn render_status_badge(status: GitFileStatus) -> gpui_kit::AnyElement {
+    let t = theme();
     let color = match status {
-        GitFileStatus::Modified => gpui_kit::rgb(0xfacc15),
-        GitFileStatus::Added | GitFileStatus::Untracked => gpui_kit::rgb(0x4ade80),
-        GitFileStatus::Deleted => gpui_kit::rgb(0xef4444),
-        _ => gpui_kit::rgb(0x9ca3af),
+        GitFileStatus::Modified => t.git_modified,
+        GitFileStatus::Added | GitFileStatus::Untracked => t.git_added,
+        GitFileStatus::Deleted => t.git_deleted,
+        _ => t.git_ignored,
     };
 
     div()
         .w(px(16.))
         .h(px(16.))
         .rounded(px(3.))
-        .bg(gpui_kit::Hsla {
-            a: 0.15,
-            ..color.into()
-        })
+        .bg(gpui_kit::Hsla { a: 0.15, ..color })
         .flex()
         .items_center()
         .justify_center()

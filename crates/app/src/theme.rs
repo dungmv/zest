@@ -75,10 +75,64 @@ pub struct AppTheme {
     pub text_muted: Hsla,
     pub text_disabled: Hsla,
 
-    // Primary action
+    // Action variants (Button & interactive)
     pub primary: Hsla,
     pub primary_hover: Hsla,
+    pub primary_active: Hsla,
     pub primary_foreground: Hsla,
+
+    pub secondary: Hsla,
+    pub secondary_hover: Hsla,
+    pub secondary_active: Hsla,
+    pub secondary_foreground: Hsla,
+
+    pub danger: Hsla,
+    pub danger_hover: Hsla,
+    pub danger_active: Hsla,
+    pub danger_foreground: Hsla,
+
+    pub warning: Hsla,
+    pub warning_hover: Hsla,
+    pub warning_foreground: Hsla,
+
+    pub success: Hsla,
+    pub success_hover: Hsla,
+    pub success_foreground: Hsla,
+
+    pub info: Hsla,
+    pub info_hover: Hsla,
+    pub info_foreground: Hsla,
+
+    // Git status
+    pub git_added: Hsla,
+    pub git_modified: Hsla,
+    pub git_deleted: Hsla,
+    pub git_untracked: Hsla,
+    pub git_ignored: Hsla,
+
+    // Diff highlights
+    pub diff_added_bg: Hsla,
+    pub diff_added_text: Hsla,
+    pub diff_deleted_bg: Hsla,
+    pub diff_deleted_text: Hsla,
+
+    // Timing waterfall
+    pub timing_dns: Hsla,
+    pub timing_tcp: Hsla,
+    pub timing_tls: Hsla,
+    pub timing_ttfb: Hsla,
+    pub timing_download: Hsla,
+
+    // Console logs
+    pub log_info: Hsla,
+    pub log_warn: Hsla,
+    pub log_error: Hsla,
+    pub log_pre_request: Hsla,
+    pub log_post_response: Hsla,
+
+    // Autocomplete variable tags
+    pub tag_variable: Hsla,
+    pub tag_dynamic: Hsla,
 
     // Method badge colors
     pub method_get: Hsla,
@@ -155,7 +209,66 @@ impl AppTheme {
             // Professional vibrant blue
             primary: hex_to_hsla(0x3b82f6),
             primary_hover: hex_to_hsla(0x2563eb),
+            primary_active: hex_to_hsla(0x1d4ed8),
             primary_foreground: hex_to_hsla(0xffffff),
+
+            // Secondary action
+            secondary: hex_to_hsla(0x262836),
+            secondary_hover: hex_to_hsla(0x313445),
+            secondary_active: hex_to_hsla(0x3d4054),
+            secondary_foreground: hex_to_hsla(0xe2e8f0),
+
+            // Danger action
+            danger: hex_to_hsla(0xef4444),
+            danger_hover: hex_to_hsla(0xdc2626),
+            danger_active: hex_to_hsla(0xb91c1c),
+            danger_foreground: hex_to_hsla(0xffffff),
+
+            // Warning action
+            warning: hex_to_hsla(0xf59e0b),
+            warning_hover: hex_to_hsla(0xd97706),
+            warning_foreground: hex_to_hsla(0x0f172a),
+
+            // Success action
+            success: hex_to_hsla(0x10b981),
+            success_hover: hex_to_hsla(0x059669),
+            success_foreground: hex_to_hsla(0xffffff),
+
+            // Info action
+            info: hex_to_hsla(0x06b6d4),
+            info_hover: hex_to_hsla(0x0891b2),
+            info_foreground: hex_to_hsla(0xffffff),
+
+            // Git status
+            git_added: hex_to_hsla(0x4ade80),
+            git_modified: hex_to_hsla(0xfacc15),
+            git_deleted: hex_to_hsla(0xef4444),
+            git_untracked: hex_to_hsla(0x4ade80),
+            git_ignored: hex_to_hsla(0x64748b),
+
+            // Diff highlights
+            diff_added_bg: hex_alpha_to_hsla(0x10b981, 0.15),
+            diff_added_text: hex_to_hsla(0x4ade80),
+            diff_deleted_bg: hex_alpha_to_hsla(0xef4444, 0.15),
+            diff_deleted_text: hex_to_hsla(0xef4444),
+
+            // Timing waterfall
+            timing_dns: hex_to_hsla(0x06b6d4),
+            timing_tcp: hex_to_hsla(0x3b82f6),
+            timing_tls: hex_to_hsla(0xa855f7),
+            timing_ttfb: hex_to_hsla(0xeab308),
+            timing_download: hex_to_hsla(0x22c55e),
+
+            // Console logs
+            log_info: hex_to_hsla(0x3b82f6),
+            log_warn: hex_to_hsla(0xf59e0b),
+            log_error: hex_to_hsla(0xef4444),
+            log_pre_request: hex_to_hsla(0x06b6d4),
+            log_post_response: hex_to_hsla(0xa855f7),
+
+            // Autocomplete variable tags
+            tag_variable: hex_to_hsla(0x38bdf8),
+            tag_dynamic: hex_to_hsla(0xf59e0b),
 
             // Method colors
             method_get: hex_to_hsla(0x10b981),
@@ -217,7 +330,66 @@ impl AppTheme {
             // Professional vibrant blue
             primary: hex_to_hsla(0x2563eb),
             primary_hover: hex_to_hsla(0x1d4ed8),
+            primary_active: hex_to_hsla(0x1e40af),
             primary_foreground: hex_to_hsla(0xffffff),
+
+            // Secondary action
+            secondary: hex_to_hsla(0xf1f5f9),
+            secondary_hover: hex_to_hsla(0xe2e8f0),
+            secondary_active: hex_to_hsla(0xcbd5e1),
+            secondary_foreground: hex_to_hsla(0x1e293b),
+
+            // Danger action
+            danger: hex_to_hsla(0xdc2626),
+            danger_hover: hex_to_hsla(0xb91c1c),
+            danger_active: hex_to_hsla(0x991b1b),
+            danger_foreground: hex_to_hsla(0xffffff),
+
+            // Warning action
+            warning: hex_to_hsla(0xd97706),
+            warning_hover: hex_to_hsla(0xb45309),
+            warning_foreground: hex_to_hsla(0xffffff),
+
+            // Success action
+            success: hex_to_hsla(0x059669),
+            success_hover: hex_to_hsla(0x047857),
+            success_foreground: hex_to_hsla(0xffffff),
+
+            // Info action
+            info: hex_to_hsla(0x0891b2),
+            info_hover: hex_to_hsla(0x0e7490),
+            info_foreground: hex_to_hsla(0xffffff),
+
+            // Git status (high-contrast for light surfaces)
+            git_added: hex_to_hsla(0x059669),
+            git_modified: hex_to_hsla(0xd97706),
+            git_deleted: hex_to_hsla(0xdc2626),
+            git_untracked: hex_to_hsla(0x059669),
+            git_ignored: hex_to_hsla(0x94a3b8),
+
+            // Diff highlights (contrast-adjusted)
+            diff_added_bg: hex_alpha_to_hsla(0x10b981, 0.12),
+            diff_added_text: hex_to_hsla(0x059669),
+            diff_deleted_bg: hex_alpha_to_hsla(0xef4444, 0.12),
+            diff_deleted_text: hex_to_hsla(0xdc2626),
+
+            // Timing waterfall
+            timing_dns: hex_to_hsla(0x0891b2),
+            timing_tcp: hex_to_hsla(0x2563eb),
+            timing_tls: hex_to_hsla(0x9333ea),
+            timing_ttfb: hex_to_hsla(0xd97706),
+            timing_download: hex_to_hsla(0x16a34a),
+
+            // Console logs
+            log_info: hex_to_hsla(0x2563eb),
+            log_warn: hex_to_hsla(0xd97706),
+            log_error: hex_to_hsla(0xdc2626),
+            log_pre_request: hex_to_hsla(0x0891b2),
+            log_post_response: hex_to_hsla(0x9333ea),
+
+            // Autocomplete variable tags
+            tag_variable: hex_to_hsla(0x0284c7),
+            tag_dynamic: hex_to_hsla(0xd97706),
 
             // Method colors for light mode (rich, solid contrast)
             method_get: hex_to_hsla(0x059669),
@@ -303,10 +475,11 @@ pub fn set_theme(preference: ThemePreference, resolved_mode: ThemeMode) {
     CURRENT_MODE.store(mode_val, std::sync::atomic::Ordering::Relaxed);
 }
 
-/// Switch the gpui-component theme to `mode` and align its popover surface with
-/// the app card background, so dropdown menus match the app palette instead of
-/// the library's near-black default. Call this after [`set_theme`] and in place
-/// of every `gpui_kit::component::Theme::change` call.
+/// Switch the gpui-component theme to `mode` and synchronize its full color palette
+/// with [`AppTheme`]. This ensures all gpui-kit UI components (Button variants,
+/// Input, Popover, TabBar, Sidebar, Table, DropdownMenu) use Zest's exact palette
+/// instead of the library's neutral black/white defaults. Call this after [`set_theme`]
+/// and in place of every `gpui_kit::component::Theme::change` call.
 pub fn sync_component_theme(mode: ThemeMode, cx: &mut App) {
     let gpui_mode = match mode {
         ThemeMode::Dark => gpui_kit::component::ThemeMode::Dark,
@@ -314,9 +487,104 @@ pub fn sync_component_theme(mode: ThemeMode, cx: &mut App) {
     };
     gpui_kit::component::Theme::change(gpui_mode, None, cx);
     let t = theme();
-    gpui_kit::component::Theme::update(cx, |component_theme| {
-        component_theme.colors.popover = t.bg_card;
-        component_theme.colors.popover_foreground = t.text_primary;
+    gpui_kit::component::Theme::update(cx, |c| {
+        // Core surfaces & text
+        c.background = t.bg_app;
+        c.foreground = t.text_primary;
+        c.border = t.border;
+        c.input = t.border;
+        c.ring = t.border_focus;
+        c.popover = t.bg_card;
+        c.popover_foreground = t.text_primary;
+
+        // Primary action
+        c.primary = t.primary;
+        c.primary_hover = t.primary_hover;
+        c.primary_active = t.primary_active;
+        c.primary_foreground = t.primary_foreground;
+        c.button_primary = t.primary;
+        c.button_primary_hover = t.primary_hover;
+        c.button_primary_active = t.primary_active;
+        c.button_primary_foreground = t.primary_foreground;
+
+        // Secondary action
+        c.secondary = t.secondary;
+        c.secondary_hover = t.secondary_hover;
+        c.secondary_active = t.secondary_active;
+        c.secondary_foreground = t.secondary_foreground;
+        c.button_secondary = t.secondary;
+        c.button_secondary_hover = t.secondary_hover;
+        c.button_secondary_active = t.secondary_active;
+        c.button_secondary_foreground = t.secondary_foreground;
+
+        // Danger action
+        c.danger = t.danger;
+        c.danger_hover = t.danger_hover;
+        c.danger_active = t.danger_active;
+        c.danger_foreground = t.danger_foreground;
+        c.button_danger = t.danger;
+        c.button_danger_hover = t.danger_hover;
+        c.button_danger_active = t.danger_active;
+        c.button_danger_foreground = t.danger_foreground;
+
+        // Warning & Success & Info
+        c.warning = t.warning;
+        c.warning_foreground = t.warning_foreground;
+        c.button_warning = t.warning;
+        c.button_warning_hover = t.warning_hover;
+        c.button_warning_foreground = t.warning_foreground;
+
+        c.success = t.success;
+        c.success_foreground = t.success_foreground;
+        c.button_success = t.success;
+        c.button_success_hover = t.success_hover;
+        c.button_success_foreground = t.success_foreground;
+
+        c.info = t.info;
+        c.info_foreground = t.info_foreground;
+        c.button_info = t.info;
+        c.button_info_hover = t.info_hover;
+        c.button_info_foreground = t.info_foreground;
+
+        // Default button
+        c.button = t.bg_card;
+        c.button_hover = t.bg_hover;
+        c.button_active = t.bg_active;
+        c.button_foreground = t.text_primary;
+
+        // Accent & Muted
+        c.accent = t.bg_hover;
+        c.accent_foreground = t.text_primary;
+        c.muted = t.bg_input;
+        c.muted_foreground = t.text_muted;
+
+        // Sidebar
+        c.sidebar = t.bg_sidebar;
+        c.sidebar_border = t.border;
+        c.sidebar_foreground = t.text_primary;
+        c.sidebar_accent = t.bg_hover;
+        c.sidebar_accent_foreground = t.text_primary;
+        c.sidebar_primary = t.primary;
+        c.sidebar_primary_foreground = t.primary_foreground;
+
+        // Titlebar
+        c.title_bar = t.bg_titlebar;
+        c.title_bar_border = t.border;
+
+        // Tabs
+        c.tab_bar = t.bg_panel;
+        c.tab = t.transparent;
+        c.tab_active = t.bg_card;
+        c.tab_active_foreground = t.text_primary;
+        c.tab_foreground = t.text_secondary;
+
+        // Table
+        c.table = t.bg_editor;
+        c.table_head = t.bg_panel;
+        c.table_head_foreground = t.text_muted;
+        c.table_hover = t.bg_hover;
+        c.table_active = t.bg_selected;
+        c.table_row_border = t.border_subtle;
     });
 }
 
@@ -385,5 +653,30 @@ mod tests {
             resolve_theme_mode(ThemePreference::System, WindowAppearance::Dark),
             ThemeMode::Dark
         );
+    }
+
+    #[test]
+    fn test_semantic_palette_tokens_dark_and_light() {
+        let dark = AppTheme::dark();
+        let light = AppTheme::light();
+
+        // Ensure actions have distinct contrast
+        assert_ne!(dark.primary, light.primary);
+        assert_ne!(dark.secondary, light.secondary);
+        assert_ne!(dark.danger, light.danger);
+
+        // Ensure git status indicators have high contrast variants
+        assert_ne!(dark.git_added, light.git_added);
+        assert_ne!(dark.git_modified, light.git_modified);
+        assert_eq!(dark.git_added, hex_to_hsla(0x4ade80));
+        assert_eq!(light.git_added, hex_to_hsla(0x059669));
+
+        // Ensure diff highlights have distinct background alphas
+        assert_ne!(dark.diff_added_bg, light.diff_added_bg);
+        assert_ne!(dark.diff_added_text, light.diff_added_text);
+
+        // Ensure timing waterfall tokens are configured
+        assert_eq!(dark.timing_dns, hex_to_hsla(0x06b6d4));
+        assert_eq!(light.timing_dns, hex_to_hsla(0x0891b2));
     }
 }

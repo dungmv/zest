@@ -86,16 +86,13 @@ pub fn render_network_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
                 .child(
                     div().flex_shrink_0().child(
                         Button::new("btn-timeout-dropdown")
-                            .ghost()
+                            .secondary()
                             .compact()
                             .w(px(88.))
                             .px(px(8.))
                             .py(px(4.))
                             .h(px(28.))
                             .rounded(px(5.))
-                            .bg(t.bg_input)
-                            .border_1()
-                            .border_color(t.border)
                             .flex()
                             .items_center()
                             .justify_between()

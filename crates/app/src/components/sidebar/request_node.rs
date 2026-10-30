@@ -72,12 +72,9 @@ pub fn render_request_inner_pill(
     let target_req_id = req.id.clone();
     let is_pinned_row = id_prefix != "req-item";
 
-    let git_green: gpui_kit::Hsla = gpui_kit::rgb(0x4ade80).into();
-    let git_yellow: gpui_kit::Hsla = gpui_kit::rgb(0xfacc15).into();
-
     let req_name_color = match req_git_status {
-        SidebarGitStatus::New => git_green,
-        SidebarGitStatus::Modified => git_yellow,
+        SidebarGitStatus::New => t.git_added,
+        SidebarGitStatus::Modified => t.git_modified,
         SidebarGitStatus::Clean => t.text_primary,
     };
 

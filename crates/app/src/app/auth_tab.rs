@@ -84,16 +84,13 @@ pub fn render_auth_tab(
                     let ws_m = ws_c.clone();
                     let req_id_m = req_id_str.clone();
                     Button::new("btn-auth-type-dropdown")
-                        .ghost()
+                        .secondary()
                         .compact()
                         .w(px(140.))
                         .px(px(8.))
                         .py(px(4.))
                         .h(px(28.))
                         .rounded(px(4.))
-                        .bg(t.bg_card)
-                        .border_1()
-                        .border_color(t.border)
                         .child(
                             div()
                                 .w_full()
@@ -492,16 +489,13 @@ pub fn render_auth_tab(
                                     let k_input = inputs.apikey_key_input.clone();
                                     let v_input = inputs.apikey_val_input.clone();
                                     Button::new("btn-auth-apikey-location-dropdown")
-                                        .ghost()
+                                        .secondary()
                                         .compact()
                                         .w(px(140.))
                                         .px(px(8.))
                                         .py(px(4.))
                                         .h(px(28.))
                                         .rounded(px(4.))
-                                        .bg(t.bg_card)
-                                        .border_1()
-                                        .border_color(t.border)
                                         .child(
                                             div()
                                                 .w_full()

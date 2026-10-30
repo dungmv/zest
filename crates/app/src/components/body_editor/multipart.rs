@@ -452,7 +452,7 @@ pub fn render_multipart_editor(
                             let cur_type_label = if is_file { "File" } else { "Text" };
 
                             Button::new(format!("dropdown-mp-type-{}", idx))
-                                .ghost()
+                                .secondary()
                                 .compact()
                                 .px(px(8.))
                                 .py(px(2.))
@@ -460,9 +460,6 @@ pub fn render_multipart_editor(
                                 .w(px(76.))
                                 .flex_shrink_0()
                                 .rounded(px(4.))
-                                .bg(t.bg_card)
-                                .border_1()
-                                .border_color(t.border)
                                 .child(
                                     div()
                                         .w_full()

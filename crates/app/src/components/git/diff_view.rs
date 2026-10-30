@@ -359,20 +359,10 @@ pub fn render_diff_content(
 
     match diff_content {
         Some(diff) if !diff.trim().is_empty() => {
-            let green_bg = gpui_kit::Hsla {
-                h: 142.0 / 360.0,
-                s: 0.7,
-                l: 0.45,
-                a: 0.15,
-            };
-            let green_text: gpui_kit::Hsla = gpui_kit::rgb(0x4ade80).into();
-            let red_bg = gpui_kit::Hsla {
-                h: 0.0,
-                s: 0.7,
-                l: 0.45,
-                a: 0.15,
-            };
-            let red_text: gpui_kit::Hsla = gpui_kit::rgb(0xef4444).into();
+            let green_bg = t.diff_added_bg;
+            let green_text = t.diff_added_text;
+            let red_bg = t.diff_deleted_bg;
+            let red_text = t.diff_deleted_text;
             let gray_text = t.text_muted;
 
             match view_mode {

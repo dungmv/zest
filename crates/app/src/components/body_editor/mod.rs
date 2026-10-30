@@ -170,15 +170,12 @@ impl RenderOnce for BodyEditor {
                         let ws_menu = self.workspace_state.clone();
                         let id_menu = req_id_str.clone();
                         Button::new("btn-body-type-dropdown")
-                            .ghost()
+                            .secondary()
                             .compact()
                             .px(px(8.))
                             .py(px(2.))
                             .h(px(24.))
                             .rounded(px(4.))
-                            .bg(t.bg_card)
-                            .border_1()
-                            .border_color(t.border)
                             .child(
                                 div()
                                     .flex()

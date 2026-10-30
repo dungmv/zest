@@ -22,12 +22,9 @@ pub fn render_folder_row(
     ctx: &SidebarRenderContext,
 ) -> AnyElement {
     let t = theme();
-    let git_green: gpui_kit::Hsla = gpui_kit::rgb(0x4ade80).into();
-    let git_yellow: gpui_kit::Hsla = gpui_kit::rgb(0xfacc15).into();
-
     let folder_color = match folder_git_status {
-        SidebarGitStatus::New => git_green,
-        SidebarGitStatus::Modified => git_yellow,
+        SidebarGitStatus::New => t.git_added,
+        SidebarGitStatus::Modified => t.git_modified,
         SidebarGitStatus::Clean => t.text_primary,
     };
 

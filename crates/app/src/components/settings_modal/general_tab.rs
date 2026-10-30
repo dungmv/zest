@@ -85,15 +85,12 @@ pub fn render_general_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
                             let modal_theme = modal_clone.clone();
                             div().flex_shrink_0().child(
                                 Button::new("btn-theme-mode-dropdown")
-                                    .ghost()
+                                    .secondary()
                                     .compact()
                                     .px(px(10.))
                                     .py(px(4.))
                                     .h(px(28.))
                                     .rounded(px(5.))
-                                    .bg(t.bg_input)
-                                    .border_1()
-                                    .border_color(t.border)
                                     .child(
                                         Icon::new(theme_icon)
                                             .size(px(13.))
@@ -197,15 +194,12 @@ pub fn render_general_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
                             let modal_layout = modal_clone;
                             div().flex_shrink_0().child(
                                 Button::new("btn-layout-split-dropdown")
-                                    .ghost()
+                                    .secondary()
                                     .compact()
                                     .px(px(10.))
                                     .py(px(4.))
                                     .h(px(28.))
                                     .rounded(px(5.))
-                                    .bg(t.bg_input)
-                                    .border_1()
-                                    .border_color(t.border)
                                     .child(
                                         Icon::new(layout_icon)
                                             .size(px(13.))

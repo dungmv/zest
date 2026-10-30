@@ -360,7 +360,7 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui_kit::AnyElement {
                                     let (tag_text, tag_color) = if *staged {
                                         ("staged", t.primary)
                                     } else if is_untracked {
-                                        ("untracked", gpui_kit::rgb(0x4ade80).into())
+                                        ("untracked", t.git_untracked)
                                     } else {
                                         ("working tree", t.text_secondary)
                                     };
