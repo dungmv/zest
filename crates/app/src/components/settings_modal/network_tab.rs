@@ -1,6 +1,10 @@
 use crate::state::ModalState;
 use crate::theme::theme;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::switch::Switch;
+use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, App, Entity, InteractiveElement as _, IntoElement, ParentElement,
@@ -44,7 +48,8 @@ pub fn render_network_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
                 ),
         )
         // 1. Timeout presets
-        .child(
+        .child({
+            let modal_set = modal_clone.clone();
             div()
                 .w_full()
                 .min_w_0()
@@ -54,15 +59,16 @@ pub fn render_network_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
                 .border_1()
                 .border_color(t.border)
                 .flex()
-                .flex_col()
-                .gap(px(8.))
+                .items_center()
+                .justify_between()
+                .gap(px(16.))
                 .child(
                     div()
-                        .w_full()
+                        .flex_1()
                         .min_w_0()
                         .flex()
-                        .items_center()
-                        .justify_between()
+                        .flex_col()
+                        .gap(px(3.))
                         .child(
                             div()
                                 .text_xs()
@@ -73,57 +79,66 @@ pub fn render_network_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
                         .child(
                             div()
                                 .text_xs()
-                                .font_family(".SystemMonoFont")
-                                .text_color(t.primary)
-                                .child(format!("{}s", cur_timeout)),
+                                .text_color(t.text_muted)
+                                .child("Maximum time to wait before terminating the HTTP request."),
                         ),
                 )
                 .child(
-                    div()
-                        .text_xs()
-                        .text_color(t.text_muted)
-                        .child("Maximum time to wait before terminating the HTTP request."),
+                    div().flex_shrink_0().child(
+                        Button::new("btn-timeout-dropdown")
+                            .ghost()
+                            .compact()
+                            .w(px(88.))
+                            .px(px(8.))
+                            .py(px(4.))
+                            .h(px(28.))
+                            .rounded(px(5.))
+                            .bg(t.bg_input)
+                            .border_1()
+                            .border_color(t.border)
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(6.))
+                                    .child(
+                                        Icon::new(IconName::Clock)
+                                            .size(px(13.))
+                                            .text_color(t.text_secondary),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .font_weight(gpui_kit::FontWeight::MEDIUM)
+                                            .text_color(t.text_primary)
+                                            .child(format!("{}s", cur_timeout)),
+                                    ),
+                            )
+                            .child(
+                                Icon::new(IconName::ChevronDown)
+                                    .size(px(12.))
+                                    .text_color(t.text_muted),
+                            )
+                            .dropdown_menu(move |menu, _window, _cx| {
+                                [10, 30, 60, 120].into_iter().fold(menu, |m, s| {
+                                    let modal_item = modal_set.clone();
+                                    m.item(
+                                        PopupMenuItem::new(format!("{}s", s))
+                                            .checked(cur_timeout == s)
+                                            .on_click(move |_, _, cx| {
+                                                modal_item.update(cx, |st, cx| {
+                                                    st.set_request_timeout_secs(s, cx);
+                                                });
+                                            }),
+                                    )
+                                })
+                            }),
+                    ),
                 )
-                .child(
-                    div()
-                        .flex()
-                        .gap(px(8.))
-                        .pt(px(2.))
-                        .children([10, 30, 60, 120].into_iter().map(|s| {
-                            let is_cur = cur_timeout == s;
-                            let modal_set = modal_clone.clone();
-                            div()
-                                .id(format!("timeout-{}s", s))
-                                .px(px(14.))
-                                .py(px(5.))
-                                .rounded(px(4.))
-                                .bg(if is_cur { t.primary } else { t.bg_input })
-                                .border_1()
-                                .border_color(if is_cur { t.primary } else { t.border })
-                                .text_color(if is_cur {
-                                    t.primary_foreground
-                                } else {
-                                    t.text_secondary
-                                })
-                                .cursor_pointer()
-                                .text_xs()
-                                .font_weight(gpui_kit::FontWeight::MEDIUM)
-                                .hover(|st| {
-                                    if !is_cur {
-                                        st.bg(t.bg_hover).text_color(t.text_primary)
-                                    } else {
-                                        st
-                                    }
-                                })
-                                .on_click(move |_, _, cx| {
-                                    modal_set.update(cx, |st, cx| {
-                                        st.set_request_timeout_secs(s, cx);
-                                    });
-                                })
-                                .child(format!("{}s", s))
-                        })),
-                ),
-        )
+        })
         // 2. Follow Redirects toggle
         .child({
             let modal_set = modal_clone.clone();

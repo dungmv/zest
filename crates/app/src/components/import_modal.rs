@@ -7,6 +7,7 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::dialog::DialogFooter;
 use gpui_kit::component::input::{Input, InputState};
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::Disableable as _;
 use gpui_kit::component::Icon;
@@ -188,56 +189,102 @@ impl RenderOnce for ImportModal {
                             .flex()
                             .flex_col()
                             .gap(px(14.))
-                            // Format Selection Section
+                            // Format Selection Row (Left: Text, Right: Dropdown)
                             .child(
                                 div()
+                                    .w_full()
+                                    .p(px(10.))
+                                    .rounded(px(6.))
+                                    .bg(t.bg_app)
+                                    .border_1()
+                                    .border_color(t.border)
                                     .flex()
-                                    .flex_col()
-                                    .gap(px(6.))
+                                    .items_center()
+                                    .justify_between()
+                                    .gap(px(16.))
                                     .child(
                                         div()
-                                            .text_xs()
-                                            .font_weight(FontWeight::SEMIBOLD)
-                                            .text_color(t.text_muted)
-                                            .child("SPECIFICATION FORMAT"),
-                                    )
-                                    .child(
-                                        div()
+                                            .flex_1()
+                                            .min_w_0()
                                             .flex()
-                                            .gap(px(8.))
+                                            .flex_col()
+                                            .gap(px(2.))
                                             .child(
-                                                render_format_button(
-                                                    "btn-format-openapi",
-                                                    "OpenAPI 3.1 / 3.0 (YAML/JSON)",
-                                                    format == ImportFormat::OpenApi3,
-                                                    {
-                                                        let st = modal_entity.clone();
-                                                        move |_, _, cx| {
-                                                            st.update(cx, |s, cx| {
-                                                                s.set_format(ImportFormat::OpenApi3, cx);
-                                                            });
-                                                        }
-                                                    },
-                                                    t,
-                                                ),
+                                                div()
+                                                    .text_xs()
+                                                    .font_weight(FontWeight::SEMIBOLD)
+                                                    .text_color(t.text_primary)
+                                                    .child("Specification Format"),
                                             )
                                             .child(
-                                                render_format_button(
-                                                    "btn-format-postman",
-                                                    "Postman Collection v2.1 (JSON)",
-                                                    format == ImportFormat::PostmanCollection,
-                                                    {
-                                                        let st = modal_entity.clone();
-                                                        move |_, _, cx| {
-                                                            st.update(cx, |s, cx| {
-                                                                s.set_format(ImportFormat::PostmanCollection, cx);
-                                                            });
-                                                        }
-                                                    },
-                                                    t,
-                                                ),
+                                                div()
+                                                    .text_xs()
+                                                    .text_color(t.text_muted)
+                                                    .child("Choose the specification or collection format to parse."),
                                             ),
-                                    ),
+                                    )
+                                    .child({
+                                        let format_label = match format {
+                                            ImportFormat::OpenApi3 => "OpenAPI 3.1 / 3.0",
+                                            ImportFormat::PostmanCollection => "Postman Collection v2.1",
+                                        };
+                                        let st = modal_entity.clone();
+
+                                        div().flex_shrink_0().child(
+                                            Button::new("btn-import-format-dropdown")
+                                                .ghost()
+                                                .compact()
+                                                .px(px(10.))
+                                                .py(px(4.))
+                                                .h(px(28.))
+                                                .rounded(px(5.))
+                                                .bg(t.bg_input)
+                                                .border_1()
+                                                .border_color(t.border)
+                                                .flex()
+                                                .items_center()
+                                                .gap(px(8.))
+                                                .child(
+                                                    Icon::new(IconName::FileText)
+                                                        .size(px(13.))
+                                                        .text_color(t.text_secondary),
+                                                )
+                                                .child(
+                                                    div()
+                                                        .text_xs()
+                                                        .font_weight(FontWeight::MEDIUM)
+                                                        .text_color(t.text_primary)
+                                                        .child(format_label),
+                                                )
+                                                .child(
+                                                    Icon::new(IconName::ChevronDown)
+                                                        .size(px(12.))
+                                                        .text_color(t.text_muted),
+                                                )
+                                                .dropdown_menu(move |menu, _window, _cx| {
+                                                    let st_openapi = st.clone();
+                                                    let st_postman = st.clone();
+                                                    menu.item(
+                                                        PopupMenuItem::new("OpenAPI 3.1 / 3.0 (YAML/JSON)")
+                                                            .checked(format == ImportFormat::OpenApi3)
+                                                            .on_click(move |_, _, cx| {
+                                                                st_openapi.update(cx, |s, cx| {
+                                                                    s.set_format(ImportFormat::OpenApi3, cx);
+                                                                });
+                                                            }),
+                                                    )
+                                                    .item(
+                                                        PopupMenuItem::new("Postman Collection v2.1 (JSON)")
+                                                            .checked(format == ImportFormat::PostmanCollection)
+                                                            .on_click(move |_, _, cx| {
+                                                                st_postman.update(cx, |s, cx| {
+                                                                    s.set_format(ImportFormat::PostmanCollection, cx);
+                                                                });
+                                                            }),
+                                                    )
+                                                }),
+                                        )
+                                    }),
                             )
                             // Source Tab Bar
                             .child(
@@ -456,45 +503,6 @@ impl RenderOnce for ImportModal {
                     ),
             )
     }
-}
-
-fn render_format_button<F>(
-    id: &'static str,
-    label: &'static str,
-    selected: bool,
-    on_click: F,
-    t: &crate::theme::AppTheme,
-) -> impl IntoElement
-where
-    F: Fn(&gpui_kit::ClickEvent, &mut Window, &mut App) + 'static,
-{
-    div()
-        .id(id)
-        .flex_1()
-        .px(px(12.))
-        .py(px(8.))
-        .rounded(px(6.))
-        .border_1()
-        .cursor_pointer()
-        .text_xs()
-        .font_weight(FontWeight::MEDIUM)
-        .flex()
-        .items_center()
-        .justify_center()
-        .gap(px(6.))
-        .when(selected, |s| {
-            s.bg(t.primary.opacity(0.12))
-                .border_color(t.primary)
-                .text_color(t.primary)
-        })
-        .when(!selected, |s| {
-            s.bg(t.bg_panel)
-                .border_color(t.border)
-                .text_color(t.text_secondary)
-                .hover(|h| h.bg(t.bg_hover).text_color(t.text_primary))
-        })
-        .child(label)
-        .on_click(on_click)
 }
 
 fn render_tab_header<F>(

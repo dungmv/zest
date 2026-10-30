@@ -14,7 +14,7 @@ pub fn render_general_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
     let modal_clone = modal_state.clone();
 
     let (theme_icon, theme_label) = match cur_pref {
-        ThemePreference::System => (IconName::Monitor, "System"),
+        ThemePreference::System => (IconName::Monitor, "System (Follow OS)"),
         ThemePreference::Dark => (IconName::Moon, "Dark"),
         ThemePreference::Light => (IconName::Sun, "Light"),
     };
