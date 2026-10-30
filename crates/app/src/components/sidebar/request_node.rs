@@ -182,60 +182,75 @@ pub fn render_request_inner_pill(
 
                 let mut m = menu
                     .item(
-                        PopupMenuItem::new("Copy as YAML").on_click(move |_, _, cx| {
-                            if let Some(r) = ws_yaml.read(cx).find_request(&r_id_yaml) {
-                                let rf = RequestFile::from_item(r);
-                                if let Ok(yaml) = to_yaml_string(&rf) {
-                                    cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(
-                                        yaml,
-                                    ));
+                        PopupMenuItem::new("Copy as YAML")
+                            .icon(IconName::FileCode)
+                            .on_click(move |_, _, cx| {
+                                if let Some(r) = ws_yaml.read(cx).find_request(&r_id_yaml) {
+                                    let rf = RequestFile::from_item(r);
+                                    if let Ok(yaml) = to_yaml_string(&rf) {
+                                        cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(
+                                            yaml,
+                                        ));
+                                    }
                                 }
-                            }
-                        }),
+                            }),
                     )
                     .item(
-                        PopupMenuItem::new("Copy as cURL").on_click(move |_, _, cx| {
-                            if let Some(r) = ws_curl.read(cx).find_request(&r_id_curl) {
-                                let mut r_clone = r.clone();
-                                let (resolved_h, resolved_a) =
-                                    ws_curl.read(cx).resolve_request_hierarchy(&r_clone);
-                                r_clone.headers = resolved_h;
-                                r_clone.auth = resolved_a;
-                                let curl = zest_core::curl::request_to_curl(&r_clone, None);
-                                cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(curl));
-                            }
-                        }),
+                        PopupMenuItem::new("Copy as cURL")
+                            .icon(IconName::Terminal)
+                            .on_click(move |_, _, cx| {
+                                if let Some(r) = ws_curl.read(cx).find_request(&r_id_curl) {
+                                    let mut r_clone = r.clone();
+                                    let (resolved_h, resolved_a) =
+                                        ws_curl.read(cx).resolve_request_hierarchy(&r_clone);
+                                    r_clone.headers = resolved_h;
+                                    r_clone.auth = resolved_a;
+                                    let curl = zest_core::curl::request_to_curl(&r_clone, None);
+                                    cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(
+                                        curl,
+                                    ));
+                                }
+                            }),
                     )
                     .separator()
                     .item(
                         PopupMenuItem::new(if is_pinned { "Unpin" } else { "Pin to top" })
+                            .icon(IconName::Pin)
                             .on_click(move |_, _, cx| {
                                 ws_p.update(cx, |state, cx| {
                                     state.toggle_pin(&r_id_p, cx);
                                 });
                             }),
                     )
-                    .item(PopupMenuItem::new("Rename").on_click(move |_, window, cx| {
-                        let ws_c = ws_r.clone();
-                        sb_r.update(cx, |state, cx| {
-                            state.start_renaming_request(
-                                r_id_r.clone(),
-                                init_r.clone(),
-                                ws_c,
-                                window,
-                                cx,
-                            );
-                        });
-                    }))
-                    .item(PopupMenuItem::new("Duplicate").on_click(move |_, _, cx| {
-                        if let Some(dup) =
-                            ws_d.update(cx, |state, cx| state.duplicate_request(&r_id_d, cx))
-                        {
-                            ed_d.update(cx, |state, cx| {
-                                state.set_active_request_id(&dup.id, cx);
-                            });
-                        }
-                    }));
+                    .item(
+                        PopupMenuItem::new("Rename")
+                            .icon(IconName::Pencil)
+                            .on_click(move |_, window, cx| {
+                                let ws_c = ws_r.clone();
+                                sb_r.update(cx, |state, cx| {
+                                    state.start_renaming_request(
+                                        r_id_r.clone(),
+                                        init_r.clone(),
+                                        ws_c,
+                                        window,
+                                        cx,
+                                    );
+                                });
+                            }),
+                    )
+                    .item(
+                        PopupMenuItem::new("Duplicate")
+                            .icon(IconName::Copy)
+                            .on_click(move |_, _, cx| {
+                                if let Some(dup) = ws_d
+                                    .update(cx, |state, cx| state.duplicate_request(&r_id_d, cx))
+                                {
+                                    ed_d.update(cx, |state, cx| {
+                                        state.set_active_request_id(&dup.id, cx);
+                                    });
+                                }
+                            }),
+                    );
 
                 if is_dirty_git {
                     let git_disc = git_menu.clone();
@@ -247,10 +262,10 @@ pub fn render_request_inner_pill(
                     let toast_disc = toast_menu.clone();
                     let r_name_disc = init_name_menu.clone();
 
-                    m = m
-                        .separator()
-                        .item(
-                            PopupMenuItem::new("Discard Changes").on_click(move |_, _, cx| {
+                    m = m.separator().item(
+                        PopupMenuItem::new("Discard Changes")
+                            .icon(IconName::Undo2)
+                            .on_click(move |_, _, cx| {
                                 let req_name = r_name_disc.clone();
                                 let norm_req = r_id_disc.replace('\\', "/");
                                 let coll_rel = format!("collections/{}", norm_req);
@@ -339,13 +354,15 @@ pub fn render_request_inner_pill(
                                     });
                                 });
                             }),
-                        );
+                    );
                 }
 
                 m.separator()
-                    .item(PopupMenuItem::new("Delete").on_click(move |_, _, cx| {
-                        delete_request_item(&ws_del, &ed_del, &r_id_del, cx);
-                    }))
+                    .item(PopupMenuItem::new("Delete").icon(IconName::Trash).on_click(
+                        move |_, _, cx| {
+                            delete_request_item(&ws_del, &ed_del, &r_id_del, cx);
+                        },
+                    ))
             }
         })
         .child(

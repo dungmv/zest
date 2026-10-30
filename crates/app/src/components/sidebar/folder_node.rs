@@ -151,20 +151,21 @@ pub fn render_folder_row(
                 let f_id_d = f_id_del.clone();
 
                 menu.item(
-                    gpui_kit::component::menu::PopupMenuItem::new("New Request").on_click(
-                        move |_, _, cx| {
+                    gpui_kit::component::menu::PopupMenuItem::new("New Request")
+                        .icon(IconName::Plus)
+                        .on_click(move |_, _, cx| {
                             let req = ws_n.update(cx, |state, cx| {
                                 state.create_request(Some(f_id_n.clone()), cx)
                             });
                             ed_n.update(cx, |state, cx| {
                                 state.set_active_request_id(&req.id, cx);
                             });
-                        },
-                    ),
+                        }),
                 )
                 .item(
-                    gpui_kit::component::menu::PopupMenuItem::new("New Folder").on_click(
-                        move |_, window, cx| {
+                    gpui_kit::component::menu::PopupMenuItem::new("New Folder")
+                        .icon(IconName::FolderPlus)
+                        .on_click(move |_, window, cx| {
                             let ws_c = ws_ns.clone();
                             let created = ws_ns.update(cx, |state, cx| {
                                 state.create_folder(
@@ -184,12 +185,12 @@ pub fn render_folder_row(
                                     );
                                 });
                             }
-                        },
-                    ),
+                        }),
                 )
                 .item(
-                    gpui_kit::component::menu::PopupMenuItem::new("Rename").on_click(
-                        move |_, window, cx| {
+                    gpui_kit::component::menu::PopupMenuItem::new("Rename")
+                        .icon(IconName::Pencil)
+                        .on_click(move |_, window, cx| {
                             let ws_c = ws_r.clone();
                             sb_r.update(cx, |state, cx| {
                                 state.start_renaming_folder(
@@ -200,8 +201,7 @@ pub fn render_folder_row(
                                     cx,
                                 );
                             });
-                        },
-                    ),
+                        }),
                 )
                 .item(
                     gpui_kit::component::menu::PopupMenuItem::new("Folder Settings...")
@@ -217,13 +217,13 @@ pub fn render_folder_row(
                 )
                 .separator()
                 .item(
-                    gpui_kit::component::menu::PopupMenuItem::new("Delete").on_click(
-                        move |_, _, cx| {
+                    gpui_kit::component::menu::PopupMenuItem::new("Delete")
+                        .icon(IconName::Trash)
+                        .on_click(move |_, _, cx| {
                             ws_d.update(cx, |state, cx| {
                                 state.delete_folder(&f_id_d, cx);
                             });
-                        },
-                    ),
+                        }),
                 )
             }
         })

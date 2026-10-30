@@ -8,6 +8,7 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::kbd::Kbd;
 use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::separator::Separator;
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -509,10 +510,11 @@ impl RenderOnce for CommandPalette {
                                 )
                             })
                             // List Requests
+                            .child(Separator::horizontal().my(px(4.)))
                             .child(
                                 div()
                                     .px(px(8.))
-                                    .pt(px(4.))
+                                    .pt(px(2.))
                                     .text_xs()
                                     .font_weight(gpui_kit::FontWeight::BOLD)
                                     .text_color(t.text_muted)
@@ -557,10 +559,11 @@ impl RenderOnce for CommandPalette {
                                 },
                             ))
                             // Switch Environment
+                            .child(Separator::horizontal().my(px(4.)))
                             .child(
                                 div()
                                     .px(px(8.))
-                                    .pt(px(6.))
+                                    .pt(px(2.))
                                     .text_xs()
                                     .font_weight(gpui_kit::FontWeight::BOLD)
                                     .text_color(t.text_muted)

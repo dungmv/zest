@@ -11,6 +11,7 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::separator::Separator;
 use gpui_kit::component::Disableable as _;
 use gpui_kit::component::Icon;
 use gpui_kit::component::Sizable as _;
@@ -98,8 +99,6 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui_kit::AnyElement {
                 .max_w(px(350.))
                 .flex_shrink_0()
                 .h_full()
-                .border_r_1()
-                .border_color(t.border)
                 .bg(t.bg_sidebar)
                 .flex()
                 .flex_col()
@@ -231,12 +230,12 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui_kit::AnyElement {
                                 })
                         })),
                 )
+                // Separator before commit section
+                .child(Separator::horizontal())
                 // 2. Commit Section (Message input + commit controls)
                 .child(
                     div()
                         .p(px(10.))
-                        .border_t_1()
-                        .border_color(t.border)
                         .bg(t.bg_card)
                         .flex()
                         .flex_col()
@@ -326,6 +325,8 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui_kit::AnyElement {
                         }),
                 ),
         )
+        // Separator between file list and diff view
+        .child(Separator::vertical())
         // Right Column: Diff Viewer (Flex-1)
         .child(
             div()

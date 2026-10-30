@@ -8,6 +8,7 @@ use crate::state::{ModalState, SettingsTab, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::separator::Separator;
 use gpui_kit::component::Icon;
 use gpui_kit::{
     div, px, App, Entity, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
@@ -98,8 +99,6 @@ impl RenderOnce for SettingsModal {
                             .flex_shrink_0()
                             .h_full()
                             .bg(t.bg_sidebar)
-                            .border_r_1()
-                            .border_color(t.border)
                             .p(px(10.))
                             .flex()
                             .flex_col()
@@ -184,6 +183,8 @@ impl RenderOnce for SettingsModal {
                                 },
                             )),
                     )
+                    // Separator between sidebar and content
+                    .child(Separator::vertical())
                     // Right Content Panel
                     .child(
                         div()

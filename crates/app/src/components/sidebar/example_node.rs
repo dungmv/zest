@@ -3,6 +3,7 @@ use super::{SidebarRenderContext, SIDEBAR_ROW_HEIGHT};
 use crate::app::actions::DismissModal;
 use crate::components::StatusCodeBadge;
 use crate::theme::theme;
+use gpui_kit::assets::IconName;
 use gpui_kit::component::menu::ContextMenuExt as _;
 use gpui_kit::component::Sizable as _;
 use gpui_kit::{
@@ -115,8 +116,9 @@ pub fn render_example_row(
 
                 let mut m = menu
                     .item(
-                        gpui_kit::component::menu::PopupMenuItem::new("Rename").on_click(
-                            move |_, window, cx| {
+                        gpui_kit::component::menu::PopupMenuItem::new("Rename")
+                            .icon(IconName::Pencil)
+                            .on_click(move |_, window, cx| {
                                 let ws_c = ws_ren.clone();
                                 sb_ren.update(cx, |state, cx| {
                                     state.start_renaming_example(
@@ -127,12 +129,12 @@ pub fn render_example_row(
                                         cx,
                                     );
                                 });
-                            },
-                        ),
+                            }),
                     )
                     .item(
-                        gpui_kit::component::menu::PopupMenuItem::new("Duplicate").on_click(
-                            move |_, _, cx| {
+                        gpui_kit::component::menu::PopupMenuItem::new("Duplicate")
+                            .icon(IconName::Copy)
+                            .on_click(move |_, _, cx| {
                                 ws_dup.update(cx, |ws, cx| {
                                     if let Some(mut rf) = ws.get_request_file(&r_id_dup) {
                                         if let Some(orig_ex) = rf
@@ -155,16 +157,16 @@ pub fn render_example_row(
                                         }
                                     }
                                 });
-                            },
-                        ),
+                            }),
                     );
 
                 if idx > 0 {
                     let ws_up = ws_ctx.clone();
                     let r_id_up = r_id_ctx.clone();
                     m = m.item(
-                        gpui_kit::component::menu::PopupMenuItem::new("Move Up").on_click(
-                            move |_, _, cx| {
+                        gpui_kit::component::menu::PopupMenuItem::new("Move Up")
+                            .icon(IconName::ArrowUp)
+                            .on_click(move |_, _, cx| {
                                 ws_up.update(cx, |ws, cx| {
                                     if let Some(mut rf) = ws.get_request_file(&r_id_up) {
                                         if idx < rf.examples.len() {
@@ -173,8 +175,7 @@ pub fn render_example_row(
                                         }
                                     }
                                 });
-                            },
-                        ),
+                            }),
                     );
                 }
 
@@ -182,8 +183,9 @@ pub fn render_example_row(
                     let ws_down = ws_ctx.clone();
                     let r_id_down = r_id_ctx.clone();
                     m = m.item(
-                        gpui_kit::component::menu::PopupMenuItem::new("Move Down").on_click(
-                            move |_, _, cx| {
+                        gpui_kit::component::menu::PopupMenuItem::new("Move Down")
+                            .icon(IconName::ArrowDown)
+                            .on_click(move |_, _, cx| {
                                 ws_down.update(cx, |ws, cx| {
                                     if let Some(mut rf) = ws.get_request_file(&r_id_down) {
                                         if idx + 1 < rf.examples.len() {
@@ -192,14 +194,14 @@ pub fn render_example_row(
                                         }
                                     }
                                 });
-                            },
-                        ),
+                            }),
                     );
                 }
 
                 m.separator().item(
-                    gpui_kit::component::menu::PopupMenuItem::new("Delete").on_click(
-                        move |_, _, cx| {
+                    gpui_kit::component::menu::PopupMenuItem::new("Delete")
+                        .icon(IconName::Trash)
+                        .on_click(move |_, _, cx| {
                             ws_del.update(cx, |ws, cx| {
                                 if let Some(mut rf) = ws.get_request_file(&r_id_del) {
                                     rf.examples.retain(|e| e.name != ex_del_name);
@@ -212,8 +214,7 @@ pub fn render_example_row(
                                     });
                                 }
                             });
-                        },
-                    ),
+                        }),
                 )
             }
         })

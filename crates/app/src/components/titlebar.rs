@@ -218,6 +218,7 @@ impl RenderOnce for AppTitleBar {
                 Button::new("btn-workspace-switcher")
                     .ghost()
                     .compact()
+                    .tooltip("Workspace Settings & Actions")
                     .px(px(8.))
                     .py(px(2.))
                     .h(px(26.))
@@ -373,6 +374,7 @@ impl RenderOnce for AppTitleBar {
                 Button::new("btn-env-breadcrumb")
                     .ghost()
                     .compact()
+                    .tooltip("Select Active Environment")
                     .px(px(8.))
                     .py(px(2.))
                     .h(px(26.))
@@ -595,21 +597,18 @@ impl RenderOnce for AppTitleBar {
             .child({
                 let modal_s = modal_clone.clone();
                 let is_vert = modal.split_layout_vertical;
-                div()
-                    .id("btn-split-toggle")
-                    .occlude()
+                Button::new("btn-split-toggle")
+                    .ghost()
+                    .compact()
                     .w(px(28.))
                     .h(px(26.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .rounded(px(4.))
-                    .cursor_pointer()
-                    .hover(|s| s.bg(t.bg_hover))
-                    .text_color(t.text_secondary)
-                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .tooltip(if is_vert {
+                        "Split Layout: Stacked (Vertical)"
+                    } else {
+                        "Split Layout: Side-by-Side (Horizontal)"
+                    })
                     .on_click(move |_, _, cx| {
-                        modal_s.update(cx, |state, cx| state.toggle_split_layout(cx))
+                        modal_s.update(cx, |state, cx| state.toggle_split_layout(cx));
                     })
                     .child(if is_vert {
                         Icon::new(IconName::PanelBottom).size(px(16.))
@@ -620,21 +619,14 @@ impl RenderOnce for AppTitleBar {
             // Settings button
             .child({
                 let modal_s = modal_clone.clone();
-                div()
-                    .id("btn-settings")
-                    .occlude()
+                Button::new("btn-settings")
+                    .ghost()
+                    .compact()
                     .w(px(28.))
                     .h(px(26.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .rounded(px(4.))
-                    .cursor_pointer()
-                    .hover(|s| s.bg(t.bg_hover))
-                    .text_color(t.text_secondary)
-                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .tooltip("Settings (⌘,)")
                     .on_click(move |_, _, cx| {
-                        modal_s.update(cx, |state, cx| state.toggle_settings_modal(cx))
+                        modal_s.update(cx, |state, cx| state.toggle_settings_modal(cx));
                     })
                     .child(Icon::new(IconName::Settings).size(px(16.)))
             });

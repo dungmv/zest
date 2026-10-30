@@ -10,6 +10,7 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::collapsible::Collapsible;
 use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::separator::Separator;
 use gpui_kit::component::skeleton::Skeleton;
 use gpui_kit::component::Icon;
 use gpui_kit::component::Sizable as _;
@@ -57,8 +58,6 @@ pub fn render_history_view(
                 .max_w(px(350.))
                 .flex_shrink_0()
                 .h_full()
-                .border_r_1()
-                .border_color(t.border)
                 .bg(t.bg_sidebar)
                 .flex()
                 .flex_col()
@@ -169,6 +168,8 @@ pub fn render_history_view(
                         })),
                 ),
         )
+        // Separator between commit list and details
+        .child(Separator::vertical())
         // Right Column: Commit Details & Collapsible File Diffs (Flex-1)
         .child({
             if let Some(commit_detail) = selected_commit {
@@ -317,7 +318,7 @@ pub fn render_history_view(
                                     .child(
                                         Collapsible::new()
                                             .open(is_expanded)
-                                            .child(
+                                            .content(
                                                 div()
                                                     .border_t_1()
                                                     .border_color(t.border)
