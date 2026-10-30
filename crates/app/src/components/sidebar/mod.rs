@@ -61,18 +61,92 @@ pub struct SidebarRenderContext<'a> {
 fn render_flat_sidebar_row(row: &FlatSidebarRow, ctx: &SidebarRenderContext) -> AnyElement {
     let t = theme();
     match row {
-        FlatSidebarRow::PinnedHeader => div()
-            .w_full()
-            .h(px(SIDEBAR_ROW_HEIGHT))
-            .px(px(12.))
-            .py(px(1.))
-            .flex()
-            .items_center()
-            .text_xs()
-            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-            .text_color(t.text_muted)
-            .child("📌 PINNED")
-            .into_any_element(),
+        FlatSidebarRow::PinnedHeader { is_collapsed } => {
+            let sb_toggle = ctx.sidebar.clone();
+            let is_collapsed = *is_collapsed;
+            let ws_drop = ctx.ws.clone();
+            let sb_drop = ctx.sidebar.clone();
+
+            div()
+                .id("pinned-folder-row")
+                .w_full()
+                .h(px(SIDEBAR_ROW_HEIGHT))
+                .pl(px(6.))
+                .pr(px(6.))
+                .py(px(1.))
+                .flex()
+                .items_center()
+                .child(
+                    div()
+                        .id("pinned-folder-header")
+                        .w_full()
+                        .h_full()
+                        .flex()
+                        .items_center()
+                        .px(px(6.))
+                        .rounded(px(4.))
+                        .text_color(t.text_secondary)
+                        .text_xs()
+                        .cursor_pointer()
+                        .hover(|s| s.bg(t.bg_hover))
+                        .on_click(move |_, _, cx| {
+                            sb_toggle.update(cx, |state, cx| {
+                                state.toggle_pinned_collapsed(cx);
+                            });
+                        })
+                        .drag_over::<DragRequestItem>(|style, _, _, _| {
+                            let t = theme();
+                            style.bg(t.bg_hover).border_1().border_color(t.border_focus)
+                        })
+                        .on_drop(move |drag: &DragRequestItem, _, cx| {
+                            let req_id = drag.id.clone();
+                            ws_drop.update(cx, |state, cx| {
+                                if !state.is_pinned(&req_id) {
+                                    state.toggle_pin(&req_id, cx);
+                                }
+                            });
+                            sb_drop.update(cx, |state, _cx| {
+                                state.pinned_collapsed = false;
+                            });
+                        })
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w(px(0.))
+                                .flex()
+                                .items_center()
+                                .gap(px(6.))
+                                .child(
+                                    div()
+                                        .w(px(14.))
+                                        .h(px(14.))
+                                        .flex_shrink_0()
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .text_color(t.text_muted)
+                                        .child(
+                                            Icon::new(if is_collapsed {
+                                                IconName::ChevronRight
+                                            } else {
+                                                IconName::ChevronDown
+                                            })
+                                            .size(px(11.)),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_family(".SystemMonoFont")
+                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
+                                        .text_color(t.text_secondary)
+                                        .truncate()
+                                        .child("Pinned"),
+                                ),
+                        ),
+                )
+                .into_any_element()
+        }
 
         FlatSidebarRow::PinnedRequest {
             req,
@@ -92,7 +166,8 @@ fn render_flat_sidebar_row(row: &FlatSidebarRow, ctx: &SidebarRenderContext) -> 
                 .id(format!("pinned-row-{}-{}", target_idx, p_id))
                 .w_full()
                 .h(px(SIDEBAR_ROW_HEIGHT))
-                .px(px(6.))
+                .pl(px(20.))
+                .pr(px(6.))
                 .py(px(1.))
                 .flex()
                 .items_center()

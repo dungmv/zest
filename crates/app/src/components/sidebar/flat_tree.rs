@@ -8,7 +8,9 @@ use zest_core::models::{Folder, HttpRequestItem};
 /// Represents a single uniform-height row in the virtualized sidebar tree.
 #[derive(Clone, Debug)]
 pub enum FlatSidebarRow {
-    PinnedHeader,
+    PinnedHeader {
+        is_collapsed: bool,
+    },
     PinnedRequest {
         req: Arc<SidebarReqItem>,
         pin_index: usize,
@@ -108,6 +110,7 @@ pub fn flatten_sidebar_tree(
     query_lower: &str,
     collapsed_folders: &HashSet<String>,
     collapsed_requests: &HashSet<String>,
+    pinned_collapsed: bool,
     git_status: Option<&GitStatusResult>,
     unsaved_requests: &HashSet<String>,
 ) -> Vec<FlatSidebarRow> {
@@ -115,6 +118,7 @@ pub fn flatten_sidebar_tree(
         return Vec::new();
     }
 
+    let has_query = !query_lower.is_empty();
     let git_index = GitStatusIndex::from_status(git_status);
     let (req_statuses, folder_statuses) =
         compute_all_git_statuses(folders, raw_requests, &git_index, unsaved_requests);
@@ -135,13 +139,16 @@ pub fn flatten_sidebar_tree(
             .collect();
 
         if !pinned_indices.is_empty() {
-            rows.push(FlatSidebarRow::PinnedHeader);
-            for (pin_index, r_idx) in pinned_indices.into_iter().enumerate() {
-                rows.push(FlatSidebarRow::PinnedRequest {
-                    req: arc_requests[r_idx].clone(),
-                    pin_index,
-                    git_status: req_statuses[r_idx],
-                });
+            let is_collapsed = pinned_collapsed && !has_query;
+            rows.push(FlatSidebarRow::PinnedHeader { is_collapsed });
+            if !is_collapsed {
+                for (pin_index, r_idx) in pinned_indices.into_iter().enumerate() {
+                    rows.push(FlatSidebarRow::PinnedRequest {
+                        req: arc_requests[r_idx].clone(),
+                        pin_index,
+                        git_status: req_statuses[r_idx],
+                    });
+                }
             }
         }
     }
@@ -159,7 +166,6 @@ pub fn flatten_sidebar_tree(
         }
     }
 
-    let has_query = !query_lower.is_empty();
     let mut req_matches = Vec::with_capacity(raw_requests.len());
     let mut root_req_indices = Vec::new();
     let mut folder_req_indices: HashMap<&str, Vec<usize>> = HashMap::with_capacity(folders.len());
@@ -441,6 +447,7 @@ mod tests {
             "",
             &collapsed_folders,
             &collapsed_requests,
+            false,
             None,
             &unsaved,
         );
@@ -449,7 +456,12 @@ mod tests {
         // Folder(auth/oauth, depth 1), Request(token, depth 2), Example(200 OK, depth 3),
         // Request(health, depth 0), RootDropzone -> 8 rows
         assert_eq!(rows.len(), 8);
-        assert!(matches!(rows[0], FlatSidebarRow::PinnedHeader));
+        assert!(matches!(
+            rows[0],
+            FlatSidebarRow::PinnedHeader {
+                is_collapsed: false
+            }
+        ));
         assert!(matches!(
             &rows[2],
             FlatSidebarRow::Folder {
@@ -488,6 +500,7 @@ mod tests {
             "",
             &collapsed_folders,
             &collapsed_requests,
+            false,
             None,
             &unsaved,
         );
@@ -501,6 +514,26 @@ mod tests {
                 git_status: SidebarGitStatus::Modified,
                 ..
             } if folder_id == "auth"
+        ));
+
+        // Test collapsing pinned folder: PinnedRequest should be hidden
+        let rows_pinned_collapsed = flatten_sidebar_tree(
+            &folders,
+            &raw_reqs,
+            &arc_reqs,
+            &pins,
+            "",
+            &collapsed_folders,
+            &collapsed_requests,
+            true,
+            None,
+            &unsaved,
+        );
+        // Expected: PinnedHeader (collapsed=true), Folder(auth, collapsed=true), Request(health), RootDropzone -> 4 rows
+        assert_eq!(rows_pinned_collapsed.len(), 4);
+        assert!(matches!(
+            rows_pinned_collapsed[0],
+            FlatSidebarRow::PinnedHeader { is_collapsed: true }
         ));
     }
 
@@ -558,6 +591,7 @@ mod tests {
             "",
             &HashSet::new(),
             &HashSet::new(),
+            false,
             Some(&git_status),
             &HashSet::new(),
         );

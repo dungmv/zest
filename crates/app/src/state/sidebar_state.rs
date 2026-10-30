@@ -21,6 +21,7 @@ pub struct SidebarState {
     pub sidebar_width: Pixels,
     pub collapsed_folders: HashSet<String>,
     pub collapsed_requests: HashSet<String>,
+    pub pinned_collapsed: bool,
     pub renaming_request: Option<RenamingState<String>>,
     pub renaming_folder: Option<RenamingState<String>>,
     pub renaming_env: Option<RenamingState<String>>,
@@ -40,6 +41,7 @@ impl Default for SidebarState {
             sidebar_width: px(260.),
             collapsed_folders: HashSet::new(),
             collapsed_requests: HashSet::new(),
+            pinned_collapsed: false,
             renaming_request: None,
             renaming_folder: None,
             renaming_env: None,
@@ -98,6 +100,12 @@ impl SidebarState {
         cx.notify();
     }
 
+    pub fn toggle_pinned_collapsed(&mut self, cx: &mut Context<Self>) {
+        self.pinned_collapsed = !self.pinned_collapsed;
+        self.ui_version = self.ui_version.wrapping_add(1);
+        cx.notify();
+    }
+
     pub fn cached_flat_rows(
         &self,
         ws: &WorkspaceDataState,
@@ -136,6 +144,7 @@ impl SidebarState {
             &query_lower,
             &self.collapsed_folders,
             &self.collapsed_requests,
+            self.pinned_collapsed,
             git.status.as_ref(),
             &per.unsaved_requests,
         );
