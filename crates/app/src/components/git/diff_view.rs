@@ -40,34 +40,52 @@ pub enum SideBySideRow {
     },
 }
 
-pub fn split_diff_into_files(diff: &str) -> Vec<(String, String)> {
+/// Split unified git patch text into individual file diff slices with zero allocations.
+pub fn split_diff_into_file_slices(diff: &str) -> Vec<(&str, &str)> {
     let mut result = Vec::new();
-    let mut current_file: Option<String> = None;
-    let mut current_chunk: Vec<&str> = Vec::new();
+    let header = "diff --git ";
+    let mut header_indices: Vec<usize> = Vec::new();
 
-    for line in diff.lines() {
-        if line.starts_with("diff --git ") {
-            if let Some(file) = current_file.take() {
-                result.push((file, current_chunk.join("\n")));
-                current_chunk.clear();
-            }
-            let file_name = if let Some(b_idx) = line.rfind(" b/") {
-                line[b_idx + 3..].trim_matches('"').to_string()
-            } else {
-                line.trim_start_matches("diff --git ").to_string()
-            };
-            current_file = Some(file_name);
-            current_chunk.push(line);
-        } else if current_file.is_some() {
-            current_chunk.push(line);
+    let mut start = 0;
+    while let Some(idx) = diff[start..].find(header) {
+        let abs_idx = start + idx;
+        if abs_idx == 0 || diff.as_bytes()[abs_idx - 1] == b'\n' {
+            header_indices.push(abs_idx);
         }
+        start = abs_idx + header.len();
     }
 
-    if let Some(file) = current_file.take() {
-        result.push((file, current_chunk.join("\n")));
+    if header_indices.is_empty() {
+        return result;
+    }
+
+    for i in 0..header_indices.len() {
+        let chunk_start = header_indices[i];
+        let chunk_end = if i + 1 < header_indices.len() {
+            header_indices[i + 1]
+        } else {
+            diff.len()
+        };
+        let chunk = diff[chunk_start..chunk_end].trim_end();
+
+        let first_line = chunk.lines().next().unwrap_or("");
+        let file_name = if let Some(b_idx) = first_line.rfind(" b/") {
+            first_line[b_idx + 3..].trim_matches('"')
+        } else {
+            first_line.trim_start_matches("diff --git ")
+        };
+        result.push((file_name, chunk));
     }
 
     result
+}
+
+#[cfg(test)]
+pub fn split_diff_into_files(diff: &str) -> Vec<(String, String)> {
+    split_diff_into_file_slices(diff)
+        .into_iter()
+        .map(|(f, c)| (f.to_string(), c.to_string()))
+        .collect()
 }
 
 pub fn parse_side_by_side_diff(diff: &str) -> Vec<SideBySideRow> {

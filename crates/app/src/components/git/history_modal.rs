@@ -1,6 +1,6 @@
 use super::common::{render_error_banner, render_not_a_repo_view};
 use super::diff_view::{
-    render_diff_content, render_diff_view_toggle, split_diff_into_files, DiffViewMode,
+    render_diff_content, render_diff_view_toggle, split_diff_into_file_slices, DiffViewMode,
 };
 use crate::components::modal_dialog::{DialogHeader, DialogTitle, ModalDialog};
 use crate::services::GitService;
@@ -173,20 +173,23 @@ pub fn render_history_view(
         // Right Column: Commit Details & Collapsible File Diffs (Flex-1)
         .child({
             if let Some(commit_detail) = selected_commit {
-                let parsed_diffs = split_diff_into_files(&commit_detail.diff);
-                let mut diff_map: std::collections::HashMap<String, String> = parsed_diffs.into_iter().collect();
+                let mut file_names: Vec<String> = commit_detail.changed_files.clone();
+                if file_names.is_empty() && !commit_detail.diff.trim().is_empty() {
+                    let slices = split_diff_into_file_slices(&commit_detail.diff);
+                    if slices.is_empty() {
+                        file_names.push("Changes".to_string());
+                    } else {
+                        file_names = slices.into_iter().map(|(f, _)| f.to_string()).collect();
+                    }
+                }
 
-                let mut file_entries: Vec<(String, String)> = Vec::new();
-                for f in &commit_detail.changed_files {
-                    let diff = diff_map.remove(f).unwrap_or_default();
-                    file_entries.push((f.clone(), diff));
-                }
-                for (f, diff) in diff_map {
-                    file_entries.push((f, diff));
-                }
-                if file_entries.is_empty() && !commit_detail.diff.trim().is_empty() {
-                    file_entries.push(("Changes".to_string(), commit_detail.diff.clone()));
-                }
+                // High-performance lazy diff resolution:
+                // Only split unified diff chunks if at least ONE file is actually expanded!
+                let diff_slices: std::collections::HashMap<&str, &str> = if !expanded_files.is_empty() {
+                    split_diff_into_file_slices(&commit_detail.diff).into_iter().collect()
+                } else {
+                    std::collections::HashMap::new()
+                };
 
                 div()
                     .flex_1()
@@ -235,7 +238,7 @@ pub fn render_history_view(
                                     .child(format!("Commit: {}", commit_detail.commit.hash))
                                     .child(format!("Author: {} <{}>", commit_detail.commit.author_name, commit_detail.commit.author_email))
                                     .child(format!("Date: {}", commit_detail.commit.relative_date))
-                                    .child(format!("• {} file{}", file_entries.len(), if file_entries.len() == 1 { "" } else { "s" })),
+                                    .child(format!("• {} file{}", file_names.len(), if file_names.len() == 1 { "" } else { "s" })),
                             ),
                     )
                     .child(
@@ -248,7 +251,7 @@ pub fn render_history_view(
                             .flex()
                             .flex_col()
                             .gap(px(8.))
-                            .when(file_entries.is_empty(), |this| {
+                            .when(file_names.is_empty(), |this| {
                                 this.child(
                                     div()
                                         .py(px(24.))
@@ -258,12 +261,12 @@ pub fn render_history_view(
                                         .child("No file changes in this commit."),
                                 )
                             })
-                            .children(file_entries.into_iter().map(|(file_path, file_diff)| {
+                            .children(file_names.into_iter().map(|file_path| {
                                 let is_expanded = expanded_files.contains(&file_path);
                                 let git_toggle = git_clone.clone();
                                 let p = file_path.clone();
 
-                                div()
+                                let mut file_card = div()
                                     .id(format!("history-file-{}", file_path))
                                     .rounded(px(6.))
                                     .border_1()
@@ -304,20 +307,34 @@ pub fn render_history_view(
                                                         Icon::new(IconName::FileText)
                                                             .size(px(13.))
                                                             .text_color(t.text_secondary),
-                                                    )
+                                                        )
                                                     .child(
                                                         div()
                                                             .text_xs()
                                                             .font_family(".SystemMonoFont")
                                                             .font_weight(gpui_kit::FontWeight::MEDIUM)
                                                             .text_color(t.text_primary)
-                                                            .child(file_path),
+                                                            .child(file_path.clone()),
                                                     ),
                                             ),
-                                    )
-                                    .child(
+                                    );
+
+                                // High performance: only compute and attach diff DOM when the file is actually expanded!
+                                if is_expanded {
+                                    let file_diff = diff_slices
+                                        .get(file_path.as_str())
+                                        .copied()
+                                        .unwrap_or_else(|| {
+                                            if file_path == "Changes" {
+                                                commit_detail.diff.as_str()
+                                            } else {
+                                                ""
+                                            }
+                                        });
+
+                                    file_card = file_card.child(
                                         Collapsible::new()
-                                            .open(is_expanded)
+                                            .open(true)
                                             .content(
                                                 div()
                                                     .border_t_1()
@@ -332,10 +349,13 @@ pub fn render_history_view(
                                                             .child("No text changes (binary file or empty change).")
                                                             .into_any_element()
                                                     } else {
-                                                        render_diff_content(Some(file_diff), view_mode)
+                                                        render_diff_content(Some(file_diff.to_string()), view_mode)
                                                     }),
                                             ),
-                                    )
+                                    );
+                                }
+
+                                file_card
                             })),
                     )
                     .into_any_element()
