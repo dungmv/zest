@@ -59,7 +59,6 @@ pub fn render_sidebar_footer(
                 .py(px(2.))
                 .h(px(24.))
                 .rounded(px(4.))
-                .tooltip("Git Branch & Actions")
                 .child(
                     div()
                         .w_full()

@@ -172,6 +172,9 @@ impl RenderOnce for AppTitleBar {
 
         // Left section
         let left_section = div()
+            .id("titlebar-left-section")
+            .occlude()
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .flex()
             .items_center()
             .flex_shrink_0()
@@ -218,7 +221,6 @@ impl RenderOnce for AppTitleBar {
                 Button::new("btn-workspace-switcher")
                     .ghost()
                     .compact()
-                    .tooltip("Workspace Settings & Actions")
                     .px(px(8.))
                     .py(px(2.))
                     .h(px(26.))
@@ -374,7 +376,6 @@ impl RenderOnce for AppTitleBar {
                 Button::new("btn-env-breadcrumb")
                     .ghost()
                     .compact()
-                    .tooltip("Select Active Environment")
                     .px(px(8.))
                     .py(px(2.))
                     .h(px(26.))
@@ -588,6 +589,9 @@ impl RenderOnce for AppTitleBar {
 
         // Right toolbar buttons: split toggle, settings
         let right_toolbar = div()
+            .id("titlebar-right-toolbar")
+            .occlude()
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .flex()
             .items_center()
             .flex_shrink_0()
@@ -600,6 +604,8 @@ impl RenderOnce for AppTitleBar {
                 Button::new("btn-split-toggle")
                     .ghost()
                     .compact()
+                    .occlude()
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .w(px(28.))
                     .h(px(26.))
                     .tooltip(if is_vert {
@@ -622,9 +628,10 @@ impl RenderOnce for AppTitleBar {
                 Button::new("btn-settings")
                     .ghost()
                     .compact()
+                    .occlude()
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .w(px(28.))
                     .h(px(26.))
-                    .tooltip("Settings (⌘,)")
                     .on_click(move |_, _, cx| {
                         modal_s.update(cx, |state, cx| state.toggle_settings_modal(cx));
                     })
