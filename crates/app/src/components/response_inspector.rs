@@ -646,28 +646,26 @@ impl RenderOnce for ResponseInspector {
                                                     .child({
                                                         let rs_w = rs_wrap.clone();
                                                         let r_ed = resp_ed.clone();
-                                                        let wrap_tip = if wrap_lines { "Line Wrap: Enabled" } else { "Line Wrap: Disabled" };
-
-                                                        let btn = Button::new("btn-toggle-wrap")
-                                                            .xsmall()
-                                                            .icon(IconName::TextWrap)
-                                                            .tooltip(wrap_tip);
-
-                                                        let btn = if wrap_lines {
-                                                            btn.primary()
+                                                        let wrap_icon = if wrap_lines {
+                                                            Icon::new(IconName::TextWrap).text_color(t.primary)
                                                         } else {
-                                                            btn.ghost()
+                                                            Icon::new(IconName::TextWrap)
                                                         };
 
-                                                        btn.on_click(move |_, window, cx: &mut App| {
-                                                            rs_w.update(cx, |state, cx| {
-                                                                state.toggle_wrap_lines(cx);
-                                                            });
-                                                            let new_wrap = rs_w.read(cx).wrap_lines;
-                                                            r_ed.update(cx, |ed, cx| {
-                                                                ed.set_soft_wrap(new_wrap, window, cx);
-                                                            });
-                                                        })
+                                                        Button::new("btn-toggle-wrap")
+                                                            .ghost()
+                                                            .xsmall()
+                                                            .icon(wrap_icon)
+                                                            .tooltip("Toggle line wrap")
+                                                            .on_click(move |_, window, cx: &mut App| {
+                                                                rs_w.update(cx, |state, cx| {
+                                                                    state.toggle_wrap_lines(cx);
+                                                                });
+                                                                let new_wrap = rs_w.read(cx).wrap_lines;
+                                                                r_ed.update(cx, |ed, cx| {
+                                                                    ed.set_soft_wrap(new_wrap, window, cx);
+                                                                });
+                                                            })
                                                     })
                                                     // Copy Button
                                                     .child({
