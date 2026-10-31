@@ -1,5 +1,6 @@
-use super::drag_drop::{DragFolderItem, DragRequestItem};
+use super::drag_drop::{DragFolderItem, DragMultiItem, DragRequestItem};
 use super::git_status::SidebarGitStatus;
+use super::item_actions::delete_multi_selected_items;
 use super::{SidebarRenderContext, SIDEBAR_ROW_HEIGHT};
 use crate::app::actions::DismissModal;
 use crate::state::ScopeSettingsTarget;
@@ -31,15 +32,28 @@ pub fn render_folder_row(
     let f_id = folder_id.to_string();
     let is_renaming_folder = ctx.renaming_folder_id == Some(folder_id);
     let f_name_str = folder_name.to_string();
+    let is_folder_selected = ctx.selected_folders.contains(folder_id);
+    let is_in_multi_set = is_folder_selected && ctx.is_multi_select;
 
     let drag_folder_payload = DragFolderItem {
         id: f_id.clone(),
         name: f_name_str.clone(),
     };
+    let multi_drag_payload = if is_in_multi_set {
+        Some(DragMultiItem::new(
+            ctx.selected_requests.iter().cloned().collect(),
+            ctx.selected_folders.iter().cloned().collect(),
+        ))
+    } else {
+        None
+    };
+
     let ws_drop_req = ctx.ws.clone();
     let f_id_target_req = f_id.clone();
     let ws_drop_folder = ctx.ws.clone();
     let f_id_target_folder = f_id.clone();
+    let ws_drop_multi = ctx.ws.clone();
+    let f_id_target_multi = f_id.clone();
 
     let header = div()
         .id(format!("folder-header-{}", f_id))
@@ -50,45 +64,103 @@ pub fn render_folder_row(
         .justify_between()
         .px(px(6.))
         .rounded(px(4.))
+        .border_1()
+        .border_color(if is_folder_selected {
+            t.border
+        } else {
+            t.transparent
+        })
+        .bg(if is_folder_selected {
+            t.bg_selected
+        } else {
+            t.transparent
+        })
         .text_color(t.text_secondary)
         .text_xs()
         .cursor_pointer()
         .hover(|s| s.bg(t.bg_hover))
         .when(!is_renaming_folder, move |this| {
-            this.on_drag(drag_folder_payload, |item, _, _, cx| {
-                cx.new(|_| item.clone())
+            let this = if let Some(multi_payload) = multi_drag_payload {
+                this.on_drag(multi_payload, |item, _, _, cx| cx.new(|_| item.clone()))
+            } else {
+                this.on_drag(drag_folder_payload, |item, _, _, cx| {
+                    cx.new(|_| item.clone())
+                })
+            };
+            this.drag_over::<DragRequestItem>(|style, _, _, _| {
+                let t = theme();
+                style.bg(t.bg_hover).border_1().border_color(t.border_focus)
+            })
+            .on_drop(move |drag: &DragRequestItem, _, cx| {
+                ws_drop_req.update(cx, |state, cx| {
+                    state.move_request_to_folder(&drag.id, Some(f_id_target_req.clone()), cx);
+                });
+            })
+            .drag_over::<DragFolderItem>(|style, _, _, _| {
+                let t = theme();
+                style
+                    .bg(t.bg_hover)
+                    .border_t_2()
+                    .border_color(t.border_focus)
+            })
+            .on_drop(move |drag: &DragFolderItem, _, cx| {
+                ws_drop_folder.update(cx, |state, cx| {
+                    state.move_folder(&drag.id, Some(f_id_target_folder.clone()), cx);
+                });
+            })
+            .drag_over::<DragMultiItem>(|style, _, _, _| {
+                let t = theme();
+                style.bg(t.bg_hover).border_1().border_color(t.border_focus)
+            })
+            .on_drop(move |drag: &DragMultiItem, _, cx| {
+                let target_f_id = f_id_target_multi.clone();
+                ws_drop_multi.update(cx, |state, cx| {
+                    for req_id in &drag.request_ids {
+                        state.move_request_to_folder(req_id, Some(target_f_id.clone()), cx);
+                    }
+                    for fold_id in &drag.folder_ids {
+                        if fold_id != &target_f_id {
+                            state.move_folder(fold_id, Some(target_f_id.clone()), cx);
+                        }
+                    }
+                });
             })
         })
-        .drag_over::<DragRequestItem>(|style, _, _, _| {
-            let t = theme();
-            style.bg(t.bg_hover).border_1().border_color(t.border_focus)
-        })
-        .on_drop(move |drag: &DragRequestItem, _, cx| {
-            ws_drop_req.update(cx, |state, cx| {
-                state.move_request_to_folder(&drag.id, Some(f_id_target_req.clone()), cx);
-            });
-        })
-        .drag_over::<DragFolderItem>(|style, _, _, _| {
-            let t = theme();
-            style
-                .bg(t.bg_hover)
-                .border_t_2()
-                .border_color(t.border_focus)
-        })
-        .on_drop(move |drag: &DragFolderItem, _, cx| {
-            ws_drop_folder.update(cx, |state, cx| {
-                state.move_folder(&drag.id, Some(f_id_target_folder.clone()), cx);
-            });
+        .on_mouse_down(MouseButton::Right, {
+            let sb_right = ctx.sidebar.clone();
+            let f_id_right = f_id.clone();
+            move |_, _, cx| {
+                let is_already_selected = sb_right.read(cx).is_folder_selected(&f_id_right);
+                let has_multi = sb_right.read(cx).is_multi_selected();
+                if has_multi && is_already_selected {
+                    // Keep multi-selection intact
+                } else {
+                    sb_right.update(cx, |state, cx| {
+                        state.select_single_folder(&f_id_right, cx);
+                    });
+                }
+            }
         })
         .on_click({
             let sb_f_click = ctx.sidebar.clone();
             let ws_f_click = ctx.ws.clone();
+            let ed_f_click = ctx.ed.clone();
             let f_id_click = f_id.clone();
             let f_name_click = f_name_str.clone();
             move |ev, window, cx| {
                 if is_renaming_folder {
                     return;
                 }
+                let mods = window.modifiers();
+                let is_ctrl_or_cmd = mods.control || mods.platform;
+                if is_ctrl_or_cmd {
+                    let current_active = ed_f_click.read(cx).active_request_id.clone();
+                    sb_f_click.update(cx, |state, cx| {
+                        state.toggle_select_folder(&f_id_click, current_active.as_deref(), cx);
+                    });
+                    return;
+                }
+
                 if ev.click_count() > 1 {
                     let ws_c = ws_f_click.clone();
                     sb_f_click.update(cx, |state, cx| {
@@ -102,6 +174,7 @@ pub fn render_folder_row(
                     });
                 } else {
                     sb_f_click.update(cx, |state, cx| {
+                        state.clear_selection(cx);
                         state.toggle_folder_collapsed(&f_id_click, cx);
                     });
                 }
@@ -127,7 +200,26 @@ pub fn render_folder_row(
             let modal_settings = ctx.modal.clone();
             let f_id_settings = f_id.clone();
 
-            move |menu, _window, _cx| {
+            let sb_menu = ctx.sidebar.clone();
+            let ed_menu = ctx.ed.clone();
+            let f_id_menu = f_id.clone();
+
+            move |menu, _window, cx| {
+                let is_in_multi = sb_menu.read(cx).is_multi_selected()
+                    && sb_menu.read(cx).is_folder_selected(&f_id_menu);
+
+                if is_in_multi {
+                    let ws_d = ws_del.clone();
+                    let ed_d = ed_menu.clone();
+                    let sb_d = sb_menu.clone();
+                    return menu.item(
+                        gpui_kit::component::menu::PopupMenuItem::new("Delete")
+                            .icon(IconName::Trash)
+                            .on_click(move |_, _, cx| {
+                                delete_multi_selected_items(&ws_d, &ed_d, &sb_d, cx);
+                            }),
+                    );
+                }
                 let ws_n = ws_new.clone();
                 let ed_n = ed_new.clone();
                 let f_id_n = f_id_new.clone();

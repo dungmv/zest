@@ -31,6 +31,8 @@ pub struct SidebarState {
     pub ui_version: usize,
     pub scroll_handle: UniformListScrollHandle,
     pub flat_cache: RefCell<SidebarFlatCache>,
+    pub selected_requests: HashSet<String>,
+    pub selected_folders: HashSet<String>,
 }
 
 impl Default for SidebarState {
@@ -51,6 +53,8 @@ impl Default for SidebarState {
             ui_version: 0,
             scroll_handle: UniformListScrollHandle::new(),
             flat_cache: RefCell::new(SidebarFlatCache::default()),
+            selected_requests: HashSet::new(),
+            selected_folders: HashSet::new(),
         }
     }
 }
@@ -78,6 +82,101 @@ impl SidebarState {
             self.sidebar_width = width;
             cx.notify();
         }
+    }
+
+    pub fn is_request_selected(&self, id: &str) -> bool {
+        self.selected_requests.contains(id)
+    }
+
+    pub fn is_folder_selected(&self, id: &str) -> bool {
+        self.selected_folders.contains(id)
+    }
+
+    pub fn selected_count(&self) -> usize {
+        self.selected_requests.len() + self.selected_folders.len()
+    }
+
+    pub fn is_multi_selected(&self) -> bool {
+        self.selected_count() > 1
+    }
+
+    pub fn clear_selection(&mut self, cx: &mut Context<Self>) {
+        if !self.selected_requests.is_empty() || !self.selected_folders.is_empty() {
+            self.selected_requests.clear();
+            self.selected_folders.clear();
+            self.ui_version = self.ui_version.wrapping_add(1);
+            cx.notify();
+        }
+    }
+
+    pub fn select_single_request(&mut self, req_id: &str, cx: &mut Context<Self>) {
+        let changed = self.selected_requests.len() != 1
+            || !self.selected_requests.contains(req_id)
+            || !self.selected_folders.is_empty();
+        if changed {
+            self.selected_folders.clear();
+            self.selected_requests.clear();
+            self.selected_requests.insert(req_id.to_string());
+            self.ui_version = self.ui_version.wrapping_add(1);
+            cx.notify();
+        }
+    }
+
+    pub fn select_single_folder(&mut self, folder_id: &str, cx: &mut Context<Self>) {
+        let changed = self.selected_folders.len() != 1
+            || !self.selected_folders.contains(folder_id)
+            || !self.selected_requests.is_empty();
+        if changed {
+            self.selected_requests.clear();
+            self.selected_folders.clear();
+            self.selected_folders.insert(folder_id.to_string());
+            self.ui_version = self.ui_version.wrapping_add(1);
+            cx.notify();
+        }
+    }
+
+    pub fn toggle_select_request(
+        &mut self,
+        req_id: &str,
+        active_req_id: Option<&str>,
+        cx: &mut Context<Self>,
+    ) {
+        if self.selected_requests.is_empty() && self.selected_folders.is_empty() {
+            if let Some(active) = active_req_id {
+                if active != "scratch" && active != req_id {
+                    self.selected_requests.insert(active.to_string());
+                }
+            }
+        }
+        if self.selected_requests.contains(req_id) {
+            self.selected_requests.remove(req_id);
+        } else {
+            self.selected_requests.insert(req_id.to_string());
+        }
+        self.ui_version = self.ui_version.wrapping_add(1);
+        cx.notify();
+    }
+
+    pub fn toggle_select_folder(
+        &mut self,
+        folder_id: &str,
+        active_req_id: Option<&str>,
+        cx: &mut Context<Self>,
+    ) {
+        if self.selected_requests.is_empty() && self.selected_folders.is_empty() {
+            if let Some(active) = active_req_id {
+                if active != "scratch" {
+                    self.selected_requests.insert(active.to_string());
+                }
+            }
+        }
+        if self.selected_folders.contains(folder_id) {
+            self.selected_folders.remove(folder_id);
+        } else {
+            self.selected_folders.insert(folder_id.to_string());
+        }
+        self.ui_version = self.ui_version.wrapping_add(1);
+        cx.notify();
     }
 
     pub fn toggle_folder_collapsed(&mut self, folder_id: &str, cx: &mut Context<Self>) {

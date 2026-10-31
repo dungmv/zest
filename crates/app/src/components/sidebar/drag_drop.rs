@@ -96,3 +96,53 @@ impl Render for DragFolderItem {
             )
     }
 }
+
+#[derive(Clone, Debug)]
+pub struct DragMultiItem {
+    pub request_ids: Vec<String>,
+    pub folder_ids: Vec<String>,
+}
+
+impl DragMultiItem {
+    pub fn new(request_ids: Vec<String>, folder_ids: Vec<String>) -> Self {
+        Self {
+            request_ids,
+            folder_ids,
+        }
+    }
+
+    pub fn total_count(&self) -> usize {
+        self.request_ids.len() + self.folder_ids.len()
+    }
+}
+
+impl Render for DragMultiItem {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        let t = theme();
+        let total = self.total_count();
+        div()
+            .px(px(8.))
+            .py(px(4.))
+            .rounded(px(6.))
+            .bg(t.bg_card)
+            .border_1()
+            .border_color(t.border_focus)
+            .shadow_md()
+            .flex()
+            .items_center()
+            .gap(px(6.))
+            .child(
+                Icon::new(IconName::Folder)
+                    .size(px(14.))
+                    .text_color(t.text_secondary),
+            )
+            .child(
+                div()
+                    .text_xs()
+                    .font_family(".SystemMonoFont")
+                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
+                    .text_color(t.text_primary)
+                    .child(format!("{} items", total)),
+            )
+    }
+}

@@ -1,6 +1,6 @@
-use super::drag_drop::DragRequestItem;
+use super::drag_drop::{DragFolderItem, DragMultiItem, DragRequestItem};
 use super::git_status::SidebarGitStatus;
-use super::item_actions::delete_request_item;
+use super::item_actions::{delete_multi_selected_items, delete_request_item};
 use super::{SidebarRenderContext, SIDEBAR_ROW_HEIGHT};
 use crate::app::actions::DismissModal;
 use crate::components::{MethodBadge, StatusCodeBadge};
@@ -46,7 +46,12 @@ pub fn render_request_inner_pill(
     let t = theme();
     let is_req_active = ctx.active_req_id == Some(req.id.as_str());
     let is_viewing_example = is_req_active && ctx.active_example_name.is_some();
-    let is_selected = is_req_active && !is_viewing_example;
+    let is_in_selected_set = ctx.selected_requests.contains(&req.id);
+    let is_selected = is_in_selected_set
+        || (ctx.selected_requests.is_empty()
+            && ctx.selected_folders.is_empty()
+            && is_req_active
+            && !is_viewing_example);
     let is_renaming = ctx.renaming_req_id == Some(req.id.as_str()) && id_prefix == "req-item";
     let has_examples = !req.examples.is_empty() && id_prefix == "req-item";
 
@@ -57,6 +62,7 @@ pub fn render_request_inner_pill(
     let ed_right = ctx.ed.clone();
     let ws_click = ctx.ws.clone();
     let sb_click = ctx.sidebar.clone();
+    let sb_right = ctx.sidebar.clone();
     let resp_click = ctx.resp.clone();
 
     let initial_name = req.display_name.clone();
@@ -68,8 +74,21 @@ pub fn render_request_inner_pill(
         name: initial_name.clone(),
         method: req.method,
     };
+    let multi_drag_payload = if is_in_selected_set && ctx.is_multi_select {
+        Some(DragMultiItem::new(
+            ctx.selected_requests.iter().cloned().collect(),
+            ctx.selected_folders.iter().cloned().collect(),
+        ))
+    } else {
+        None
+    };
+
     let ws_req_drop = ctx.ws.clone();
+    let ws_req_drop_folder = ctx.ws.clone();
+    let ws_req_drop_multi = ctx.ws.clone();
     let target_req_id = req.id.clone();
+    let target_req_folder_drop = req.folder_id.clone();
+    let target_req_folder_multi = req.folder_id.clone();
     let is_pinned_row = id_prefix != "req-item";
 
     let req_name_color = match req_git_status {
@@ -99,26 +118,74 @@ pub fn render_request_inner_pill(
         .items_center()
         .justify_between()
         .when(!is_renaming && !is_pinned_row, move |this| {
-            this.on_drag(drag_req_payload, |item, _, _, cx| cx.new(|_| item.clone()))
-                .drag_over::<DragRequestItem>(|style, _, _, _| {
-                    let t = theme();
-                    style.bg(t.bg_hover).border_color(t.border_focus)
-                })
-                .on_drop(move |drag: &DragRequestItem, _, cx| {
-                    ws_req_drop.update(cx, |state, cx| {
-                        state.move_request(&drag.id, &target_req_id, cx);
-                    });
-                })
+            let this = if let Some(multi_payload) = multi_drag_payload {
+                this.on_drag(multi_payload, |item, _, _, cx| cx.new(|_| item.clone()))
+            } else {
+                this.on_drag(drag_req_payload, |item, _, _, cx| cx.new(|_| item.clone()))
+            };
+            this.drag_over::<DragRequestItem>(|style, _, _, _| {
+                let t = theme();
+                style.bg(t.bg_hover).border_color(t.border_focus)
+            })
+            .on_drop(move |drag: &DragRequestItem, _, cx| {
+                ws_req_drop.update(cx, |state, cx| {
+                    state.move_request(&drag.id, &target_req_id, cx);
+                });
+            })
+            .drag_over::<DragFolderItem>(|style, _, _, _| {
+                let t = theme();
+                style.bg(t.bg_hover).border_color(t.border_focus)
+            })
+            .on_drop(move |drag: &DragFolderItem, _, cx| {
+                let target_folder = target_req_folder_drop.clone();
+                ws_req_drop_folder.update(cx, |state, cx| {
+                    state.move_folder(&drag.id, target_folder, cx);
+                });
+            })
+            .drag_over::<DragMultiItem>(|style, _, _, _| {
+                let t = theme();
+                style.bg(t.bg_hover).border_color(t.border_focus)
+            })
+            .on_drop(move |drag: &DragMultiItem, _, cx| {
+                let target_folder = target_req_folder_multi.clone();
+                ws_req_drop_multi.update(cx, |state, cx| {
+                    for req_id in &drag.request_ids {
+                        state.move_request_to_folder(req_id, target_folder.clone(), cx);
+                    }
+                    for fold_id in &drag.folder_ids {
+                        state.move_folder(fold_id, target_folder.clone(), cx);
+                    }
+                });
+            })
         })
         .on_mouse_down(MouseButton::Right, move |_, _, cx| {
-            ed_right.update(cx, |state, cx| {
-                state.set_active_request_id(&r_id_right, cx);
-            });
+            let is_already_selected = sb_right.read(cx).is_request_selected(&r_id_right);
+            let has_multi = sb_right.read(cx).is_multi_selected();
+            if has_multi && is_already_selected {
+                // Keep multi-selection intact
+            } else {
+                sb_right.update(cx, |state, cx| {
+                    state.select_single_request(&r_id_right, cx);
+                });
+                ed_right.update(cx, |state, cx| {
+                    state.set_active_request_id(&r_id_right, cx);
+                });
+            }
         })
         .on_click(move |ev, window, cx| {
             if is_renaming {
                 return;
             }
+            let mods = window.modifiers();
+            let is_ctrl_or_cmd = mods.control || mods.platform;
+            if is_ctrl_or_cmd {
+                let current_active = ed_s.read(cx).active_request_id.clone();
+                sb_click.update(cx, |state, cx| {
+                    state.toggle_select_request(&r_id_click, current_active.as_deref(), cx);
+                });
+                return;
+            }
+
             if ev.click_count() > 1 {
                 let r_id = r_id_click.clone();
                 let init_name = initial_name_click.clone();
@@ -131,7 +198,8 @@ pub fn render_request_inner_pill(
                 });
             } else {
                 let r_id = r_id_click.clone();
-                sb_click.update(cx, |state, _cx| {
+                sb_click.update(cx, |state, cx| {
+                    state.select_single_request(&r_id, cx);
                     state.record_navigation(&r_id);
                 });
                 ed_s.update(cx, |state, cx| {
@@ -155,7 +223,20 @@ pub fn render_request_inner_pill(
             let is_pinned = ctx.pins.contains(&r_id_menu);
             let is_dirty_git = req_git_status != SidebarGitStatus::Clean;
 
-            move |menu, _window, _cx| {
+            move |menu, _window, cx| {
+                let is_in_multi = sb_menu.read(cx).is_multi_selected()
+                    && sb_menu.read(cx).is_request_selected(&r_id_menu);
+
+                if is_in_multi {
+                    let ws_del = ws_menu.clone();
+                    let ed_del = ed_menu.clone();
+                    let sb_del = sb_menu.clone();
+                    return menu.item(PopupMenuItem::new("Delete").icon(IconName::Trash).on_click(
+                        move |_, _, cx| {
+                            delete_multi_selected_items(&ws_del, &ed_del, &sb_del, cx);
+                        },
+                    ));
+                }
                 let ws_r = ws_menu.clone();
                 let sb_r = sb_menu.clone();
                 let r_id_r = r_id_menu.clone();

@@ -35,7 +35,7 @@ use gpui_kit::{
     IntoElement, ListSizingBehavior, ParentElement, RenderOnce, StatefulInteractiveElement as _,
     Styled, Window,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub struct SidebarRenderContext<'a> {
     pub active_req_id: Option<&'a str>,
@@ -56,6 +56,9 @@ pub struct SidebarRenderContext<'a> {
     pub ed: &'a Entity<RequestSessionState>,
     pub resp: &'a Entity<ResponseState>,
     pub toast: &'a Entity<ToastState>,
+    pub is_multi_select: bool,
+    pub selected_requests: &'a HashSet<String>,
+    pub selected_folders: &'a HashSet<String>,
 }
 
 fn render_flat_sidebar_row(row: &FlatSidebarRow, ctx: &SidebarRenderContext) -> AnyElement {
@@ -223,6 +226,7 @@ fn render_flat_sidebar_row(row: &FlatSidebarRow, ctx: &SidebarRenderContext) -> 
         FlatSidebarRow::RootDropzone => {
             let ws_root = ctx.ws.clone();
             let ws_root_folder = ctx.ws.clone();
+            let ws_root_multi = ctx.ws.clone();
             div()
                 .id("sidebar-root-dropzone")
                 .w_full()
@@ -246,6 +250,20 @@ fn render_flat_sidebar_row(row: &FlatSidebarRow, ctx: &SidebarRenderContext) -> 
                 .on_drop(move |drag: &DragFolderItem, _, cx| {
                     ws_root_folder.update(cx, |state, cx| {
                         state.move_folder(&drag.id, None, cx);
+                    });
+                })
+                .drag_over::<DragMultiItem>(|style, _, _, _| {
+                    let t = theme();
+                    style.bg(t.bg_hover).border_1().border_color(t.border_focus)
+                })
+                .on_drop(move |drag: &DragMultiItem, _, cx| {
+                    ws_root_multi.update(cx, |state, cx| {
+                        for req_id in &drag.request_ids {
+                            state.move_request_to_folder(req_id, None, cx);
+                        }
+                        for fold_id in &drag.folder_ids {
+                            state.move_folder(fold_id, None, cx);
+                        }
                     });
                 })
                 .into_any_element()
@@ -547,6 +565,9 @@ impl RenderOnce for SidebarTree {
                                         ed: &ed_clone,
                                         resp: &resp_clone,
                                         toast: &toast_clone,
+                                        is_multi_select: sb_ref.is_multi_selected(),
+                                        selected_requests: &sb_ref.selected_requests,
+                                        selected_folders: &sb_ref.selected_folders,
                                     };
 
                                     let mut elements = Vec::with_capacity(visible_range.len());
