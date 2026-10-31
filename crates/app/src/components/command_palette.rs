@@ -1,34 +1,20 @@
 use crate::components::status_badge::MethodBadge;
 use crate::state::{
-    EnvironmentState, GitActiveModal, GitState, GitTab, ModalState, PersistenceState,
-    RequestSessionState, SettingsTab, SidebarState, WorkspaceDataState,
+    EnvironmentState, ModalState, PersistenceState, RequestSessionState, SidebarState,
+    WorkspaceDataState,
 };
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::kbd::Kbd;
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::separator::Separator;
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, Keystroke,
-    ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled, Window,
+    div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
+    RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
 
-fn render_kbd_hint(keybinding: &'static str) -> impl IntoElement {
-    if let Ok(stroke) = Keystroke::parse(keybinding) {
-        Kbd::new(stroke).into_any_element()
-    } else {
-        div()
-            .text_xs()
-            .text_color(theme().text_muted)
-            .child(keybinding.to_string())
-            .into_any_element()
-    }
-}
-
-#[allow(clippy::type_complexity)]
 #[derive(IntoElement)]
 pub struct CommandPalette {
     workspace_state: Entity<WorkspaceDataState>,
@@ -36,22 +22,17 @@ pub struct CommandPalette {
     persistence_state: Entity<PersistenceState>,
     modal_state: Entity<ModalState>,
     sidebar_state: Entity<SidebarState>,
-    git_state: Entity<GitState>,
     editor_state: Entity<RequestSessionState>,
-    on_send: std::rc::Rc<dyn Fn(&mut Window, &mut App)>,
 }
 
 impl CommandPalette {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         workspace_state: Entity<WorkspaceDataState>,
         env_state: Entity<EnvironmentState>,
         persistence_state: Entity<PersistenceState>,
         modal_state: Entity<ModalState>,
         sidebar_state: Entity<SidebarState>,
-        git_state: Entity<GitState>,
         editor_state: Entity<RequestSessionState>,
-        on_send: impl Fn(&mut Window, &mut App) + 'static,
     ) -> Self {
         Self {
             workspace_state,
@@ -59,9 +40,7 @@ impl CommandPalette {
             persistence_state,
             modal_state,
             sidebar_state,
-            git_state,
             editor_state,
-            on_send: std::rc::Rc::new(on_send),
         }
     }
 }
@@ -73,17 +52,14 @@ impl RenderOnce for CommandPalette {
         let env_clone = self.env_state.clone();
         let modal_clone = self.modal_state.clone();
         let sb_clone = self.sidebar_state.clone();
-        let git_clone = self.git_state.clone();
         let ed_clone = self.editor_state.clone();
-        let on_send = self.on_send.clone();
 
         let cmd_holder = window.use_keyed_state(
             gpui_kit::SharedString::from("cmd-palette-search-holder"),
             cx,
             |window, cx| {
                 let inp = cx.new(|cx| {
-                    InputState::new(window, cx)
-                        .placeholder("Type a command, request, or environment...")
+                    InputState::new(window, cx).placeholder("Search requests or environments...")
                 });
                 let sub = cx.subscribe_in(&inp, window, move |_, _, event, _, cx| {
                     if let InputEvent::Change = event {
@@ -95,6 +71,7 @@ impl RenderOnce for CommandPalette {
         );
 
         let search_input = cmd_holder.read(cx).0.clone();
+        search_input.update(cx, |s, cx| s.focus(window, cx));
         let q = search_input.read(cx).value().to_lowercase();
 
         let (matched_requests, envs) = {
@@ -110,27 +87,72 @@ impl RenderOnce for CommandPalette {
                 .map(|(i, id)| (id.as_str(), i))
                 .collect();
 
-            let mut filtered: Vec<(usize, String, String, zest_core::models::HttpMethod)> = ws
+            let mut filtered: Vec<(
+                usize,
+                String,
+                String,
+                String,
+                String,
+                zest_core::models::HttpMethod,
+            )> = ws
                 .requests
                 .iter()
-                .filter(|r| {
-                    q.is_empty()
-                        || r.name.to_lowercase().contains(&q)
-                        || r.url.to_lowercase().contains(&q)
-                })
-                .map(|r| {
+                .filter_map(|r| {
+                    let mut curr_fid = r.folder_id.clone();
+                    let mut folder_names = Vec::new();
+                    while let Some(fid) = curr_fid {
+                        if let Some(f) = ws.folders.iter().find(|f| f.id == fid) {
+                            folder_names.push(f.name.clone());
+                            curr_fid = f.parent_id.clone();
+                        } else {
+                            break;
+                        }
+                    }
+                    folder_names.reverse();
+                    let folder_path = folder_names.join(" / ");
+                    let req_name = crate::state::effective_request_name(r);
+                    let full_path = if folder_path.is_empty() {
+                        req_name.clone()
+                    } else {
+                        format!("{} / {}", folder_path, req_name)
+                    };
+
+                    let matches = q.is_empty()
+                        || full_path.to_lowercase().contains(&q)
+                        || r.url.to_lowercase().contains(&q);
+
+                    if !matches {
+                        return None;
+                    }
+
                     let rank = recent_index
                         .get(r.id.as_str())
                         .copied()
                         .unwrap_or(recent_len + 100);
-                    (rank, r.id.clone(), r.name.clone(), r.method)
+                    Some((
+                        rank,
+                        r.id.clone(),
+                        req_name,
+                        full_path,
+                        folder_path,
+                        r.method,
+                    ))
                 })
                 .collect();
-            filtered.sort_by_key(|(rank, _, _, _)| *rank);
+            filtered.sort_by_key(|(rank, _, _, _, _, _)| *rank);
             filtered.truncate(50);
 
             (filtered, env.environments.clone())
         };
+
+        let filtered_envs: Vec<_> = envs
+            .into_iter()
+            .filter(|e| q.is_empty() || e.name.to_lowercase().contains(&q))
+            .collect();
+
+        let has_matched_requests = !matched_requests.is_empty();
+        let has_filtered_envs = !filtered_envs.is_empty();
+        let is_empty = !has_matched_requests && !has_filtered_envs;
 
         div()
             .id("cmd-palette-overlay")
@@ -152,10 +174,15 @@ impl RenderOnce for CommandPalette {
             .on_key_down({
                 let modal_s = modal_clone.clone();
                 move |event, _, cx| {
-                    if event.keystroke.key.as_str() == "escape" {
+                    let is_escape = event.keystroke.key.as_str() == "escape";
+                    let is_ctrl_or_cmd_k = (event.keystroke.modifiers.control
+                        || event.keystroke.modifiers.platform)
+                        && event.keystroke.key.eq_ignore_ascii_case("k");
+                    if is_escape || is_ctrl_or_cmd_k {
                         modal_s.update(cx, |state, cx| {
                             state.close_command_palette(cx);
                         });
+                        cx.stop_propagation();
                     }
                 }
             })
@@ -175,10 +202,15 @@ impl RenderOnce for CommandPalette {
                     .on_key_down({
                         let modal_s = modal_clone.clone();
                         move |event, _, cx| {
-                            if event.keystroke.key.as_str() == "escape" {
+                            let is_escape = event.keystroke.key.as_str() == "escape";
+                            let is_ctrl_or_cmd_k = (event.keystroke.modifiers.control
+                                || event.keystroke.modifiers.platform)
+                                && event.keystroke.key.eq_ignore_ascii_case("k");
+                            if is_escape || is_ctrl_or_cmd_k {
                                 modal_s.update(cx, |state, cx| {
                                     state.close_command_palette(cx);
                                 });
+                                cx.stop_propagation();
                             }
                         }
                     })
@@ -199,10 +231,18 @@ impl RenderOnce for CommandPalette {
                                     .on_key_down({
                                         let modal_s = modal_clone.clone();
                                         move |event, _, cx| {
-                                            if event.keystroke.key.as_str() == "escape" {
+                                            let is_escape = event.keystroke.key.as_str() == "escape";
+                                            let is_ctrl_or_cmd_k = (event
+                                                .keystroke
+                                                .modifiers
+                                                .control
+                                                || event.keystroke.modifiers.platform)
+                                                && event.keystroke.key.eq_ignore_ascii_case("k");
+                                            if is_escape || is_ctrl_or_cmd_k {
                                                 modal_s.update(cx, |state, cx| {
                                                     state.close_command_palette(cx);
                                                 });
+                                                cx.stop_propagation();
                                             }
                                         }
                                     })
@@ -222,15 +262,24 @@ impl RenderOnce for CommandPalette {
                                 div()
                                     .id("close-cmd-pal")
                                     .cursor_pointer()
+                                    .px(px(4.))
+                                    .py(px(1.))
+                                    .rounded(px(3.))
+                                    .bg(t.bg_input)
+                                    .border_1()
+                                    .border_color(t.border)
+                                    .text_color(t.text_muted)
+                                    .font_family(".SystemMonoFont")
+                                    .text_size(px(10.))
                                     .on_click(move |_, _, cx| {
                                         modal_s.update(cx, |state, cx| {
                                             state.close_command_palette(cx);
                                         });
                                     })
-                                    .child(render_kbd_hint("escape"))
+                                    .child("Esc")
                             }),
                     )
-                    // Actions & Items List
+                    // Items List: Switch Request & Switch Environment
                     .child(
                         div()
                             .flex_1()
@@ -239,296 +288,132 @@ impl RenderOnce for CommandPalette {
                             .flex()
                             .flex_col()
                             .gap(px(4.))
-                            // Action: Send active request
-                            .child({
-                                let modal_s = modal_clone.clone();
-                                let on_send_cb = on_send.clone();
-                                div()
-                                    .id("cmd-send-req")
-                                    .px(px(8.))
-                                    .py(px(6.))
-                                    .rounded(px(4.))
-                                    .hover(|s| s.bg(t.bg_hover))
-                                    .cursor_pointer()
-                                    .flex()
-                                    .items_center()
-                                    .justify_between()
-                                    .on_click(move |_, window, cx| {
-                                        modal_s.update(cx, |state, cx| {
-                                            state.close_command_palette(cx);
-                                        });
-                                        on_send_cb(window, cx);
-                                    })
-                                    .child(
+                            .when(
+                                is_empty,
+                                |this| {
+                                    this.child(
                                         div()
+                                            .px(px(12.))
+                                            .py(px(16.))
+                                            .text_center()
+                                            .text_xs()
+                                            .text_color(t.text_muted)
+                                            .child("No matching requests or environments found."),
+                                    )
+                                },
+                            )
+                            // List Requests
+                            .when(has_matched_requests, |this| {
+                                this.child(
+                                    div()
+                                        .px(px(8.))
+                                        .pt(px(2.))
+                                        .text_xs()
+                                        .font_weight(gpui_kit::FontWeight::BOLD)
+                                        .text_color(t.text_muted)
+                                        .child("SWITCH REQUEST"),
+                                )
+                                .children(matched_requests.into_iter().map(
+                                    |(_, req_id, req_name, full_path, folder_path, req_method)| {
+                                        let modal_s = modal_clone.clone();
+                                        let sb_s = sb_clone.clone();
+                                        let ed_s = ed_clone.clone();
+                                        let r_id = req_id.clone();
+
+                                        div()
+                                            .id(format!("cmd-req-{}", req_id))
+                                            .px(px(8.))
+                                            .py(px(6.))
+                                            .rounded(px(4.))
+                                            .hover(|s| s.bg(t.bg_hover))
+                                            .cursor_pointer()
                                             .flex()
                                             .items_center()
+                                            .justify_between()
                                             .gap(px(8.))
-                                            .child(Icon::new(IconName::Send).size(px(14.)))
+                                            .on_click(move |_, _, cx| {
+                                                sb_s.update(cx, |state, _cx| {
+                                                    state.record_navigation(&r_id);
+                                                });
+                                                modal_s.update(cx, |state, cx| {
+                                                    state.close_command_palette(cx);
+                                                });
+                                                ed_s.update(cx, |state, cx| {
+                                                    state.set_active_request_id(&r_id, cx);
+                                                });
+                                            })
                                             .child(
                                                 div()
-                                                    .text_sm()
-                                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                                                    .text_color(t.text_primary)
-                                                    .child("Send Active Request"),
-                                            ),
-                                    )
-                                    .child(render_kbd_hint("cmd-enter"))
+                                                    .flex()
+                                                    .items_center()
+                                                    .gap(px(8.))
+                                                    .min_w(px(0.))
+                                                    .flex_1()
+                                                    .overflow_hidden()
+                                                    .child(MethodBadge::new(req_method))
+                                                    .child(
+                                                        div()
+                                                            .text_sm()
+                                                            .font_family(".SystemMonoFont")
+                                                            .truncate()
+                                                            .child(if folder_path.is_empty() {
+                                                                div()
+                                                                    .text_color(t.text_primary)
+                                                                    .child(full_path)
+                                                                    .into_any_element()
+                                                            } else {
+                                                                div()
+                                                                    .flex()
+                                                                    .items_center()
+                                                                    .gap(px(4.))
+                                                                    .child(
+                                                                        div()
+                                                                            .text_color(
+                                                                                t.text_muted,
+                                                                            )
+                                                                            .child(format!(
+                                                                                "{} /",
+                                                                                folder_path
+                                                                            )),
+                                                                    )
+                                                                    .child(
+                                                                        div()
+                                                                            .text_color(
+                                                                                t.text_primary,
+                                                                            )
+                                                                            .font_weight(
+                                                                                gpui_kit::FontWeight::MEDIUM,
+                                                                            )
+                                                                            .child(req_name),
+                                                                    )
+                                                                    .into_any_element()
+                                                            }),
+                                                    ),
+                                            )
+                                    },
+                                ))
                             })
-                            // Action: Open Settings
-                            .when(q.is_empty() || "settings".contains(&q) || "preferences".contains(&q), |this| {
-                                let modal_s = modal_clone.clone();
-                                this.child(
+                            // Switch Environment
+                            .when(has_filtered_envs, |this| {
+                                this.when(has_matched_requests, |this| {
+                                    this.child(Separator::horizontal().my(px(4.)))
+                                })
+                                .child(
                                     div()
-                                        .id("cmd-open-settings")
                                         .px(px(8.))
-                                        .py(px(6.))
-                                        .rounded(px(4.))
-                                        .hover(|s| s.bg(t.bg_hover))
-                                        .cursor_pointer()
-                                        .flex()
-                                        .items_center()
-                                        .justify_between()
-                                        .on_click(move |_, _, cx| {
-                                            modal_s.update(cx, |state, cx| {
-                                                state.close_command_palette(cx);
-                                                state.open_settings_modal(cx);
-                                            });
-                                        })
-                                        .child(
-                                            div()
-                                                .flex()
-                                                .items_center()
-                                                .gap(px(8.))
-                                                .child(Icon::new(IconName::Settings).size(px(14.)))
-                                                .child(
-                                                    div()
-                                                        .text_sm()
-                                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                                                        .text_color(t.text_primary)
-                                                        .child("Open Settings"),
-                                                ),
-                                        )
-                                        .child(render_kbd_hint("cmd-,"))
+                                        .pt(px(2.))
+                                        .text_xs()
+                                        .font_weight(gpui_kit::FontWeight::BOLD)
+                                        .text_color(t.text_muted)
+                                        .child("SWITCH ENVIRONMENT"),
                                 )
-                            })
-                            // Action: Manage Cookies (Settings -> Cookies tab)
-                            .when(q.is_empty() || "cookies".contains(&q) || "cookie jar".contains(&q) || "session".contains(&q), |this| {
-                                let modal_s = modal_clone.clone();
-                                this.child(
-                                    div()
-                                        .id("cmd-open-cookies")
-                                        .px(px(8.))
-                                        .py(px(6.))
-                                        .rounded(px(4.))
-                                        .hover(|s| s.bg(t.bg_hover))
-                                        .cursor_pointer()
-                                        .flex()
-                                        .items_center()
-                                        .justify_between()
-                                        .on_click(move |_, _, cx| {
-                                            modal_s.update(cx, |state, cx| {
-                                                state.close_command_palette(cx);
-                                                state.open_settings_tab(SettingsTab::Cookies, cx);
-                                            });
-                                        })
-                                        .child(
-                                            div()
-                                                .flex()
-                                                .items_center()
-                                                .gap(px(8.))
-                                                .child(Icon::new(IconName::Cookie).size(px(14.)))
-                                                .child(
-                                                    div()
-                                                        .text_sm()
-                                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                                                        .text_color(t.text_primary)
-                                                        .child("Settings: Manage Cookies"),
-                                                ),
-                                        )
-                                        .child(div().text_xs().text_color(t.text_muted).child("Settings"))
-                                )
-                            })
-                            // Action: Git Source Control
-                            .when(q.is_empty() || "git".contains(&q) || "source control".contains(&q) || "commit".contains(&q) || "diff".contains(&q), |this| {
-                                let modal_s = modal_clone.clone();
-                                let git_s = git_clone.clone();
-                                this.child(
-                                    div()
-                                        .id("cmd-open-git")
-                                        .px(px(8.))
-                                        .py(px(6.))
-                                        .rounded(px(4.))
-                                        .hover(|s| s.bg(t.bg_hover))
-                                        .cursor_pointer()
-                                        .flex()
-                                        .items_center()
-                                        .justify_between()
-                                        .on_click(move |_, _, cx| {
-                                            modal_s.update(cx, |state, cx| {
-                                                state.close_command_palette(cx);
-                                            });
-                                            git_s.update(cx, |state, cx| {
-                                                state.set_tab(GitTab::Changes, cx);
-                                                state.open_modal(GitActiveModal::Commit, cx);
-                                            });
-                                        })
-                                        .child(
-                                            div()
-                                                .flex()
-                                                .items_center()
-                                                .gap(px(8.))
-                                                .child(Icon::new(IconName::GitBranch).size(px(14.)))
-                                                .child(
-                                                    div()
-                                                        .text_sm()
-                                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                                                        .text_color(t.text_primary)
-                                                        .child("Git: Open Source Control (Commit & Diff)"),
-                                                ),
-                                        )
-                                        .child(render_kbd_hint("cmd-shift-g"))
-                                )
-                            })
-                            // Action: Git Switch Branch / Checkout
-                            .when(q.is_empty() || "git".contains(&q) || "branch".contains(&q) || "checkout".contains(&q), |this| {
-                                let modal_s = modal_clone.clone();
-                                let git_s = git_clone.clone();
-                                this.child(
-                                    div()
-                                        .id("cmd-git-checkout")
-                                        .px(px(8.))
-                                        .py(px(6.))
-                                        .rounded(px(4.))
-                                        .hover(|s| s.bg(t.bg_hover))
-                                        .cursor_pointer()
-                                        .flex()
-                                        .items_center()
-                                        .justify_between()
-                                        .on_click(move |_, _, cx| {
-                                            modal_s.update(cx, |state, cx| {
-                                                state.close_command_palette(cx);
-                                            });
-                                            git_s.update(cx, |state, cx| {
-                                                state.set_tab(GitTab::Branches, cx);
-                                                state.open_modal(GitActiveModal::NewBranch, cx);
-                                            });
-                                        })
-                                        .child(
-                                            div()
-                                                .flex()
-                                                .items_center()
-                                                .gap(px(8.))
-                                                .child(Icon::new(IconName::GitBranch).size(px(14.)))
-                                                .child(
-                                                    div()
-                                                        .text_sm()
-                                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                                                        .text_color(t.text_primary)
-                                                        .child("Git: Switch Branch / Checkout"),
-                                                ),
-                                        )
-                                        .child(div().text_xs().text_color(t.text_muted).child("Git"))
-                                )
-                            })
-                            // Action: Import OpenAPI or Postman
-                            .when(q.is_empty() || "import".contains(&q) || "openapi".contains(&q) || "postman".contains(&q) || "swagger".contains(&q), |this| {
-                                let modal_s = modal_clone.clone();
-                                this.child(
-                                    div()
-                                        .id("cmd-import-spec")
-                                        .px(px(8.))
-                                        .py(px(6.))
-                                        .rounded(px(4.))
-                                        .hover(|s| s.bg(t.bg_hover))
-                                        .cursor_pointer()
-                                        .flex()
-                                        .items_center()
-                                        .justify_between()
-                                        .on_click(move |_, _, cx| {
-                                            modal_s.update(cx, |state, cx| {
-                                                state.close_command_palette(cx);
-                                                state.open_import_modal(None, cx);
-                                            });
-                                        })
-                                        .child(
-                                            div()
-                                                .flex()
-                                                .items_center()
-                                                .gap(px(8.))
-                                                .child(Icon::new(IconName::Download).size(px(14.)))
-                                                .child(
-                                                    div()
-                                                        .text_sm()
-                                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                                                        .text_color(t.text_primary)
-                                                        .child("Import: OpenAPI (YAML/JSON) or Postman"),
-                                                ),
-                                        )
-                                        .child(render_kbd_hint("cmd-i"))
-                                )
-                            })
-                            // Action: Git Commit History
-                            .when(q.is_empty() || "git".contains(&q) || "history".contains(&q) || "log".contains(&q), |this| {
-                                let modal_s = modal_clone.clone();
-                                let git_s = git_clone.clone();
-                                this.child(
-                                    div()
-                                        .id("cmd-git-history")
-                                        .px(px(8.))
-                                        .py(px(6.))
-                                        .rounded(px(4.))
-                                        .hover(|s| s.bg(t.bg_hover))
-                                        .cursor_pointer()
-                                        .flex()
-                                        .items_center()
-                                        .justify_between()
-                                        .on_click(move |_, _, cx| {
-                                            modal_s.update(cx, |state, cx| {
-                                                state.close_command_palette(cx);
-                                            });
-                                            git_s.update(cx, |state, cx| {
-                                                state.set_tab(GitTab::History, cx);
-                                                state.open_modal(GitActiveModal::History, cx);
-                                            });
-                                        })
-                                        .child(
-                                            div()
-                                                .flex()
-                                                .items_center()
-                                                .gap(px(8.))
-                                                .child(Icon::new(IconName::GitCommitHorizontal).size(px(14.)))
-                                                .child(
-                                                    div()
-                                                        .text_sm()
-                                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                                                        .text_color(t.text_primary)
-                                                        .child("Git: View Commit History"),
-                                                ),
-                                        )
-                                        .child(div().text_xs().text_color(t.text_muted).child("Git"))
-                                )
-                            })
-                            // List Requests
-                            .child(Separator::horizontal().my(px(4.)))
-                            .child(
-                                div()
-                                    .px(px(8.))
-                                    .pt(px(2.))
-                                    .text_xs()
-                                    .font_weight(gpui_kit::FontWeight::BOLD)
-                                    .text_color(t.text_muted)
-                                    .child("SWITCH REQUEST"),
-                            )
-                            .children(matched_requests.into_iter().map(
-                                |(_, req_id, req_name, req_method)| {
+                                .children(filtered_envs.into_iter().map(|env| {
+                                    let env_s = env_clone.clone();
                                     let modal_s = modal_clone.clone();
-                                    let sb_s = sb_clone.clone();
-                                    let ed_s = ed_clone.clone();
-                                    let r_id = req_id.clone();
+                                    let env_id = env.id.clone();
 
                                     div()
-                                        .id(format!("cmd-req-{}", req_id))
+                                        .id(format!("cmd-env-{}", env.id))
                                         .px(px(8.))
                                         .py(px(6.))
                                         .rounded(px(4.))
@@ -538,75 +423,25 @@ impl RenderOnce for CommandPalette {
                                         .items_center()
                                         .gap(px(8.))
                                         .on_click(move |_, _, cx| {
-                                            sb_s.update(cx, |state, _cx| {
-                                                state.record_navigation(&r_id);
+                                            env_s.update(cx, |state, cx| {
+                                                state.set_active_environment(
+                                                    Some(env_id.clone()),
+                                                    cx,
+                                                );
                                             });
                                             modal_s.update(cx, |state, cx| {
                                                 state.close_command_palette(cx);
                                             });
-                                            ed_s.update(cx, |state, cx| {
-                                                state.set_active_request_id(&r_id, cx);
-                                            });
                                         })
-                                        .child(MethodBadge::new(req_method))
+                                        .child("●")
                                         .child(
                                             div()
                                                 .text_sm()
-                                                .font_family(".SystemMonoFont")
                                                 .text_color(t.text_primary)
-                                                .child(req_name),
+                                                .child(format!("Switch to: {}", env.name)),
                                         )
-                                },
-                            ))
-                            // Switch Environment
-                            .child(Separator::horizontal().my(px(4.)))
-                            .child(
-                                div()
-                                    .px(px(8.))
-                                    .pt(px(2.))
-                                    .text_xs()
-                                    .font_weight(gpui_kit::FontWeight::BOLD)
-                                    .text_color(t.text_muted)
-                                    .child("SWITCH ENVIRONMENT"),
-                            )
-                            .children(
-                                envs.into_iter()
-                                    .filter(|e| q.is_empty() || e.name.to_lowercase().contains(&q))
-                                    .map(|env| {
-                                        let env_s = env_clone.clone();
-                                        let modal_s = modal_clone.clone();
-                                        let env_id = env.id.clone();
-
-                                        div()
-                                            .id(format!("cmd-env-{}", env.id))
-                                            .px(px(8.))
-                                            .py(px(6.))
-                                            .rounded(px(4.))
-                                            .hover(|s| s.bg(t.bg_hover))
-                                            .cursor_pointer()
-                                            .flex()
-                                            .items_center()
-                                            .gap(px(8.))
-                                            .on_click(move |_, _, cx| {
-                                                env_s.update(cx, |state, cx| {
-                                                    state.set_active_environment(
-                                                        Some(env_id.clone()),
-                                                        cx,
-                                                    );
-                                                });
-                                                modal_s.update(cx, |state, cx| {
-                                                    state.close_command_palette(cx);
-                                                });
-                                            })
-                                            .child("●")
-                                            .child(
-                                                div()
-                                                    .text_sm()
-                                                    .text_color(t.text_primary)
-                                                    .child(format!("Switch to: {}", env.name)),
-                                             )
-                                    }),
-                            ),
+                                }))
+                            }),
                     ),
             )
     }

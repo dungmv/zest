@@ -293,12 +293,7 @@ pub fn render_sidebar_footer(
                     .gap(px(4.))
                     .flex_shrink_0()
                     .text_xs()
-                    .child(
-                        Spinner::new()
-                            .icon(IconName::RefreshCw)
-                            .with_size(px(12.))
-                            .color(t.primary),
-                    )
+                    .child(Spinner::new().with_size(px(12.)).color(t.primary))
                     .child(div().text_xs().text_color(t.text_muted).child(sync_label)),
             )
         })

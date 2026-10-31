@@ -325,6 +325,19 @@ impl Render for AppView {
                                 m.dismiss_top_modal(cx);
                             });
                         }
+                        cx.stop_propagation();
+                    } else if (event.keystroke.modifiers.control
+                        || event.keystroke.modifiers.platform)
+                        && event.keystroke.key.eq_ignore_ascii_case("k")
+                        && !event.keystroke.modifiers.alt
+                    {
+                        let git_open = git_c.read(cx).show_modal;
+                        if !git_open {
+                            modal_c.update(cx, |m, cx| {
+                                m.toggle_command_palette(cx);
+                            });
+                            cx.stop_propagation();
+                        }
                     }
                 }
             })

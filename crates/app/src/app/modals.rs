@@ -21,7 +21,7 @@ pub struct ModalOverlayEntities<'a> {
 pub fn attach_modal_overlays(
     root: Div,
     entities: ModalOverlayEntities,
-    send_request_cb: impl 'static + Clone + Fn(&mut Window, &mut App),
+    _send_request_cb: impl 'static + Clone + Fn(&mut Window, &mut App),
     cx: &mut App,
 ) -> Div {
     let workspace_state = entities.workspace_state;
@@ -83,16 +83,13 @@ pub fn attach_modal_overlays(
         ))
     })
     .when(show_command_palette, move |this| {
-        let send_cb = send_request_cb.clone();
         this.child(CommandPalette::new(
             ws_entity.clone(),
             env_entity.clone(),
             per_entity.clone(),
             modal_entity.clone(),
             sidebar_entity.clone(),
-            git_entity.clone(),
             ed_entity.clone(),
-            send_cb,
         ))
     })
     // Toast Notifications container bottom-right
