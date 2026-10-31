@@ -13,7 +13,7 @@ use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::separator::Separator;
-use gpui_kit::component::Icon;
+use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     deferred, div, px, App, AppContext as _, Entity, Focusable as _, FontWeight,
@@ -124,10 +124,9 @@ impl RenderOnce for RequestBar {
 
         div()
             .relative()
-            .h(px(44.))
+            .h(px(40.))
             .w_full()
             .px(px(8.))
-            .py(px(4.))
             .flex()
             .items_center()
             .bg(t.bg_editor)
@@ -138,7 +137,7 @@ impl RenderOnce for RequestBar {
                 div()
                     .flex_1()
                     .min_w(px(0.))
-                    .h(px(34.))
+                    .h(px(28.))
                     .px(px(4.))
                     .rounded(px(6.))
                     .bg(t.bg_input)
@@ -148,6 +147,7 @@ impl RenderOnce for RequestBar {
                     .flex()
                     .items_center()
                     .gap(px(2.))
+                    .overflow_hidden()
                     .when(show_autocomplete, |this| {
                         let auto_s = auto_state.clone();
                         let scr_h = scroll_handle.read(cx).clone();
@@ -210,16 +210,13 @@ impl RenderOnce for RequestBar {
                         Button::new("method-dropdown-btn")
                             .ghost()
                             .compact()
-                            .pl(px(4.))
-                            .pr(px(1.))
-                            .py(px(3.))
+                            .small()
+                            .h(px(22.))
+                            .px(px(4.))
                             .rounded(px(4.))
                             .flex()
                             .items_center()
-                            .child(
-                                MethodBadge::new(method)
-                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD),
-                            )
+                            .child(MethodBadge::new(method))
                             .dropdown_menu(move |menu, _window, _cx| {
                                 [
                                     HttpMethod::Get,
@@ -239,7 +236,7 @@ impl RenderOnce for RequestBar {
                                         PopupMenuItem::element(move |_window, _cx| {
                                             div()
                                                 .text_xs()
-                                                .font_weight(gpui_kit::FontWeight::BOLD)
+                                                .font_weight(gpui_kit::FontWeight::NORMAL)
                                                 .text_color(theme().method_color(mth))
                                                 .child(mth.as_str().to_string())
                                         })
@@ -261,7 +258,7 @@ impl RenderOnce for RequestBar {
                             })
                     })
                     // Subtle vertical separator
-                    .child(Separator::vertical().h(px(16.)))
+                    .child(Separator::vertical().h(px(14.)))
                     // URL Input Box - with inline tokens for environment variables
                     .child(
                         div()
@@ -321,7 +318,7 @@ impl RenderOnce for RequestBar {
                             }),
                     )
                     // Subtle vertical separator
-                    .child(Separator::vertical().h(px(16.)))
+                    .child(Separator::vertical().h(px(14.)))
                     // Send / Cancel Action Button
                     .child({
                         let ed_s = ed_clone.clone();
@@ -330,8 +327,9 @@ impl RenderOnce for RequestBar {
                         Button::new("btn-send-or-cancel")
                             .ghost()
                             .compact()
+                            .small()
+                            .h(px(22.))
                             .px(px(6.))
-                            .py(px(3.))
                             .rounded(px(4.))
                             .flex()
                             .items_center()

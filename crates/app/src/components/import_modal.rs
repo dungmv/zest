@@ -815,10 +815,8 @@ fn render_method_pill(method: HttpMethod, t: &crate::theme::AppTheme) -> impl In
         .items_center()
         .justify_center()
         .py(px(1.))
-        .rounded(px(3.))
-        .bg(color.opacity(0.15))
         .text_xs()
-        .font_weight(FontWeight::BOLD)
+        .font_weight(FontWeight::NORMAL)
         .text_color(color)
         .child(method.as_str())
 }

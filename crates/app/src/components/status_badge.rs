@@ -3,23 +3,14 @@ use gpui_kit::component::tag::Tag;
 use gpui_kit::{div, px, App, IntoElement, ParentElement, RenderOnce, Styled, Window};
 use zest_core::models::HttpMethod;
 
-#[derive(IntoElement)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, IntoElement)]
 pub struct MethodBadge {
-    method: HttpMethod,
-    font_weight: gpui_kit::FontWeight,
+    pub method: HttpMethod,
 }
 
 impl MethodBadge {
     pub fn new(method: HttpMethod) -> Self {
-        Self {
-            method,
-            font_weight: gpui_kit::FontWeight::NORMAL,
-        }
-    }
-
-    pub fn font_weight(mut self, weight: gpui_kit::FontWeight) -> Self {
-        self.font_weight = weight;
-        self
+        Self { method }
     }
 }
 
@@ -27,19 +18,13 @@ impl RenderOnce for MethodBadge {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let t = theme();
         let color = t.method_color(self.method);
-        let bg_color = gpui_kit::Hsla { a: 0.15, ..color };
 
-        Tag::custom(bg_color, color, gpui_kit::transparent_black())
+        div()
             .flex_shrink_0()
-            .rounded(px(4.))
-            .px(px(6.))
-            .py(px(1.5))
-            .child(
-                div()
-                    .text_xs()
-                    .font_weight(self.font_weight)
-                    .child(self.method.as_str()),
-            )
+            .text_xs()
+            .font_weight(gpui_kit::FontWeight::NORMAL)
+            .text_color(color)
+            .child(self.method.as_str())
     }
 }
 
@@ -90,12 +75,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_method_badge_font_weight_default_and_builder() {
+    fn test_method_badge_construction() {
         let badge = MethodBadge::new(HttpMethod::Get);
-        assert_eq!(badge.font_weight, gpui_kit::FontWeight::NORMAL);
-
-        let bold_badge = badge.font_weight(gpui_kit::FontWeight::SEMIBOLD);
-        assert_eq!(bold_badge.font_weight, gpui_kit::FontWeight::SEMIBOLD);
+        assert_eq!(badge.method, HttpMethod::Get);
     }
 
     #[test]

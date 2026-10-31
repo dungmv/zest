@@ -1,3 +1,4 @@
+use crate::components::status_badge::MethodBadge;
 use crate::components::tabs_with_badge::render_tab_badge;
 use crate::state::{
     RequestSessionState, ResponseState, ResponseTabKind, ResponseViewMode, WorkspaceState,
@@ -874,19 +875,7 @@ impl RenderOnce for ResponseInspector {
                                                             .flex()
                                                             .items_center()
                                                             .gap(px(8.))
-                                                            .child(
-                                                                div()
-                                                                    .px(px(6.))
-                                                                    .py(px(2.))
-                                                                    .rounded(px(4.))
-                                                                    .bg(gpui_kit::Hsla { a: 0.15, ..t.method_color(sent.method) })
-                                                                    .border_1()
-                                                                    .border_color(gpui_kit::Hsla { a: 0.3, ..t.method_color(sent.method) })
-                                                                    .font_weight(gpui_kit::FontWeight::BOLD)
-                                                                    .text_xs()
-                                                                    .text_color(t.method_color(sent.method))
-                                                                    .child(sent.method.as_str()),
-                                                            )
+                                                            .child(MethodBadge::new(sent.method))
                                                             .child(
                                                                 div()
                                                                     .text_xs()
