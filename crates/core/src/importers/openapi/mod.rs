@@ -1,11 +1,14 @@
+pub mod body;
+pub mod sample;
+
 use super::models::{ImportFormat, ImportResult, ImportedEnvironment, ImportedRequest};
 use super::{push_folder_chain, split_folder_segments};
-use crate::models::{
-    ApiKeyLocation, Auth, EnvironmentVariable, HttpMethod, KeyValuePair, MultipartItem, RequestBody,
-};
+use crate::models::{ApiKeyLocation, Auth, EnvironmentVariable, HttpMethod, KeyValuePair};
 use crate::storage::models::{RequestExampleFile, RequestKvItem};
 use anyhow::{anyhow, Result};
-use serde_json::{json, Map, Value};
+use body::{extract_request_body, SwaggerFormDataParam};
+use sample::{generate_media_sample, generate_schema_sample, value_to_string};
+use serde_json::{Map, Value};
 use std::collections::HashSet;
 use std::str::FromStr;
 
@@ -168,9 +171,10 @@ pub fn parse_openapi(content: &str) -> Result<ImportResult> {
 
             let mut query_params = Vec::new();
             let mut header_params = Vec::new();
+            let mut form_params = Vec::new();
 
-            for param in all_params {
-                let resolved_param = resolve_ref(&root, &param);
+            for param in &all_params {
+                let resolved_param = resolve_ref(&root, param);
                 let p_in = resolved_param
                     .get("in")
                     .and_then(|v| v.as_str())
@@ -198,20 +202,35 @@ pub fn parse_openapi(content: &str) -> Result<ImportResult> {
 
                 let kv = KeyValuePair {
                     enabled: required,
-                    key: p_name,
-                    value: sample_val,
-                    description: p_desc,
+                    key: p_name.clone(),
+                    value: sample_val.clone(),
+                    description: p_desc.clone(),
                 };
 
                 match p_in {
                     "query" => query_params.push(kv),
                     "header" => header_params.push(kv),
+                    "formData" => {
+                        let is_file = resolved_param
+                            .get("type")
+                            .and_then(|t| t.as_str())
+                            .map(|t| t.eq_ignore_ascii_case("file"))
+                            .unwrap_or(false);
+                        form_params.push(SwaggerFormDataParam {
+                            name: p_name,
+                            value: sample_val,
+                            is_file,
+                            required,
+                            description: p_desc,
+                        });
+                    }
                     _ => {}
                 }
             }
 
             // Request Body
-            let (body, content_type_header) = extract_request_body(&root, op_obj);
+            let (body, content_type_header) =
+                extract_request_body(&root, op_obj, &all_params, &form_params);
             if let Some(ct) = content_type_header {
                 if !header_params
                     .iter()
@@ -293,11 +312,10 @@ fn format_path_params(path: &str) -> String {
     out
 }
 
-fn resolve_ref<'a>(root: &'a Value, val: &'a Value) -> &'a Value {
+pub(crate) fn resolve_ref<'a>(root: &'a Value, val: &'a Value) -> &'a Value {
     let mut current = val;
     let mut visited = std::collections::HashSet::new();
     let mut depth = 0;
-
     while depth < 32 {
         if let Some(ref_str) = current.get("$ref").and_then(|r| r.as_str()) {
             if !visited.insert(ref_str) {
@@ -321,6 +339,9 @@ fn extract_param_sample(root: &Value, param: &Value) -> String {
     if let Some(ex) = param.get("example") {
         return value_to_string(ex);
     }
+    if let Some(default_val) = param.get("default") {
+        return value_to_string(default_val);
+    }
     if let Some(schema) = param.get("schema") {
         let res_schema = resolve_ref(root, schema);
         if let Some(default_val) = res_schema.get("default") {
@@ -330,201 +351,32 @@ fn extract_param_sample(root: &Value, param: &Value) -> String {
             return value_to_string(ex);
         }
         if let Some(type_str) = res_schema.get("type").and_then(|t| t.as_str()) {
-            match type_str {
-                "integer" | "number" => return "0".to_string(),
-                "boolean" => return "true".to_string(),
-                "string" => {
-                    if let Some(fmt) = res_schema.get("format").and_then(|f| f.as_str()) {
-                        match fmt {
-                            "date" => return "2026-01-01".to_string(),
-                            "date-time" => return "2026-01-01T00:00:00Z".to_string(),
-                            "uuid" => return "123e4567-e89b-12d3-a456-426614174000".to_string(),
-                            "email" => return "user@example.com".to_string(),
-                            _ => {}
-                        }
-                    }
-                    return "value".to_string();
-                }
-                _ => {}
-            }
+            return sample_from_type(type_str, res_schema.get("format").and_then(|f| f.as_str()));
         }
+    }
+    if let Some(type_str) = param.get("type").and_then(|t| t.as_str()) {
+        return sample_from_type(type_str, param.get("format").and_then(|f| f.as_str()));
     }
     String::new()
 }
 
-fn value_to_string(v: &Value) -> String {
-    match v {
-        Value::String(s) => s.clone(),
-        Value::Number(n) => n.to_string(),
-        Value::Bool(b) => b.to_string(),
-        Value::Null => String::new(),
-        _ => v.to_string(),
-    }
-}
-
-fn extract_request_body(
-    root: &Value,
-    op_obj: &Map<String, Value>,
-) -> (RequestBody, Option<String>) {
-    // OpenAPI 3.x requestBody
-    if let Some(rb) = op_obj.get("requestBody") {
-        let rb_resolved = resolve_ref(root, rb);
-        if let Some(content) = rb_resolved.get("content").and_then(|c| c.as_object()) {
-            // Check application/json
-            if let Some(json_media) = content.get("application/json") {
-                let sample_json = generate_media_sample(root, json_media);
-                return (
-                    RequestBody::Json {
-                        content: sample_json,
-                    },
-                    Some("application/json".to_string()),
-                );
-            }
-
-            // Check form urlencoded
-            if let Some(form_media) = content.get("application/x-www-form-urlencoded") {
-                let mut form_items = Vec::new();
-                if let Some(schema) = form_media.get("schema") {
-                    let res_schema = resolve_ref(root, schema);
-                    if let Some(props) = res_schema.get("properties").and_then(|p| p.as_object()) {
-                        for (k, v) in props {
-                            let sample = generate_schema_sample(root, v, 0);
-                            form_items.push(KeyValuePair::new(k, value_to_string(&sample)));
-                        }
-                    }
-                }
-                return (
-                    RequestBody::FormUrlEncoded { params: form_items },
-                    Some("application/x-www-form-urlencoded".to_string()),
-                );
-            }
-
-            // Check multipart/form-data
-            if let Some(multipart_media) = content.get("multipart/form-data") {
-                let mut multi_items = Vec::new();
-                if let Some(schema) = multipart_media.get("schema") {
-                    let res_schema = resolve_ref(root, schema);
-                    if let Some(props) = res_schema.get("properties").and_then(|p| p.as_object()) {
-                        for (k, v) in props {
-                            let sample = generate_schema_sample(root, v, 0);
-                            multi_items.push(MultipartItem::new_text(k, value_to_string(&sample)));
-                        }
-                    }
-                }
-                return (
-                    RequestBody::Multipart { items: multi_items },
-                    Some("multipart/form-data".to_string()),
-                );
-            }
-
-            // Check raw / text
-            if let Some((media_type, media_obj)) = content.iter().next() {
-                let sample = generate_media_sample(root, media_obj);
-                return (
-                    RequestBody::Raw {
-                        content: sample,
-                        content_type: media_type.clone(),
-                    },
-                    Some(media_type.clone()),
-                );
-            }
-        }
-    }
-
-    // Swagger 2.0 parameters with in: body
-    if let Some(params) = op_obj.get("parameters").and_then(|p| p.as_array()) {
-        for param in params {
-            let res_param = resolve_ref(root, param);
-            if res_param.get("in").and_then(|i| i.as_str()) == Some("body") {
-                if let Some(schema) = res_param.get("schema") {
-                    let sample = generate_schema_sample(root, schema, 0);
-                    let pretty = serde_json::to_string_pretty(&sample).unwrap_or_default();
-                    return (
-                        RequestBody::Json { content: pretty },
-                        Some("application/json".to_string()),
-                    );
+fn sample_from_type(type_str: &str, format: Option<&str>) -> String {
+    match type_str {
+        "integer" | "number" => "0".to_string(),
+        "boolean" => "true".to_string(),
+        "string" => {
+            if let Some(fmt) = format {
+                match fmt {
+                    "date" => return "2026-01-01".to_string(),
+                    "date-time" => return "2026-01-01T00:00:00Z".to_string(),
+                    "uuid" => return "123e4567-e89b-12d3-a456-426614174000".to_string(),
+                    "email" => return "user@example.com".to_string(),
+                    _ => {}
                 }
             }
+            "value".to_string()
         }
-    }
-
-    (RequestBody::None, None)
-}
-
-fn generate_media_sample(root: &Value, media_obj: &Value) -> String {
-    if let Some(ex) = media_obj.get("example") {
-        if ex.is_string() {
-            return ex.as_str().unwrap().to_string();
-        }
-        return serde_json::to_string_pretty(ex).unwrap_or_default();
-    }
-    if let Some(examples) = media_obj.get("examples").and_then(|e| e.as_object()) {
-        if let Some((_, first_ex)) = examples.iter().next() {
-            let res_ex = resolve_ref(root, first_ex);
-            if let Some(val) = res_ex.get("value") {
-                if val.is_string() {
-                    return val.as_str().unwrap().to_string();
-                }
-                return serde_json::to_string_pretty(val).unwrap_or_default();
-            }
-        }
-    }
-    if let Some(schema) = media_obj.get("schema") {
-        let sample = generate_schema_sample(root, schema, 0);
-        return serde_json::to_string_pretty(&sample).unwrap_or_default();
-    }
-    String::new()
-}
-
-fn generate_schema_sample(root: &Value, schema: &Value, depth: usize) -> Value {
-    if depth > 4 {
-        return json!({});
-    }
-    let res_schema = resolve_ref(root, schema);
-
-    if let Some(ex) = res_schema.get("example") {
-        return ex.clone();
-    }
-    if let Some(default_val) = res_schema.get("default") {
-        return default_val.clone();
-    }
-
-    let schema_type = res_schema.get("type").and_then(|t| t.as_str());
-    match schema_type {
-        Some("object") | None if res_schema.get("properties").is_some() => {
-            let mut obj = Map::new();
-            if let Some(props) = res_schema.get("properties").and_then(|p| p.as_object()) {
-                for (k, v) in props {
-                    obj.insert(k.clone(), generate_schema_sample(root, v, depth + 1));
-                }
-            }
-            Value::Object(obj)
-        }
-        Some("array") => {
-            if let Some(items) = res_schema.get("items") {
-                let sample_item = generate_schema_sample(root, items, depth + 1);
-                Value::Array(vec![sample_item])
-            } else {
-                Value::Array(Vec::new())
-            }
-        }
-        Some("string") => {
-            if let Some(format) = res_schema.get("format").and_then(|f| f.as_str()) {
-                match format {
-                    "date-time" => json!("2026-01-01T00:00:00Z"),
-                    "date" => json!("2026-01-01"),
-                    "email" => json!("user@example.com"),
-                    "uuid" => json!("123e4567-e89b-12d3-a456-426614174000"),
-                    _ => json!("string"),
-                }
-            } else {
-                json!("string")
-            }
-        }
-        Some("integer") => json!(0),
-        Some("number") => json!(0.0),
-        Some("boolean") => json!(true),
-        _ => json!(null),
+        _ => String::new(),
     }
 }
 
@@ -664,49 +516,4 @@ fn extract_response_examples(root: &Value, op_obj: &Map<String, Value>) -> Vec<R
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_openapi_circular_ref_safety() {
-        let json_spec = r##"{
-            "openapi": "3.0.0",
-            "info": { "title": "Circular API", "version": "1.0.0" },
-            "paths": {
-                "/test": {
-                    "get": {
-                        "responses": {
-                            "200": {
-                                "description": "OK",
-                                "content": {
-                                    "application/json": {
-                                        "schema": { "$ref": "#/components/schemas/NodeA" }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            "components": {
-                "schemas": {
-                    "NodeA": {
-                        "type": "object",
-                        "properties": {
-                            "next": { "$ref": "#/components/schemas/NodeB" }
-                        }
-                    },
-                    "NodeB": {
-                        "type": "object",
-                        "properties": {
-                            "next": { "$ref": "#/components/schemas/NodeA" }
-                        }
-                    }
-                }
-            }
-        }"##;
-
-        let res = parse_openapi(json_spec).unwrap();
-        assert_eq!(res.requests.len(), 1);
-    }
-}
+mod tests;
