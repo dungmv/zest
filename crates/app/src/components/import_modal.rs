@@ -6,7 +6,6 @@ use gpui_kit::component::alert::Alert;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::dialog::DialogFooter;
-use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::Disableable as _;
@@ -21,50 +20,29 @@ use std::path::PathBuf;
 use zest_core::importers::{parse_content, ImportFormat, ImportOptions, ImportResult};
 use zest_core::models::HttpMethod;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ImportSourceTab {
-    File,
-    Paste,
-}
-
 pub struct ImportModalState {
     pub format: ImportFormat,
-    pub source_tab: ImportSourceTab,
     pub selected_file: Option<PathBuf>,
     pub loaded_content: Option<String>,
     pub create_enclosing_folder: bool,
     pub import_environments: bool,
     pub parse_result: Option<Result<ImportResult, String>>,
-    pub paste_input: Entity<InputState>,
 }
 
 impl ImportModalState {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let paste_input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder(
-                "Paste OpenAPI (JSON/YAML) or Postman Collection (JSON) content here...",
-            )
-        });
-
+    pub fn new() -> Self {
         Self {
             format: ImportFormat::OpenApi3,
-            source_tab: ImportSourceTab::File,
             selected_file: None,
             loaded_content: None,
             create_enclosing_folder: true,
             import_environments: true,
             parse_result: None,
-            paste_input,
         }
     }
 
     pub fn set_format(&mut self, format: ImportFormat, cx: &mut Context<Self>) {
         self.format = format;
-        self.reparse(cx);
-    }
-
-    pub fn set_source_tab(&mut self, tab: ImportSourceTab, cx: &mut Context<Self>) {
-        self.source_tab = tab;
         self.reparse(cx);
     }
 
@@ -80,20 +58,8 @@ impl ImportModalState {
     }
 
     pub fn reparse(&mut self, cx: &mut Context<Self>) {
-        let content_to_parse = match self.source_tab {
-            ImportSourceTab::File => self.loaded_content.clone(),
-            ImportSourceTab::Paste => {
-                let text = self.paste_input.read(cx).value().to_string();
-                if text.trim().is_empty() {
-                    None
-                } else {
-                    Some(text)
-                }
-            }
-        };
-
-        if let Some(content) = content_to_parse {
-            match parse_content(&content, self.format) {
+        if let Some(content) = &self.loaded_content {
+            match parse_content(content, self.format) {
                 Ok(res) => {
                     self.parse_result = Some(Ok(res));
                 }
@@ -140,39 +106,28 @@ impl RenderOnce for ImportModal {
             .use_keyed_state(
                 gpui_kit::SharedString::from("import-modal-state-key"),
                 cx,
-                |window, cx| cx.new(|cx| ImportModalState::new(window, cx)),
+                |_window, cx| cx.new(|_cx| ImportModalState::new()),
             )
             .read(cx)
             .clone();
 
-        let (
-            format,
-            source_tab,
-            selected_file,
-            create_enclosing,
-            import_env,
-            parse_result,
-            paste_inp,
-        ) = {
+        let (format, selected_file, create_enclosing, import_env, parse_result) = {
             let s = modal_entity.read(cx);
             (
                 s.format,
-                s.source_tab,
                 s.selected_file.clone(),
                 s.create_enclosing_folder,
                 s.import_environments,
                 s.parse_result.clone(),
-                s.paste_input.clone(),
             )
         };
 
         let target_folder_rel = modal_entity_ref.read(cx).import_target_folder_rel.clone();
 
         ModalDialog::new("import-modal")
-            .w(px(700.))
-            .max_h(px(600.))
+            .w(px(640.))
+            .h(px(520.))
             .title("Import into Workspace")
-            .description("OpenAPI 3.0/3.1, Postman v2.0/v2.1, or cURL")
             .icon(IconName::Download)
             .on_close({
                 let modal_c = modal_entity_ref.clone();
@@ -184,159 +139,115 @@ impl RenderOnce for ImportModal {
             .child(
                 div()
                     .flex_1()
+                    .min_h(px(0.))
                     .overflow_y_scrollbar()
-                            .p(px(16.))
+                    .p(px(16.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(14.))
+                    // Format Selection Row (Left: Text, Right: Dropdown)
+                    .child(
+                        div()
+                            .w_full()
+                            .p(px(10.))
+                            .rounded(px(6.))
+                            .bg(t.bg_app)
+                            .border_1()
+                            .border_color(t.border)
                             .flex()
-                            .flex_col()
-                            .gap(px(14.))
-                            // Format Selection Row (Left: Text, Right: Dropdown)
+                            .items_center()
+                            .justify_between()
+                            .gap(px(16.))
                             .child(
                                 div()
-                                    .w_full()
-                                    .p(px(10.))
-                                    .rounded(px(6.))
-                                    .bg(t.bg_app)
-                                    .border_1()
-                                    .border_color(t.border)
+                                    .flex_1()
+                                    .min_w_0()
                                     .flex()
-                                    .items_center()
-                                    .justify_between()
-                                    .gap(px(16.))
+                                    .flex_col()
+                                    .gap(px(2.))
                                     .child(
                                         div()
-                                            .flex_1()
-                                            .min_w_0()
-                                            .flex()
-                                            .flex_col()
-                                            .gap(px(2.))
-                                            .child(
-                                                div()
-                                                    .text_xs()
-                                                    .font_weight(FontWeight::SEMIBOLD)
-                                                    .text_color(t.text_primary)
-                                                    .child("Specification Format"),
-                                            )
-                                            .child(
-                                                div()
-                                                    .text_xs()
-                                                    .text_color(t.text_muted)
-                                                    .child("Choose the specification or collection format to parse."),
-                                            ),
-                                    )
-                                    .child({
-                                        let format_label = match format {
-                                            ImportFormat::OpenApi3 => "OpenAPI 3.1 / 3.0",
-                                            ImportFormat::PostmanCollection => "Postman Collection v2.1",
-                                        };
-                                        let st = modal_entity.clone();
-
-                                        div().flex_shrink_0().child(
-                                            Button::new("btn-import-format-dropdown")
-                                                .ghost()
-                                                .compact()
-                                                .px(px(10.))
-                                                .py(px(4.))
-                                                .h(px(28.))
-                                                .rounded(px(5.))
-                                                .bg(t.bg_input)
-                                                .border_1()
-                                                .border_color(t.border)
-                                                .flex()
-                                                .items_center()
-                                                .gap(px(8.))
-                                                .child(
-                                                    Icon::new(IconName::FileText)
-                                                        .size(px(13.))
-                                                        .text_color(t.text_secondary),
-                                                )
-                                                .child(
-                                                    div()
-                                                        .text_xs()
-                                                        .font_weight(FontWeight::MEDIUM)
-                                                        .text_color(t.text_primary)
-                                                        .child(format_label),
-                                                )
-                                                .child(
-                                                    Icon::new(IconName::ChevronDown)
-                                                        .size(px(12.))
-                                                        .text_color(t.text_muted),
-                                                )
-                                                .dropdown_menu(move |menu, _window, _cx| {
-                                                    let st_openapi = st.clone();
-                                                    let st_postman = st.clone();
-                                                    menu.item(
-                                                        PopupMenuItem::new("OpenAPI 3.1 / 3.0 (YAML/JSON)")
-                                                            .checked(format == ImportFormat::OpenApi3)
-                                                            .on_click(move |_, _, cx| {
-                                                                st_openapi.update(cx, |s, cx| {
-                                                                    s.set_format(ImportFormat::OpenApi3, cx);
-                                                                });
-                                                            }),
-                                                    )
-                                                    .item(
-                                                        PopupMenuItem::new("Postman Collection v2.1 (JSON)")
-                                                            .checked(format == ImportFormat::PostmanCollection)
-                                                            .on_click(move |_, _, cx| {
-                                                                st_postman.update(cx, |s, cx| {
-                                                                    s.set_format(ImportFormat::PostmanCollection, cx);
-                                                                });
-                                                            }),
-                                                    )
-                                                }),
-                                        )
-                                    }),
-                            )
-                            // Source Tab Bar
-                            .child(
-                                div()
-                                    .flex()
-                                    .border_b_1()
-                                    .border_color(t.border)
-                                    .gap(px(16.))
-                                    .child(
-                                        render_tab_header(
-                                            "btn-tab-file",
-                                            "From File",
-                                            source_tab == ImportSourceTab::File,
-                                            {
-                                                let st = modal_entity.clone();
-                                                move |_, _, cx| {
-                                                    st.update(cx, |s, cx| s.set_source_tab(ImportSourceTab::File, cx));
-                                                }
-                                            },
-                                            t,
-                                        ),
+                                            .text_xs()
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .text_color(t.text_primary)
+                                            .child("Specification Format"),
                                     )
                                     .child(
-                                        render_tab_header(
-                                            "btn-tab-paste",
-                                            "Paste Content",
-                                            source_tab == ImportSourceTab::Paste,
-                                            {
-                                                let st = modal_entity.clone();
-                                                move |_, _, cx| {
-                                                    st.update(cx, |s, cx| s.set_source_tab(ImportSourceTab::Paste, cx));
-                                                }
-                                            },
-                                            t,
-                                        ),
+                                        div()
+                                            .text_xs()
+                                            .text_color(t.text_muted)
+                                            .child("Choose the specification or collection format to parse."),
                                     ),
                             )
-                            // Source Input Views
-                            .child(
-                                match source_tab {
-                                    ImportSourceTab::File => render_file_picker_view(
-                                        selected_file.as_ref(),
-                                        modal_entity.clone(),
-                                        t,
-                                    ).into_any_element(),
-                                    ImportSourceTab::Paste => render_paste_view(
-                                        paste_inp.clone(),
-                                        modal_entity.clone(),
-                                        t,
-                                    ).into_any_element(),
-                                }
-                            )
+                            .child({
+                                let format_label = match format {
+                                    ImportFormat::OpenApi3 => "OpenAPI 3.1 / 3.0",
+                                    ImportFormat::PostmanCollection => "Postman Collection v2.1",
+                                };
+                                let st = modal_entity.clone();
+
+                                div().flex_shrink_0().child(
+                                    Button::new("btn-import-format-dropdown")
+                                        .ghost()
+                                        .compact()
+                                        .px(px(10.))
+                                        .py(px(4.))
+                                        .h(px(28.))
+                                        .rounded(px(5.))
+                                        .bg(t.bg_input)
+                                        .border_1()
+                                        .border_color(t.border)
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(8.))
+                                        .child(
+                                            Icon::new(IconName::FileText)
+                                                .size(px(13.))
+                                                .text_color(t.text_secondary),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .font_weight(FontWeight::MEDIUM)
+                                                .text_color(t.text_primary)
+                                                .child(format_label),
+                                        )
+                                        .child(
+                                            Icon::new(IconName::ChevronDown)
+                                                .size(px(12.))
+                                                .text_color(t.text_muted),
+                                        )
+                                        .dropdown_menu(move |menu, _window, _cx| {
+                                            let st_openapi = st.clone();
+                                            let st_postman = st.clone();
+                                            menu.item(
+                                                PopupMenuItem::new("OpenAPI 3.1 / 3.0 (YAML/JSON)")
+                                                    .checked(format == ImportFormat::OpenApi3)
+                                                    .on_click(move |_, _, cx| {
+                                                        st_openapi.update(cx, |s, cx| {
+                                                            s.set_format(ImportFormat::OpenApi3, cx);
+                                                        });
+                                                    }),
+                                            )
+                                            .item(
+                                                PopupMenuItem::new("Postman Collection v2.1 (JSON)")
+                                                    .checked(format == ImportFormat::PostmanCollection)
+                                                    .on_click(move |_, _, cx| {
+                                                        st_postman.update(cx, |s, cx| {
+                                                            s.set_format(ImportFormat::PostmanCollection, cx);
+                                                        });
+                                                    }),
+                                            )
+                                        }),
+                                )
+                            }),
+                    )
+                    // File Picker
+                    .child(render_file_picker_view(
+                        selected_file.as_ref(),
+                        modal_entity.clone(),
+                        t,
+                    ))
                             // Parse & Preview Section
                             .when_some(parse_result.clone(), |this, res| {
                                 match res {
@@ -505,32 +416,6 @@ impl RenderOnce for ImportModal {
     }
 }
 
-fn render_tab_header<F>(
-    id: &'static str,
-    label: &'static str,
-    active: bool,
-    on_click: F,
-    t: &crate::theme::AppTheme,
-) -> impl IntoElement
-where
-    F: Fn(&gpui_kit::ClickEvent, &mut Window, &mut App) + 'static,
-{
-    div()
-        .id(id)
-        .pb(px(6.))
-        .cursor_pointer()
-        .text_xs()
-        .font_weight(if active {
-            FontWeight::SEMIBOLD
-        } else {
-            FontWeight::NORMAL
-        })
-        .text_color(if active { t.text_primary } else { t.text_muted })
-        .when(active, |s| s.border_b_2().border_color(t.primary))
-        .child(label)
-        .on_click(on_click)
-}
-
 fn render_file_picker_view(
     selected_file: Option<&PathBuf>,
     modal_state: Entity<ImportModalState>,
@@ -620,52 +505,6 @@ fn render_file_picker_view(
                     }),
             ),
     )
-}
-
-fn render_paste_view(
-    paste_input: Entity<InputState>,
-    modal_state: Entity<ImportModalState>,
-    t: &crate::theme::AppTheme,
-) -> impl IntoElement {
-    let st_parse = modal_state.clone();
-
-    div()
-        .flex()
-        .flex_col()
-        .gap(px(8.))
-        .child(
-            div()
-                .h(px(140.))
-                .rounded(px(6.))
-                .border_1()
-                .border_color(t.border)
-                .bg(t.bg_panel)
-                .overflow_hidden()
-                .child(Input::new(&paste_input)),
-        )
-        .child(
-            div().flex().justify_end().child(
-                div()
-                    .id("btn-analyze-paste-content")
-                    .px(px(10.))
-                    .py(px(5.))
-                    .rounded(px(5.))
-                    .border_1()
-                    .border_color(t.border)
-                    .bg(t.bg_card)
-                    .cursor_pointer()
-                    .hover(|s| s.bg(t.bg_hover).border_color(t.primary))
-                    .text_xs()
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(t.text_primary)
-                    .child("Analyze & Preview")
-                    .on_click(move |_, _, cx| {
-                        st_parse.update(cx, |s, cx| {
-                            s.reparse(cx);
-                        });
-                    }),
-            ),
-        )
 }
 
 fn render_preview_card(res: &ImportResult, t: &crate::theme::AppTheme) -> impl IntoElement {

@@ -533,8 +533,8 @@ impl RenderOnce for ScopeSettingsModal {
 
         // Render modal
         ModalDialog::new("scope-settings-modal")
-            .w(px(640.))
-            .max_h(px(580.))
+            .w(px(580.))
+            .h(px(320.))
             .title(title)
             .icon(IconName::Settings)
             .on_close({
@@ -614,6 +614,7 @@ impl RenderOnce for ScopeSettingsModal {
                     .child(
                         div()
                             .flex_1()
+                            .min_h(px(0.))
                             .p(px(16.))
                             .overflow_y_scrollbar()
                             .child(match active_tab {

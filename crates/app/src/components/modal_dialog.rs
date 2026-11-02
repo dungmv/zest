@@ -60,6 +60,7 @@ impl ModalDialog {
         self
     }
 
+    #[allow(dead_code)] // Reusable modal builder method for dialogs requiring an upper height bound
     pub fn max_h(mut self, max_height: impl Into<Pixels>) -> Self {
         self.max_height = Some(max_height.into());
         self
@@ -75,6 +76,7 @@ impl ModalDialog {
         self
     }
 
+    #[allow(dead_code)] // Reusable modal builder method for dialogs providing a subtitle or description
     pub fn description(mut self, description: impl Into<SharedString>) -> Self {
         self.description = Some(description.into());
         self
