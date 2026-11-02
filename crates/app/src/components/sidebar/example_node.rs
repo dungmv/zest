@@ -226,7 +226,6 @@ pub fn render_example_row(
                 .items_center()
                 .gap(px(6.))
                 .overflow_hidden()
-                .child(div().text_xs().text_color(t.text_muted).child("↳"))
                 .child(
                     if let (true, Some(inp)) = (is_renaming_this_ex, ctx.rename_example_input) {
                         let sb_esc = ctx.sidebar.clone();
