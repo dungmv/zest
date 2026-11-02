@@ -1248,7 +1248,7 @@ impl RenderOnce for ScriptEditor {
                 .overflow_hidden()
                 .child(
                     // Left: Code Editor Area
-                    div().flex_1().h_full().overflow_hidden().p(px(8.)).child(
+                    div().flex_1().h_full().overflow_hidden().child(
                         Editor::new(&self.editor)
                             .appearance(false)
                             .bordered(false)
@@ -1336,7 +1336,7 @@ impl RenderOnce for ScriptEditor {
                 )
                 .child(
                     // Bottom: Code Editor Area
-                    div().flex_1().w_full().overflow_hidden().p(px(8.)).child(
+                    div().flex_1().w_full().overflow_hidden().child(
                         Editor::new(&self.editor)
                             .appearance(false)
                             .bordered(false)

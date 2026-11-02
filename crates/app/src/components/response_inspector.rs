@@ -794,8 +794,6 @@ impl RenderOnce for ResponseInspector {
                                                 .flex_1()
                                                 .size_full()
                                                 .overflow_hidden()
-                                                .py(px(4.))
-                                                .px(px(4.))
                                                 .child(
                                                     Editor::new(&self.response_editor)
                                                         .readonly(true)

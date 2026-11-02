@@ -586,8 +586,6 @@ impl RenderOnce for BodyEditor {
                             .into_any_element(),
                         Some(RequestBody::Json { .. }) => div()
                             .size_full()
-                            .py(px(6.))
-                            .px(px(4.))
                             .child(
                                 Editor::new(&self.json_editor)
                                     .appearance(false)
@@ -625,8 +623,6 @@ impl RenderOnce for BodyEditor {
                         {
                             div()
                                 .size_full()
-                                .py(px(6.))
-                                .px(px(4.))
                                 .child(
                                     Editor::new(&self.xml_editor)
                                         .appearance(false)
@@ -637,7 +633,6 @@ impl RenderOnce for BodyEditor {
                         }
                         Some(RequestBody::Raw { .. }) => div()
                             .size_full()
-                            .p(px(8.))
                             .child(
                                 Textarea::new(&self.raw_textarea)
                                     .appearance(false)
