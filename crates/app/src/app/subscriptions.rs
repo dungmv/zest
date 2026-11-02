@@ -21,7 +21,6 @@ pub struct SubscriptionTargets<'a> {
     pub git_state: &'a Entity<GitState>,
     pub editor_state: &'a Entity<RequestSessionState>,
     pub response_state: &'a Entity<ResponseState>,
-    #[allow(dead_code)]
     pub toast_state: &'a Entity<ToastState>,
     pub composer_inputs: &'a ComposerInputs,
 }
@@ -381,6 +380,7 @@ pub fn setup_app_subscriptions(
     subscriptions.push(cx.observe(targets.git_state, |_, _, cx| cx.notify()));
     subscriptions.push(cx.observe(targets.env_state, |_, _, cx| cx.notify()));
     subscriptions.push(cx.observe(targets.persistence_state, |_, _, cx| cx.notify()));
+    subscriptions.push(cx.observe(targets.toast_state, |_, _, cx| cx.notify()));
 
     // 6. Observe OS appearance changes for System theme preference
     let modal_theme = targets.modal_state.clone();
