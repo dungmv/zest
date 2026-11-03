@@ -283,7 +283,7 @@ impl RenderOnce for AppTitleBar {
                                     }),
                             )
                             .item(
-                                PopupMenuItem::new("Clean History")
+                                PopupMenuItem::new("Clear Recents")
                                     .icon(IconName::Trash)
                                     .on_click(move |_, _, cx| {
                                         ws_clean.update(cx, |state, cx| {

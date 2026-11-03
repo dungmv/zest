@@ -45,12 +45,48 @@ impl Default for AppSettings {
     }
 }
 
+#[cfg(test)]
+thread_local! {
+    static TEST_CONFIG_PATH: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(test)]
+pub fn set_test_config_path(path: Option<PathBuf>) {
+    TEST_CONFIG_PATH.with(|p| *p.borrow_mut() = path);
+}
+
 impl AppSettings {
     pub fn config_file_path() -> PathBuf {
-        if let Some(config_dir) = dirs::config_dir() {
-            config_dir.join("zest").join("settings.json")
+        if let Ok(dir) = std::env::var("ZEST_CONFIG_DIR") {
+            return PathBuf::from(dir).join("settings.json");
+        }
+        #[cfg(test)]
+        {
+            if let Some(path) = TEST_CONFIG_PATH.with(|p| p.borrow().clone()) {
+                return path;
+            }
+            std::env::temp_dir().join(format!("zest_test_settings_{}.json", std::process::id()))
+        }
+        #[cfg(not(test))]
+        {
+            if let Some(config_dir) = dirs::config_dir() {
+                config_dir.join("zest").join("settings.json")
+            } else {
+                PathBuf::from("./zest-settings.json")
+            }
+        }
+    }
+
+    pub fn normalize_path(path: &str) -> String {
+        let p = std::path::Path::new(path);
+        if let Ok(canon) = p.canonicalize() {
+            canon.to_string_lossy().to_string()
         } else {
-            PathBuf::from("./zest-settings.json")
+            let mut s = path.trim();
+            while s.len() > 1 && (s.ends_with('/') || s.ends_with('\\')) {
+                s = &s[..s.len() - 1];
+            }
+            s.to_string()
         }
     }
 
@@ -77,12 +113,14 @@ impl AppSettings {
     }
 
     pub fn add_recent_workspace(&mut self, path: &str) {
-        self.recent_workspaces.retain(|p| p != path);
-        self.recent_workspaces.insert(0, path.to_string());
+        let normalized = Self::normalize_path(path);
+        self.recent_workspaces
+            .retain(|p| Self::normalize_path(p) != normalized);
+        self.recent_workspaces.insert(0, normalized.clone());
         if self.recent_workspaces.len() > 10 {
             self.recent_workspaces.truncate(10);
         }
-        self.current_workspace = Some(path.to_string());
+        self.current_workspace = Some(normalized);
         let _ = self.save();
     }
 }

@@ -64,13 +64,14 @@ impl WorkspaceDataState {
         let ws_dir = if let Some(curr) = &settings.current_workspace {
             let path = PathBuf::from(curr);
             if path.exists() {
-                path
+                path.canonicalize().unwrap_or(path)
             } else {
                 default_workspace_dir()
             }
         } else {
             default_workspace_dir()
         };
+        let ws_dir = ws_dir.canonicalize().unwrap_or(ws_dir);
 
         let default_name = ws_dir
             .file_name()
@@ -143,6 +144,7 @@ impl WorkspaceDataState {
     }
 
     pub fn open_workspace(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+        let path = path.canonicalize().unwrap_or(path);
         let store: Arc<dyn WorkspaceStore> = Arc::new(FsWorkspaceStore::new(&path));
         if !path.join("workspace.yaml").exists() {
             let name = path
@@ -174,6 +176,7 @@ impl WorkspaceDataState {
     }
 
     pub fn new_workspace(&mut self, path: PathBuf, name: &str, cx: &mut Context<Self>) {
+        let path = path.canonicalize().unwrap_or(path);
         let store: Arc<dyn WorkspaceStore> = Arc::new(FsWorkspaceStore::new(&path));
         let _ = store.init_workspace(name);
         self.open_workspace(path, cx);

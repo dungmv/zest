@@ -123,9 +123,11 @@ mod tests {
 
     #[test]
     fn test_modal_state_theme_preference_persistence() {
-        let mut settings = crate::settings::AppSettings::load();
-        let original_theme = settings.theme.clone();
+        let temp_cfg =
+            std::env::temp_dir().join(format!("zest_test_cfg_{}.json", uuid::Uuid::new_v4()));
+        crate::settings::set_test_config_path(Some(temp_cfg.clone()));
 
+        let mut settings = crate::settings::AppSettings::load();
         settings.theme = Some("dark".to_string());
         let _ = settings.save();
         let modals = ModalState::new();
@@ -139,8 +141,8 @@ mod tests {
             crate::theme::ThemePreference::Light
         );
 
-        settings.theme = original_theme;
-        let _ = settings.save();
+        crate::settings::set_test_config_path(None);
+        let _ = std::fs::remove_file(temp_cfg);
     }
 
     #[test]
@@ -539,6 +541,12 @@ mod tests {
 
     #[test]
     fn test_rename_workspace() {
+        let temp_cfg = std::env::temp_dir().join(format!(
+            "zest_test_cfg_rename_{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        crate::settings::set_test_config_path(Some(temp_cfg.clone()));
+
         let temp_dir =
             std::env::temp_dir().join(format!("test_ws_rename_{}", uuid::Uuid::new_v4().simple()));
         let store = Arc::new(FsWorkspaceStore::new(&temp_dir));
@@ -573,7 +581,50 @@ mod tests {
         ws_state.clean_history_internal();
         assert!(ws_state.recent_workspaces.is_empty());
 
+        crate::settings::set_test_config_path(None);
+        let _ = std::fs::remove_file(temp_cfg);
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_add_recent_workspaces_normalization_and_persistence() {
+        let temp_cfg =
+            std::env::temp_dir().join(format!("zest_test_recent_{}.json", uuid::Uuid::new_v4()));
+        crate::settings::set_test_config_path(Some(temp_cfg.clone()));
+
+        let mut settings = crate::settings::AppSettings::load();
+        assert!(settings.recent_workspaces.is_empty());
+
+        settings.add_recent_workspace("/path/to/ws1/");
+        assert_eq!(settings.recent_workspaces.len(), 1);
+        assert_eq!(settings.recent_workspaces[0], "/path/to/ws1");
+        assert_eq!(settings.current_workspace.as_deref(), Some("/path/to/ws1"));
+
+        // Adding same path with or without trailing slash shouldn't duplicate
+        settings.add_recent_workspace("/path/to/ws1");
+        assert_eq!(settings.recent_workspaces.len(), 1);
+
+        // Adding another workspace should prepend
+        settings.add_recent_workspace("/path/to/ws2");
+        assert_eq!(settings.recent_workspaces.len(), 2);
+        assert_eq!(settings.recent_workspaces[0], "/path/to/ws2");
+        assert_eq!(settings.recent_workspaces[1], "/path/to/ws1");
+        assert_eq!(settings.current_workspace.as_deref(), Some("/path/to/ws2"));
+
+        // Re-adding ws1 should move it to the front
+        settings.add_recent_workspace("/path/to/ws1");
+        assert_eq!(settings.recent_workspaces.len(), 2);
+        assert_eq!(settings.recent_workspaces[0], "/path/to/ws1");
+        assert_eq!(settings.recent_workspaces[1], "/path/to/ws2");
+
+        // Verify reloading from disk maintains state
+        let reloaded = crate::settings::AppSettings::load();
+        assert_eq!(reloaded.recent_workspaces.len(), 2);
+        assert_eq!(reloaded.recent_workspaces[0], "/path/to/ws1");
+        assert_eq!(reloaded.current_workspace.as_deref(), Some("/path/to/ws1"));
+
+        crate::settings::set_test_config_path(None);
+        let _ = std::fs::remove_file(temp_cfg);
     }
 
     #[test]
