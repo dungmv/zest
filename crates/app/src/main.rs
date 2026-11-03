@@ -8,6 +8,7 @@ pub mod services;
 pub mod settings;
 mod state;
 mod theme;
+pub mod version;
 
 use app::*;
 use gpui_kit::assets::AllAssets;

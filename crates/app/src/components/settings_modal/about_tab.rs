@@ -28,7 +28,8 @@ pub fn render_about_tab(
     let t = theme();
     let modal_clone = modal_state.clone();
 
-    let version = env!("CARGO_PKG_VERSION");
+    let version = crate::version::APP_VERSION;
+    let commit_hash = crate::version::COMMIT_HASH;
     let os = std::env::consts::OS;
     let arch = std::env::consts::ARCH;
     let platform_label = format!("{os} ({arch})");
@@ -193,6 +194,7 @@ pub fn render_about_tab(
                         .flex_col()
                         .gap(px(10.))
                         .child(render_spec_row("App Version", version, t.text_primary))
+                        .child(render_spec_row("Git Commit", commit_hash, t.text_secondary))
                         .child(render_spec_row(
                             "Target Platform",
                             &platform_label,

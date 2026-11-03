@@ -45,7 +45,8 @@ impl RenderOnce for AboutModal {
         let modal_clone = self.modal_state.clone();
         let toast_clone = self.toast_state;
 
-        let version = env!("CARGO_PKG_VERSION");
+        let version = crate::version::APP_VERSION;
+        let commit_hash = crate::version::COMMIT_HASH;
         let os = std::env::consts::OS;
         let arch = std::env::consts::ARCH;
         let platform_label = format!("{os} ({arch})");
@@ -146,7 +147,7 @@ impl RenderOnce for AboutModal {
                                             .on_click(move |_, _, cx| {
                                                 cx.write_to_clipboard(
                                                     gpui_kit::ClipboardItem::new_string(format!(
-                                                        "Zest v{version} ({plat_c})"
+                                                        "Zest v{version} ({commit_hash}) - {plat_c}"
                                                     )),
                                                 );
                                                 toast_c.update(cx, |t, cx| {
@@ -176,6 +177,7 @@ impl RenderOnce for AboutModal {
                             .flex_col()
                             .gap(px(8.))
                             .child(render_meta_row("Version", version, t.text_primary))
+                            .child(render_meta_row("Commit", commit_hash, t.text_secondary))
                             .child(render_meta_row(
                                 "Platform",
                                 &platform_label,

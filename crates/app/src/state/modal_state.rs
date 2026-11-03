@@ -282,7 +282,7 @@ impl ModalState {
         self.update_status = UpdateStatus::Checking;
         cx.notify();
 
-        let current_version = env!("CARGO_PKG_VERSION");
+        let current_version = crate::version::APP_VERSION;
         let (tx, rx) = tokio::sync::oneshot::channel();
 
         crate::services::global_tokio_runtime().spawn(async move {

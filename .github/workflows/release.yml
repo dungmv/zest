@@ -76,6 +76,9 @@ jobs:
           target: ${{ matrix.target }}
 
       - name: Build release binary
+        env:
+          ZEST_APP_VERSION: ${{ github.ref_name }}
+          ZEST_COMMIT_SHA: ${{ github.sha }}
         run: cargo build --release -p zest --target ${{ matrix.target }}
 
       - name: Package archive (Windows)
