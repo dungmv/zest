@@ -48,6 +48,10 @@ pub fn with_retry<T, F: FnMut() -> std::io::Result<T>>(mut op: F) -> std::io::Re
 /// the watcher can deterministically filter out self-echo events.
 #[derive(Debug, Clone)]
 pub struct AtomicWriter {
+    /// Directory used for staging temporary files prior to atomic renames.
+    /// On Windows, writes are performed directly to avoid sharing violations,
+    /// so this field is only read on non-Windows targets.
+    #[cfg_attr(windows, allow(dead_code))]
     tmp_dir: PathBuf,
     fingerprints: Arc<DiskFingerprints>,
 }
@@ -59,6 +63,10 @@ impl AtomicWriter {
             tmp_dir,
             fingerprints,
         }
+    }
+
+    pub fn tmp_dir(&self) -> &Path {
+        &self.tmp_dir
     }
 
     pub fn fingerprints(&self) -> &Arc<DiskFingerprints> {
@@ -229,6 +237,7 @@ mod tests {
 
         let fp = Arc::new(DiskFingerprints::new());
         let writer = AtomicWriter::new(tmp_dir.clone(), fp.clone());
+        assert_eq!(writer.tmp_dir(), tmp_dir.as_path());
 
         // Stale temp file must be cleaned up on initialization
         assert!(!stale_tmp.exists());
