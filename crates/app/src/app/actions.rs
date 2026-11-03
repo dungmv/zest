@@ -13,5 +13,12 @@ actions!(
         NavigateBack,
         NavigateForward,
         DismissModal,
+        // Native application menu (macOS menubar) actions.
+        OpenAbout,
+        OpenSettings,
+        HideApp,
+        HideOtherApps,
+        ShowAllApps,
+        Quit,
     ]
 );

@@ -67,9 +67,12 @@ fn main() {
 
         let window_options = default_window_options(cx);
 
-        gpui_kit::open_window(window_options, cx, |window, cx| {
+        let (_window, app_view) = gpui_kit::open_window(window_options, cx, |window, cx| {
             cx.new(|cx| AppView::new(window, cx))
         })
         .expect("Failed to open main window");
+
+        let modal = app_view.read(cx).state.modal.clone();
+        platform::init_app_menu(modal, cx);
     });
 }
