@@ -73,13 +73,13 @@ All UI edits to YAML-backed data flow through `PersistenceCoordinator` (`crates/
 
 ---
 
-## 5. File Watcher, Suppression & External Change Reconciliation
+## 5. File Watcher, Content Fingerprinting & External Change Reconciliation
 
 External disk changes are monitored by `WorkspaceWatcher` (`crates/core/src/storage/watcher.rs`) emitting `FsEvent`:
-- **Single Cleaner Thread (PERF-005)**: `FsWorkspaceStore::suppress_path` registers app-written paths and schedules expiration (1500ms) on the dedicated `workspace-suppress-cleaner` background thread.
+- **Content Fingerprinting (`DiskFingerprints` & `AtomicWriter`)**: All app reads and writes record SHA-256 content fingerprints (or `Fingerprint::Absent` on deletes/renames) in `DiskFingerprints` (`crates/core/src/storage/fingerprints.rs`) *before* mutating disk, and stage atomic-write temp files in `.local/tmp/`. When a watcher event arrives, `DiskFingerprints::matches_disk` compares the current on-disk hash against the recorded fingerprint and drops self-echo events deterministically without fragile time-window suppression. Dot-prefixed files (`is_hidden_artifact`) are also ignored.
 - **Defense-in-Depth Atomic Replace Handling**: Tools like `git restore` and external editors replace files via remove + recreate. Both `downgrade_existing_deletions` (in `watcher.rs`) and `PersistenceState::handle_fs_events_batch` check whether a "deleted" request file still exists on disk; if it does, the event is downgraded to a change/tree rescan so live requests never vanish from the sidebar.
 - **Selective Git Metadata Watching**: The watcher emits `FsEvent::GitChanged` for `.git/index`, `HEAD`, and `refs/` while ignoring `.lock`, `.git/objects/`, and `.git/logs/`, keeping Git status badges in sync with external CLI actions.
-- **Conflict Detection**: If a file changes externally while `PersistenceState::is_dirty(rel_path)` is true, the request is marked in `conflicts` rather than silently overwriting in-memory edits.
+- **Dirty-Aware Reload & Conflict Detection**: Watcher reloads never overwrite in-memory requests (`WorkspaceDataState::reload_tree_preserving`), environments, or globals (`EnvironmentState::apply_disk_changes`) that have pending or in-flight writes in `PersistenceCoordinator`. External modifications to dirty targets are recorded in `PersistenceState::conflicts` and `PersistenceState::env_conflicts` and surfaced via Reload / Keep mine conflict banners.
 
 ---
 

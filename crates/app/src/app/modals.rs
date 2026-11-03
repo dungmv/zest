@@ -16,6 +16,7 @@ pub struct ModalOverlayEntities<'a> {
     pub git_state: &'a Entity<GitState>,
     pub editor_state: &'a Entity<RequestSessionState>,
     pub toast_state: &'a Entity<ToastState>,
+    pub env_var_table: &'a Entity<EnvVarTable>,
 }
 
 pub fn attach_modal_overlays(
@@ -32,6 +33,7 @@ pub fn attach_modal_overlays(
     let git_state = entities.git_state;
     let editor_state = entities.editor_state;
     let toast_state = entities.toast_state;
+    let env_var_table = entities.env_var_table;
 
     let modal = modal_state.read(cx);
     let show_env_modal = modal.show_env_modal;
@@ -50,12 +52,15 @@ pub fn attach_modal_overlays(
     let git_entity = git_state.clone();
     let ed_entity = editor_state.clone();
     let toast_entity = toast_state.clone();
+    let var_table_entity = env_var_table.clone();
 
     root.when(show_env_modal, |this| {
         this.child(EnvironmentModal::new(
             env_entity.clone(),
+            per_entity.clone(),
             modal_entity.clone(),
             sidebar_entity.clone(),
+            var_table_entity,
         ))
     })
     .when(show_settings_modal, |this| {

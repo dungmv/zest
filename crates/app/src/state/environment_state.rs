@@ -1,6 +1,6 @@
 use super::EnvironmentEvent;
-use gpui_kit::{Context, Task};
-use std::collections::HashMap;
+use gpui_kit::Context;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use zest_core::models::Environment;
 use zest_core::storage::models::EnvironmentFile;
@@ -13,7 +13,6 @@ pub struct EnvironmentState {
     pub global_environment: Environment,
     pub active_environment_id: Option<String>,
     pub corrupt_secrets_warning: Option<String>,
-    pub env_save_task: Option<Task<()>>,
     cached_effective_env: RwLock<Option<Arc<Environment>>>,
 }
 
@@ -30,7 +29,6 @@ impl EnvironmentState {
             global_environment: Environment::new(&workspace_name, "Globals"),
             active_environment_id: initial_active_id,
             corrupt_secrets_warning: None,
-            env_save_task: None,
             cached_effective_env: RwLock::new(None),
         };
         state.reload_environments();
@@ -97,6 +95,93 @@ impl EnvironmentState {
         } else if self.active_environment_id.is_none() {
             self.active_environment_id = self.environments.first().map(|e| e.id.clone());
         }
+    }
+
+    /// Reconciles external disk changes reported by the file watcher while
+    /// preserving any environment (or `"globals"`) that currently has unsaved
+    /// in-memory edits. Returns the list of environment names (or `"globals"`)
+    /// that were modified on disk while dirty in memory so the caller can
+    /// surface a conflict banner.
+    pub fn apply_disk_changes(
+        &mut self,
+        changed: &HashSet<String>,
+        dirty: &HashSet<String>,
+        cx: &mut Context<Self>,
+    ) -> Vec<String> {
+        let mut conflicts: Vec<String> = changed
+            .iter()
+            .filter(|name| dirty.contains(*name))
+            .cloned()
+            .collect();
+
+        let kept_envs: Vec<Environment> = self
+            .environments
+            .iter()
+            .filter(|e| dirty.contains(&e.name))
+            .cloned()
+            .collect();
+        let kept_globals = dirty
+            .contains("globals")
+            .then(|| self.global_environment.clone());
+
+        self.reload_environments();
+
+        for env in kept_envs {
+            if let Some(slot) = self.environments.iter_mut().find(|e| e.name == env.name) {
+                *slot = env;
+            } else {
+                if !conflicts.contains(&env.name) {
+                    conflicts.push(env.name.clone());
+                }
+                self.environments.push(env);
+                self.environments.sort_by_key(|a| a.name.to_lowercase());
+            }
+        }
+
+        if let Some(g) = kept_globals {
+            self.global_environment = g;
+        }
+
+        self.invalidate_cache();
+        cx.emit(EnvironmentEvent::EnvironmentsReloaded);
+        conflicts.sort();
+        conflicts
+    }
+
+    /// Reloads a single environment (or `"globals"`) directly from disk,
+    /// discarding any in-memory edits for that target.
+    pub fn reload_environment_from_disk(&mut self, name: &str, cx: &mut Context<Self>) {
+        let ws_name = self.workspace_name.clone();
+        if name == "globals" {
+            let global_file = self.store.load_global_environment().unwrap_or_default();
+            let global_secrets = self.store.load_global_secrets().unwrap_or_default();
+            self.global_environment =
+                global_file.to_environment("globals", &ws_name, "Globals", &global_secrets);
+        } else {
+            let exists_on_disk = self
+                .store
+                .list_environments()
+                .unwrap_or_default()
+                .iter()
+                .any(|n| n == name);
+            if exists_on_disk {
+                if let Ok(env_file) = self.store.load_environment(name) {
+                    let secrets = self.store.load_secrets(name).unwrap_or_default();
+                    let env = env_file.to_environment(name, &ws_name, name, &secrets);
+                    if let Some(slot) = self.environments.iter_mut().find(|e| e.name == name) {
+                        *slot = env;
+                    } else {
+                        self.environments.push(env);
+                        self.environments.sort_by_key(|a| a.name.to_lowercase());
+                    }
+                }
+            } else {
+                self.environments.retain(|e| e.name != name);
+            }
+        }
+        self.invalidate_cache();
+        cx.emit(EnvironmentEvent::EnvironmentsReloaded);
+        cx.notify();
     }
 
     pub fn active_environment(&self) -> Option<&Environment> {
@@ -176,13 +261,6 @@ impl EnvironmentState {
     pub fn save_global_environment_silently(&mut self, env: Environment) {
         self.global_environment = env;
         self.invalidate_cache();
-    }
-
-    pub fn save_global_environment(&mut self, env: Environment, cx: &mut Context<Self>) {
-        self.global_environment = env;
-        self.invalidate_cache();
-        cx.emit(EnvironmentEvent::GlobalsModified);
-        cx.notify();
     }
 
     pub fn update_variable_key(
@@ -348,6 +426,7 @@ impl EnvironmentState {
         let env_file = EnvironmentFile::default();
         let _ = self.store.save_environment(&env_name, &env_file);
         self.reload_environments();
+        cx.emit(EnvironmentEvent::EnvironmentsReloaded);
         if self.active_environment_id.is_none() {
             self.set_active_environment(Some(env_name.clone()), cx);
         } else {
@@ -371,6 +450,7 @@ impl EnvironmentState {
         let _ = self.store.save_environment(&new_name, &env_file);
         let _ = self.store.save_secrets(&new_name, &secrets);
         self.reload_environments();
+        cx.emit(EnvironmentEvent::EnvironmentsReloaded);
         cx.notify();
         Some(new_name)
     }
@@ -396,6 +476,7 @@ impl EnvironmentState {
             self.active_environment_id = Some(trimmed.to_string());
         }
         self.reload_environments();
+        cx.emit(EnvironmentEvent::EnvironmentsReloaded);
         if was_active {
             cx.emit(EnvironmentEvent::ActiveEnvironmentChanged(
                 self.active_environment_id.clone(),
@@ -410,65 +491,21 @@ impl EnvironmentState {
         }
         let _ = self.store.delete_environment(env_id);
         self.reload_environments();
+        cx.emit(EnvironmentEvent::EnvironmentsReloaded);
         if self.active_environment_id.as_deref() == Some(env_id) {
             self.set_active_environment(self.environments.first().map(|e| e.id.clone()), cx);
         }
         cx.notify();
-    }
-
-    pub fn save_environments(&mut self, envs: Vec<Environment>, cx: &mut Context<Self>) {
-        self.env_save_task = None;
-        for env in &envs {
-            let (file, secrets) = EnvironmentFile::from_environment(env);
-            let _ = self.store.save_environment(&env.name, &file);
-            let _ = self.store.save_secrets(&env.name, &secrets);
-        }
-        self.reload_environments();
-        cx.notify();
-    }
-
-    pub fn save_environments_debounced(&mut self, envs: Vec<Environment>, cx: &mut Context<Self>) {
-        let store = self.store.clone();
-        let envs_clone = envs.clone();
-        let task = cx.spawn(async move |this, cx| {
-            cx.background_executor()
-                .timer(std::time::Duration::from_millis(500))
-                .await;
-            cx.background_executor()
-                .spawn(async move {
-                    for env in &envs_clone {
-                        let (file, secrets) = EnvironmentFile::from_environment(env);
-                        let _ = store.save_environment(&env.name, &file);
-                        let _ = store.save_secrets(&env.name, &secrets);
-                    }
-                })
-                .await;
-            if let Some(this) = this.upgrade() {
-                this.update(cx, |ws, cx| {
-                    ws.reload_environments();
-                    cx.notify();
-                });
-            }
-        });
-        self.env_save_task = Some(task);
-    }
-
-    pub fn flush_environments(&mut self) {
-        if self.env_save_task.take().is_some() {
-            for env in &self.environments {
-                let (file, secrets) = EnvironmentFile::from_environment(env);
-                let _ = self.store.save_environment(&env.name, &file);
-                let _ = self.store.save_secrets(&env.name, &secrets);
-            }
-            self.reload_environments();
-        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gpui_kit::{AppContext as _, TestAppContext};
     use tempfile::tempdir;
+    use zest_core::models::EnvironmentVariable;
+    use zest_core::storage::models::EnvVarFile;
     use zest_core::storage::FsWorkspaceStore;
 
     #[test]
@@ -488,5 +525,91 @@ mod tests {
             names,
             vec!["alpha", "beta", "Development", "local", "production"]
         );
+    }
+
+    #[gpui_kit::test]
+    fn test_apply_disk_changes_preserves_dirty_env_and_globals(cx: &mut TestAppContext) {
+        let temp = tempdir().expect("create temp dir");
+        let store: Arc<dyn WorkspaceStore> = Arc::new(FsWorkspaceStore::new(temp.path()));
+        store.init_workspace("TestWS").unwrap();
+
+        let mut disk_dev = EnvironmentFile::default();
+        disk_dev.variables.push(EnvVarFile {
+            name: "HOST".to_string(),
+            value: Some("disk-dev".to_string()),
+            secret: false,
+            enabled: true,
+        });
+        store.save_environment("dev", &disk_dev).unwrap();
+
+        let mut disk_staging = EnvironmentFile::default();
+        disk_staging.variables.push(EnvVarFile {
+            name: "HOST".to_string(),
+            value: Some("disk-staging-v1".to_string()),
+            secret: false,
+            enabled: true,
+        });
+        store.save_environment("staging", &disk_staging).unwrap();
+
+        let env_entity =
+            cx.new(|_| EnvironmentState::new(store.clone(), "TestWS".to_string(), None));
+
+        // Simulate in-progress user typing in `dev` and `globals`
+        env_entity.update(cx, |env, cx| {
+            let dev_idx = env
+                .environments
+                .iter()
+                .position(|e| e.name == "dev")
+                .unwrap();
+            env.environments[dev_idx].variables[0].current_value = "user-typing-abxy".to_string();
+            env.global_environment.variables.push(EnvironmentVariable {
+                key: "G_KEY".to_string(),
+                initial_value: "g_typing".to_string(),
+                current_value: "g_typing".to_string(),
+                secret: false,
+            });
+
+            // Meanwhile disk changes for both `dev` (dirty) and `staging` (clean)
+            let mut ext_staging = EnvironmentFile::default();
+            ext_staging.variables.push(EnvVarFile {
+                name: "HOST".to_string(),
+                value: Some("disk-staging-v2".to_string()),
+                secret: false,
+                enabled: true,
+            });
+            store.save_environment("staging", &ext_staging).unwrap();
+
+            let changed: HashSet<String> = ["dev".to_string(), "staging".to_string()]
+                .into_iter()
+                .collect();
+            let dirty: HashSet<String> = ["dev".to_string(), "globals".to_string()]
+                .into_iter()
+                .collect();
+
+            let conflicts = env.apply_disk_changes(&changed, &dirty, cx);
+            assert_eq!(conflicts, vec!["dev".to_string()]);
+
+            // Dirty `dev` and `globals` must retain user's in-memory text
+            let dev = env.environments.iter().find(|e| e.name == "dev").unwrap();
+            assert_eq!(dev.variables[0].current_value, "user-typing-abxy");
+            assert_eq!(
+                env.global_environment.variables[0].current_value,
+                "g_typing"
+            );
+
+            // Clean `staging` must update to the new disk value
+            let staging = env
+                .environments
+                .iter()
+                .find(|e| e.name == "staging")
+                .unwrap();
+            assert_eq!(staging.variables[0].initial_value, "disk-staging-v2");
+
+            // Reloading `dev` explicitly from disk discards the dirty memory copy
+            env.reload_environment_from_disk("dev", cx);
+            let dev_reloaded = env.environments.iter().find(|e| e.name == "dev").unwrap();
+            assert_eq!(dev_reloaded.variables[0].initial_value, "disk-dev");
+            assert_eq!(dev_reloaded.variables[0].current_value, "");
+        });
     }
 }

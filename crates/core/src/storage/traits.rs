@@ -1,10 +1,12 @@
 use crate::models::HttpMethod;
+use crate::storage::fingerprints::DiskFingerprints;
 use crate::storage::models::{
     EnvironmentFile, FolderFile, LocFile, LocalState, RequestFile, WorkspaceMeta, WorkspaceTree,
 };
 use anyhow::Result;
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
 
 /// Trait defining all storage operations for a workspace.
 /// The UI depends ONLY on this trait.
@@ -89,8 +91,6 @@ pub trait WorkspaceStore: Send + Sync {
     fn load_cookies(&self) -> Result<serde_json::Value>;
     fn save_cookies(&self, cookies: &serde_json::Value) -> Result<()>;
 
-    /// Thread-safe set of paths currently suppressed from watcher notifications
-    fn suppressed_paths(
-        &self,
-    ) -> std::sync::Arc<std::sync::Mutex<std::collections::HashSet<std::path::PathBuf>>>;
+    /// Last known on-disk file fingerprints used by the watcher to filter self-echo events
+    fn disk_fingerprints(&self) -> Arc<DiskFingerprints>;
 }

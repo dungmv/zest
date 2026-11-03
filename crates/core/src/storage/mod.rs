@@ -1,3 +1,4 @@
+pub mod fingerprints;
 pub mod fs_ops;
 pub mod fs_store;
 pub mod models;
@@ -6,6 +7,7 @@ pub mod slug;
 pub mod traits;
 pub mod watcher;
 
+pub use fingerprints::{DiskFingerprints, Fingerprint};
 pub use fs_store::FsWorkspaceStore;
 pub use models::*;
 pub use traits::WorkspaceStore;
@@ -612,39 +614,29 @@ mod tests {
     }
 
     #[test]
-    fn test_suppress_path_worker_lifecycle() {
+    fn test_store_records_disk_fingerprints_on_writes_and_deletes() {
         let temp_dir = std::env::temp_dir().join(format!(
-            "zest-suppress-test-{}",
+            "zest-fingerprint-test-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_nanos()
         ));
         let store = FsWorkspaceStore::new(&temp_dir);
-        let test_path = temp_dir.join("test.yaml");
+        store.init_workspace("FingerprintWS").unwrap();
 
-        assert!(!store
-            .suppressed_paths()
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .contains(&test_path));
-        store.suppress_path(&test_path);
-        assert!(store
-            .suppressed_paths()
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .contains(&test_path));
+        let env_path = temp_dir.join("environments").join("local.yaml");
+        let fp = store.disk_fingerprints();
+        assert!(fp.matches_disk(&env_path));
 
-        // Calling multiple times in a burst does not panic and tracks suppressed paths via single queue
-        for i in 0..50 {
-            let p = temp_dir.join(format!("burst_{}.yaml", i));
-            store.suppress_path(&p);
-            assert!(store
-                .suppressed_paths()
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .contains(&p));
-        }
+        let (_, rel_req) = store
+            .create_request(None, "Ping", HttpMethod::Get, "https://example.com")
+            .unwrap();
+        let req_path = temp_dir.join("collections").join(&rel_req);
+        assert!(fp.matches_disk(&req_path));
+
+        store.delete_request(&rel_req).unwrap();
+        assert!(fp.matches_disk(&req_path));
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }

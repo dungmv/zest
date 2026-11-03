@@ -554,3 +554,126 @@ fn test_external_change_reconciles_clean_vs_dirty(cx: &mut gpui_kit::TestAppCont
     assert!(!per_state.read_with(cx, |per, _| per.is_dirty(&req_id)));
     assert!(!per_state.read_with(cx, |per, _| per.conflicts.contains_key(&req_id)));
 }
+
+#[gpui_kit::test]
+async fn test_watcher_env_conflict_and_tree_changed_preserves_dirty(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    use zest_core::models::EnvironmentVariable;
+    use zest_core::storage::FsEvent;
+
+    let (dir, store) = setup_test_workspace("test_env_conflict");
+    let ws_state =
+        cx.new(|_| WorkspaceDataState::new_for_path(dir.path().to_path_buf(), store.clone()));
+    let per_state = cx.new(|_| PersistenceState::new(store.clone(), dir.path().to_path_buf()));
+    let env_state =
+        cx.new(|_| EnvironmentState::new(store.clone(), "test_env_conflict".to_string(), None));
+    let git_state = cx.new(|_| GitState::new(dir.path().to_path_buf()));
+
+    let req_id = store
+        .create_request(None, "Dirty Request", HttpMethod::Get, "https://api.com/v1")
+        .unwrap()
+        .1;
+    ws_state.update(cx, |ws, _| ws.reload_tree());
+
+    // 1. User edits request in memory and marks it dirty, then TreeChanged fires
+    per_state.update(cx, |per, cx| per.mark_dirty(req_id.clone(), cx));
+    ws_state.update(cx, |ws, _| {
+        if let Some(r) = ws.requests.iter_mut().find(|r| r.id == req_id) {
+            r.url = "https://api.com/v2-unsaved".to_string();
+        }
+    });
+
+    let ws1 = ws_state.clone();
+    let env1 = env_state.clone();
+    let git1 = git_state.clone();
+    per_state.update(cx, |per, cx| {
+        per.handle_fs_events_batch(vec![FsEvent::TreeChanged], ws1, env1, git1, cx);
+    });
+
+    let preserved_url =
+        ws_state.read_with(cx, |ws, _| ws.find_request(&req_id).map(|r| r.url.clone()));
+    assert_eq!(preserved_url.as_deref(), Some("https://api.com/v2-unsaved"));
+
+    // 2. User edits `local` environment and `schedule_save_environment` is pending
+    env_state.update(cx, |env, cx| {
+        env.add_variable("local", cx);
+        env.update_variable_key("local", 0, "TOKEN".to_string(), cx);
+        env.update_variable_current_value("local", 0, "typing-fast-value".to_string(), cx);
+    });
+    let local_snapshot = env_state.read_with(cx, |env, _| env.environments[0].clone());
+    per_state.update(cx, |per, cx| {
+        per.schedule_save_environment("local".to_string(), local_snapshot, cx);
+    });
+
+    // External modification to environments/local.yaml while save is pending
+    std::fs::write(
+        dir.path().join("environments").join("local.yaml"),
+        "variables:\n  - name: TOKEN\n    value: external-disk-value\n    secret: false\n    enabled: true\n",
+    )
+    .unwrap();
+
+    let ws2 = ws_state.clone();
+    let env2 = env_state.clone();
+    let git2 = git_state.clone();
+    per_state.update(cx, |per, cx| {
+        per.handle_fs_events_batch(
+            vec![FsEvent::EnvironmentChanged("local".to_string())],
+            ws2,
+            env2,
+            git2,
+            cx,
+        );
+    });
+
+    // In-memory value must NOT be overwritten, and env_conflicts must record "local"
+    let mem_val = env_state.read_with(cx, |env, _| {
+        env.environments
+            .iter()
+            .find(|e| e.name == "local")
+            .unwrap()
+            .variables[0]
+            .current_value
+            .clone()
+    });
+    assert_eq!(mem_val, "typing-fast-value");
+    assert!(per_state.read_with(cx, |per, _| per.env_conflicts.contains_key("local")));
+
+    // 3. Resolve conflict with "Reload" -> loads external disk value and clears conflict
+    let env3 = env_state.clone();
+    per_state.update(cx, |per, cx| {
+        per.resolve_env_conflict_reload("local", env3, cx);
+    });
+    assert!(!per_state.read_with(cx, |per, _| per.env_conflicts.contains_key("local")));
+    let reloaded_val = env_state.read_with(cx, |env, _| {
+        env.environments
+            .iter()
+            .find(|e| e.name == "local")
+            .unwrap()
+            .variables[0]
+            .initial_value
+            .clone()
+    });
+    assert_eq!(reloaded_val, "external-disk-value");
+
+    // 4.Globals conflict + "Keep mine" resolution
+    env_state.update(cx, |env, _| {
+        env.global_environment.variables.push(EnvironmentVariable {
+            key: "G".to_string(),
+            initial_value: "mine".to_string(),
+            current_value: "mine".to_string(),
+            secret: false,
+        });
+    });
+    let glob_snap = env_state.read_with(cx, |env, _| env.global_environment.clone());
+    per_state.update(cx, |per, cx| {
+        per.schedule_save_globals(glob_snap, cx);
+        per.env_conflicts
+            .insert("globals".to_string(), "conflict".to_string());
+    });
+    let env4 = env_state.clone();
+    per_state.update(cx, |per, cx| {
+        per.resolve_env_conflict_keep("globals", env4, cx);
+    });
+    assert!(!per_state.read_with(cx, |per, _| per.env_conflicts.contains_key("globals")));
+}

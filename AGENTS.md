@@ -85,7 +85,7 @@ These principles were forged through major refactoring milestones (SL-001..007, 
 ### 2.6 Local-First Storage & Unified Write-Behind Persistence (SL-005)
 - All storage models in `zest_core::storage::models` must specify `#[serde(deny_unknown_fields)]`. Never add catch-all fields like `extra: BTreeMap`.
 - All UI mutations to YAML-backed state (`Request`, `Environment`, `Globals`, `WorkspaceMeta`, `FolderMeta`, `Pins`, `LocalState`) update in-memory state immediately and enqueue coalesced, revision-ordered snapshots via `PersistenceCoordinator` (`state/persistence_coordinator.rs`).
-- File writes initiated by the application register paths with `FsWorkspaceStore::suppress_path` (managed by the `workspace-suppress-cleaner` thread) to prevent watcher echo loops.
+- File writes initiated by the application go through `AtomicWriter` (staging temp files in `.local/tmp/` and recording SHA-256 `DiskFingerprints` before touching disk); the watcher drops events whose on-disk content matches the known fingerprint, and reloads never overwrite targets with pending writes (conflicts are surfaced instead).
 
 ---
 

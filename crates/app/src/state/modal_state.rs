@@ -1,3 +1,4 @@
+use super::ModalEvent;
 use crate::settings::AppSettings;
 use gpui_kit::Context;
 
@@ -105,11 +106,15 @@ impl ModalState {
 
     pub fn toggle_env_modal(&mut self, cx: &mut Context<Self>) {
         self.show_env_modal = !self.show_env_modal;
+        if self.show_env_modal {
+            cx.emit(ModalEvent::EnvModalSelectionChanged);
+        }
         cx.notify();
     }
 
     pub fn open_env_modal(&mut self, cx: &mut Context<Self>) {
         self.show_env_modal = true;
+        cx.emit(ModalEvent::EnvModalSelectionChanged);
         cx.notify();
     }
 
@@ -121,11 +126,13 @@ impl ModalState {
     pub fn open_env_modal_with_id(&mut self, env_id: Option<String>, cx: &mut Context<Self>) {
         self.show_env_modal = true;
         self.selected_env_modal_id = env_id;
+        cx.emit(ModalEvent::EnvModalSelectionChanged);
         cx.notify();
     }
 
     pub fn select_modal_environment(&mut self, env_id: Option<String>, cx: &mut Context<Self>) {
         self.selected_env_modal_id = env_id;
+        cx.emit(ModalEvent::EnvModalSelectionChanged);
         cx.notify();
     }
 

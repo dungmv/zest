@@ -157,6 +157,9 @@ impl Runner {
                                                 act_name,
                                             ),
                                         );
+                                        cx.emit(
+                                            crate::state::EnvironmentEvent::EnvironmentsReloaded,
+                                        );
                                         cx.notify();
                                     } else {
                                         for (k, v_opt) in &all_mutations {
@@ -186,6 +189,9 @@ impl Runner {
                                         }
                                         env.invalidate_cache();
                                         cx.emit(crate::state::EnvironmentEvent::GlobalsModified);
+                                        cx.emit(
+                                            crate::state::EnvironmentEvent::EnvironmentsReloaded,
+                                        );
                                         cx.notify();
                                     }
                                 });

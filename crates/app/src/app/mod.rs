@@ -25,6 +25,7 @@ pub struct AppView {
     pub(crate) state: AppState,
     pub(crate) composer_inputs: ComposerInputs,
     pub(crate) inspector_displays: InspectorDisplays,
+    pub(crate) env_var_table: Entity<EnvVarTable>,
     pub(crate) runner: Runner,
     pub(crate) _subscriptions: Vec<Subscription>,
 }
@@ -51,6 +52,11 @@ impl AppView {
         let mut composer_inputs =
             ComposerInputs::new(window, state.env.clone(), highlighter_factory.clone(), cx);
         let mut inspector_displays = InspectorDisplays::new(window, highlighter_factory, cx);
+        let env_var_table = {
+            let env_ent = state.env.clone();
+            let modal_ent = state.modal.clone();
+            cx.new(|cx| EnvVarTable::new(window, env_ent, modal_ent, cx))
+        };
 
         let executor = state.workspace.read(cx).executor.clone();
         let tokio_rt = Arc::new(
@@ -134,6 +140,7 @@ impl AppView {
             state,
             composer_inputs,
             inspector_displays,
+            env_var_table,
             runner,
             _subscriptions,
         }
@@ -371,6 +378,7 @@ impl Render for AppView {
                 git_state: &git_entity,
                 editor_state: &session_entity,
                 toast_state: &toast_entity,
+                env_var_table: &self.env_var_table,
             },
             move |_, cx| {
                 send_view.update(cx, |view, cx| {

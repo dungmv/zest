@@ -3,7 +3,7 @@
 //! states and UI editors receive change payloads in a single synchronous dispatch
 //! instead of polling intermediate state fields on `cx.notify()`.
 
-use super::{EnvironmentState, RequestSessionState, ResponseState, WorkspaceDataState};
+use super::{EnvironmentState, ModalState, RequestSessionState, ResponseState, WorkspaceDataState};
 use gpui_kit::EventEmitter;
 use std::fmt;
 use std::path::PathBuf;
@@ -199,9 +199,20 @@ pub enum EnvironmentEvent {
     EnvironmentModified(String),
     /// Globals variables were modified.
     GlobalsModified,
+    /// Environments were reloaded or externally/programmatically updated; UI inputs must re-sync.
+    EnvironmentsReloaded,
 }
 
 impl EventEmitter<EnvironmentEvent> for EnvironmentState {}
+
+/// Events emitted by `ModalState`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModalEvent {
+    /// Environment modal opened or its selected environment changed.
+    EnvModalSelectionChanged,
+}
+
+impl EventEmitter<ModalEvent> for ModalState {}
 
 #[cfg(test)]
 mod tests {
@@ -419,7 +430,9 @@ mod tests {
         assert_eq!(
             events.as_slice(),
             &[
+                EnvironmentEvent::EnvironmentsReloaded,
                 EnvironmentEvent::ActiveEnvironmentChanged(Some("Staging".to_string())),
+                EnvironmentEvent::EnvironmentsReloaded,
                 EnvironmentEvent::ActiveEnvironmentChanged(Some("Production".to_string())),
             ]
         );

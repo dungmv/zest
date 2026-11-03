@@ -1,8 +1,9 @@
+use crate::storage::fingerprints::{strip_unc_prefix, DiskFingerprints};
 use anyhow::Result;
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
-use std::sync::{mpsc, Arc, Mutex};
+use std::path::Path;
+use std::sync::{mpsc, Arc};
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -17,6 +18,15 @@ pub enum FsEvent {
 
 pub struct WorkspaceWatcher {
     _watcher: RecommendedWatcher,
+}
+
+/// Dot-prefixed files are internal artifacts (atomic-write fallback temp files
+/// `.tmp_<uuid>_<name>.yaml`, editor swap files, `.DS_Store`) and never
+/// represent user-visible workspace content.
+pub fn is_hidden_artifact(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| n.starts_with('.'))
 }
 
 /// A Remove event may be followed by the same file being recreated (atomic
@@ -39,46 +49,9 @@ fn downgrade_existing_deletions(pending: &mut HashSet<FsEvent>, root: &Path) {
     }
 }
 
-fn strip_unc_str(s: &str) -> &str {
-    let s = s.strip_prefix(r"\\?\").unwrap_or(s);
-    if s.starts_with("/private/var/") || s.starts_with("/private/tmp/") {
-        &s["/private".len()..]
-    } else {
-        s
-    }
-}
-
-fn strip_unc_prefix(p: &Path) -> PathBuf {
-    let s = p.to_string_lossy();
-    if let Some(stripped) = s.strip_prefix(r"\\?\") {
-        PathBuf::from(stripped)
-    } else {
-        p.to_path_buf()
-    }
-}
-
-fn path_matches(p1: &Path, p2: &Path) -> bool {
-    let s1 = p1.to_string_lossy();
-    let s2 = p2.to_string_lossy();
-    let t1 = strip_unc_str(&s1);
-    let t2 = strip_unc_str(&s2);
-
-    let normalize_ch = |c: char| -> char {
-        if c == '/' {
-            '\\'
-        } else {
-            c.to_ascii_lowercase()
-        }
-    };
-
-    t1.chars()
-        .map(normalize_ch)
-        .eq(t2.chars().map(normalize_ch))
-}
-
 pub fn start_workspace_watcher(
     root_dir: &Path,
-    suppressed_paths: Arc<Mutex<HashSet<PathBuf>>>,
+    fingerprints: Arc<DiskFingerprints>,
     event_sender: UnboundedSender<FsEvent>,
 ) -> Result<WorkspaceWatcher> {
     let (raw_tx, raw_rx) = mpsc::channel::<Event>();
@@ -134,13 +107,6 @@ pub fn start_workspace_watcher(
 
                 if let Some(event) = next_event {
                     for path in &event.paths {
-                        // Check if path is in suppressed set (normalized for Windows UNC prefixes and case)
-                        if let Ok(set) = suppressed_paths.lock() {
-                            if set.iter().any(|p| path_matches(p, path)) {
-                                continue;
-                            }
-                        }
-
                         let clean_path = strip_unc_prefix(path);
                         let Ok(rel) = clean_path
                             .strip_prefix(&root_buf)
@@ -162,12 +128,19 @@ pub fn start_workspace_watcher(
                             continue;
                         }
 
-                        // Ignore internal / non-collection files
+                        // Ignore internal / non-collection files and dot-prefixed artifacts
                         if rel_str.starts_with(".local")
                             || rel_str.ends_with(".loc")
                             || rel_str.ends_with(".tmp")
                             || rel_str.ends_with(".bak")
+                            || is_hidden_artifact(&clean_path)
                         {
+                            continue;
+                        }
+
+                        // Drop self-echo events whose on-disk state matches the
+                        // fingerprint recorded by our own reads/writes.
+                        if fingerprints.matches_disk(path) {
                             continue;
                         }
 
@@ -214,6 +187,8 @@ pub fn start_workspace_watcher(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::storage::fingerprints::path_matches;
+    use crate::storage::{EnvironmentFile, FsWorkspaceStore, WorkspaceStore};
 
     #[test]
     fn test_path_matches_cross_platform() {
@@ -229,6 +204,19 @@ mod tests {
             Path::new(r"C:\workspace\collections\req.yaml"),
             Path::new(r"C:\workspace\collections\other.yaml")
         ));
+    }
+
+    #[test]
+    fn test_is_hidden_artifact() {
+        assert!(is_hidden_artifact(Path::new(
+            "environments/.tmp_123_dev.yaml"
+        )));
+        assert!(is_hidden_artifact(Path::new("collections/.DS_Store")));
+        assert!(is_hidden_artifact(Path::new("collections/.req.yaml.swp")));
+        assert!(!is_hidden_artifact(Path::new("environments/dev.yaml")));
+        assert!(!is_hidden_artifact(Path::new(
+            "collections/users/_folder.yaml"
+        )));
     }
 
     #[test]
@@ -257,9 +245,9 @@ mod tests {
         std::fs::create_dir_all(root.join(".git").join("objects")).unwrap();
         std::fs::create_dir_all(root.join("collections")).unwrap();
 
-        let sup = Arc::new(Mutex::new(HashSet::new()));
+        let fp = Arc::new(DiskFingerprints::new());
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let _watcher = start_workspace_watcher(root, sup, tx).unwrap();
+        let _watcher = start_workspace_watcher(root, fp, tx).unwrap();
 
         // 1. Modify git index
         std::fs::write(root.join(".git").join("index"), "fake index").unwrap();
@@ -267,7 +255,7 @@ mod tests {
         std::fs::write(root.join(".git").join("objects").join("abc"), "blob").unwrap();
         // 3. Modify git lock (should be ignored)
         std::fs::write(root.join(".git").join("index.lock"), "lock").unwrap();
-        // 4. Modify a request
+        // 4. Modify a request externally
         std::fs::write(root.join("collections").join("req.yaml"), "name: Req\n").unwrap();
 
         let mut received = HashSet::new();
@@ -293,5 +281,62 @@ mod tests {
             received.contains(&FsEvent::RequestChanged("req.yaml".to_string())),
             "Expected RequestChanged event"
         );
+    }
+
+    #[tokio::test]
+    async fn test_watcher_ignores_self_writes_and_hidden_files_but_emits_external_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = FsWorkspaceStore::new(dir.path());
+        store.init_workspace("WatcherSelfEcho").unwrap();
+
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let _watcher = start_workspace_watcher(dir.path(), store.disk_fingerprints(), tx).unwrap();
+
+        // Allow watcher to settle after init
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        while rx.try_recv().is_ok() {}
+
+        // 1. App saves environment, workspace meta, and hidden temp file -> must produce ZERO events
+        let mut env = EnvironmentFile::default();
+        env.variables.push(crate::storage::models::EnvVarFile {
+            name: "API_URL".to_string(),
+            value: Some("https://api.example.com".to_string()),
+            secret: false,
+            enabled: true,
+        });
+        store.save_environment("dev", &env).unwrap();
+        store
+            .save_workspace_meta(&crate::storage::models::WorkspaceMeta {
+                version: 1,
+                name: "UpdatedName".to_string(),
+                headers: Vec::new(),
+                auth: crate::storage::models::RequestAuth::None,
+            })
+            .unwrap();
+        std::fs::write(
+            dir.path().join("environments").join(".tmp_fake_dev.yaml"),
+            "variables: []\n",
+        )
+        .unwrap();
+
+        let echo = tokio::time::timeout(Duration::from_millis(500), rx.recv()).await;
+        assert!(
+            echo.is_err(),
+            "Self-writes and dot-files must not emit watcher events, got: {:?}",
+            echo
+        );
+
+        // 2. External modification to environments/dev.yaml -> MUST emit EnvironmentChanged("dev")
+        std::fs::write(
+            dir.path().join("environments").join("dev.yaml"),
+            "variables:\n  - name: API_URL\n    value: https://changed.example.com\n",
+        )
+        .unwrap();
+
+        let ext_ev = tokio::time::timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .expect("Expected external change event within timeout")
+            .expect("Channel open");
+        assert_eq!(ext_ev, FsEvent::EnvironmentChanged("dev".to_string()));
     }
 }

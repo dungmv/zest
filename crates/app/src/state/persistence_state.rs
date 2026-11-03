@@ -25,6 +25,7 @@ pub struct PersistenceState {
     pub workspace_path: PathBuf,
     pub local_state: LocalState,
     pub conflicts: HashMap<String, String>,
+    pub env_conflicts: HashMap<String, String>,
     pub unsaved_requests: HashSet<String>,
     pub unsaved_version: usize,
     pub coordinator: PersistenceCoordinator,
@@ -41,6 +42,7 @@ impl PersistenceState {
             workspace_path,
             local_state,
             conflicts: HashMap::new(),
+            env_conflicts: HashMap::new(),
             unsaved_requests: HashSet::new(),
             unsaved_version: 0,
             coordinator: PersistenceCoordinator::new(),
@@ -59,6 +61,7 @@ impl PersistenceState {
         self.store = store;
         self.workspace_path = path;
         self.conflicts.clear();
+        self.env_conflicts.clear();
         self.unsaved_requests.clear();
         self.debounce_tasks.clear();
         self.coordinator.bump_workspace_generation();
@@ -350,9 +353,14 @@ impl PersistenceState {
     }
 
     pub fn cancel_environment(&mut self, env_name: &str, cx: &mut Context<Self>) {
-        let target = PersistTarget::Environment(env_name.to_string());
+        let target = if env_name == "globals" {
+            PersistTarget::Globals
+        } else {
+            PersistTarget::Environment(env_name.to_string())
+        };
         self.coordinator.cancel_target(&target);
         self.debounce_tasks.remove(&target);
+        self.env_conflicts.remove(env_name);
         self.unsaved_version = self.unsaved_version.wrapping_add(1);
         cx.notify();
     }
@@ -373,9 +381,9 @@ impl PersistenceState {
         cx: &mut Context<Self>,
     ) {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<FsEvent>();
-        let sup = self.store.suppressed_paths();
+        let fp = self.store.disk_fingerprints();
         if let Ok(watcher) =
-            zest_core::storage::start_workspace_watcher(&self.workspace_path, sup, tx)
+            zest_core::storage::start_workspace_watcher(&self.workspace_path, fp, tx)
         {
             self.watcher = Some(watcher);
             let ws_clone = workspace_data.clone();
@@ -429,15 +437,17 @@ impl PersistenceState {
     ) {
         let mut git_changed = false;
         let mut tree_changed = false;
-        let mut env_changed = false;
-        let mut req_changed = std::collections::HashSet::new();
-        let mut req_deleted = std::collections::HashSet::new();
+        let mut changed_envs = HashSet::new();
+        let mut req_changed = HashSet::new();
+        let mut req_deleted = HashSet::new();
 
         for event in events {
             match event {
                 FsEvent::GitChanged => git_changed = true,
                 FsEvent::TreeChanged => tree_changed = true,
-                FsEvent::EnvironmentChanged(_) => env_changed = true,
+                FsEvent::EnvironmentChanged(name) => {
+                    changed_envs.insert(name);
+                }
                 FsEvent::RequestDeleted(rel_path) => {
                     req_deleted.insert(rel_path.clone());
                     req_changed.remove(&rel_path);
@@ -452,10 +462,8 @@ impl PersistenceState {
 
         // Deletion events are verified against the filesystem: `git restore`
         // and editors replace files via remove+recreate, so the file may exist
-        // again by the time the batch is handled. A pending deletion whose file
-        // is still on disk must not drop the request from the workspace; it is
-        // downgraded to a change and re-read via a full tree rescan.
-        let mut verified_deleted = std::collections::HashSet::new();
+        // again by the time the batch is handled.
+        let mut verified_deleted = HashSet::new();
         for rel_path in &req_deleted {
             if self
                 .workspace_path
@@ -496,9 +504,26 @@ impl PersistenceState {
             }
         }
 
+        let mut dirty_requests = self.unsaved_requests.clone();
+        let mut dirty_envs = HashSet::new();
+        for target in self.coordinator.dirty_targets() {
+            match target {
+                PersistTarget::Request(id) => {
+                    dirty_requests.insert(id);
+                }
+                PersistTarget::Environment(name) => {
+                    dirty_envs.insert(name);
+                }
+                PersistTarget::Globals => {
+                    dirty_envs.insert("globals".to_string());
+                }
+                _ => {}
+            }
+        }
+
         if tree_changed {
             workspace_data.update(cx, |ws, cx| {
-                ws.reload_tree();
+                ws.reload_tree_preserving(&dirty_requests);
                 cx.emit(WorkspaceEvent::RequestsReloaded { req_ids: None });
                 cx.notify();
             });
@@ -538,10 +563,6 @@ impl PersistenceState {
                             r.last_status_code = prev_status;
                             reloaded_ids.push(path);
                         } else {
-                            // The file exists on disk but the request is absent
-                            // from memory: it was removed by an earlier deletion
-                            // batch and has been recreated since. Rescan so it is
-                            // re-added with correct ordering instead of ignored.
                             needs_rescan = true;
                         }
                     }
@@ -553,7 +574,7 @@ impl PersistenceState {
 
                     ws.bump_tree_version();
                     if needs_rescan {
-                        ws.reload_tree();
+                        ws.reload_tree_preserving(&dirty_requests);
                         cx.emit(WorkspaceEvent::RequestsReloaded { req_ids: None });
                     } else if !reloaded_ids.is_empty() {
                         cx.emit(WorkspaceEvent::RequestsReloaded {
@@ -565,11 +586,21 @@ impl PersistenceState {
             }
         }
 
+        let env_changed = !changed_envs.is_empty();
         if env_changed {
-            env_state.update(cx, |env, cx| {
-                env.reload_environments();
+            let new_conflicts = env_state.update(cx, |env, cx| {
+                let c = env.apply_disk_changes(&changed_envs, &dirty_envs, cx);
                 cx.notify();
+                c
             });
+            for env_name in new_conflicts {
+                self.env_conflicts.insert(
+                    env_name,
+                    "Environment file was modified externally while you have unsaved changes."
+                        .to_string(),
+                );
+                self_changed = true;
+            }
         }
 
         if self_changed {
@@ -581,6 +612,55 @@ impl PersistenceState {
         if git_changed || working_tree_changed {
             git_state.update(cx, |git, cx| git.refresh_status(cx));
         }
+    }
+
+    pub fn resolve_env_conflict_reload(
+        &mut self,
+        env_name: &str,
+        env_state: Entity<EnvironmentState>,
+        cx: &mut Context<Self>,
+    ) {
+        self.cancel_environment(env_name, cx);
+        let name = env_name.to_string();
+        env_state.update(cx, |env, cx| {
+            env.reload_environment_from_disk(&name, cx);
+        });
+    }
+
+    pub fn resolve_env_conflict_keep(
+        &mut self,
+        env_name: &str,
+        env_state: Entity<EnvironmentState>,
+        cx: &mut Context<Self>,
+    ) {
+        self.env_conflicts.remove(env_name);
+        if env_name == "globals" {
+            let env = env_state.read(cx).global_environment.clone();
+            self.enqueue_write(
+                PersistTarget::Globals,
+                PersistPayload::Globals(Box::new(env)),
+                Duration::from_millis(0),
+                cx,
+            );
+        } else if let Some(env) = env_state
+            .read(cx)
+            .environments
+            .iter()
+            .find(|e| e.name == env_name || e.id == env_name)
+            .cloned()
+        {
+            let name = env.name.clone();
+            self.enqueue_write(
+                PersistTarget::Environment(name.clone()),
+                PersistPayload::Environment {
+                    name,
+                    env: Box::new(env),
+                },
+                Duration::from_millis(0),
+                cx,
+            );
+        }
+        cx.notify();
     }
 
     pub fn resolve_conflict_reload(

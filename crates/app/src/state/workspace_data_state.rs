@@ -247,6 +247,24 @@ impl WorkspaceDataState {
     }
 
     pub fn reload_tree(&mut self) {
+        self.reload_tree_preserving(&std::collections::HashSet::new());
+    }
+
+    /// Rescans the collection hierarchy on disk while preserving the in-memory
+    /// `HttpRequestItem` for any request ID in `dirty` whose file still exists
+    /// on disk. Prevents `TreeChanged` events from clobbering active typing in
+    /// the request composer.
+    pub fn reload_tree_preserving(&mut self, dirty: &std::collections::HashSet<String>) {
+        let mut kept_requests: HashMap<String, HttpRequestItem> = if dirty.is_empty() {
+            HashMap::new()
+        } else {
+            self.requests
+                .iter()
+                .filter(|r| dirty.contains(&r.id))
+                .map(|r| (r.id.clone(), r.clone()))
+                .collect()
+        };
+
         if let Ok(tree) = self.store.scan_tree() {
             let ws_name = self.workspace_meta.name.clone();
             let total_reqs = tree.count_requests();
@@ -314,6 +332,17 @@ impl WorkspaceDataState {
                     &mut all_requests,
                     &mut errors,
                 );
+            }
+
+            if !kept_requests.is_empty() {
+                for req in &mut all_requests {
+                    if let Some(mut kept) = kept_requests.remove(&req.id) {
+                        kept.folder_id = req.folder_id.clone();
+                        kept.last_status_code = kept.last_status_code.or(req.last_status_code);
+                        errors.remove(&req.id);
+                        *req = kept;
+                    }
+                }
             }
 
             self.requests = all_requests;

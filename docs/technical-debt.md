@@ -16,7 +16,7 @@ Dưới đây là danh sách theo dõi (Watchlist) cho **Vòng phát triển m�
 | **TD-202** | `scope_settings_modal.rs` vượt ngưỡng 650 LOC (~1.515 LOC) | `crates/app/src/components/scope_settings_modal.rs` | 🔵 **Low** | Trung bình | 📋 Theo dõi (Cycle 2) |
 | **TD-203** | `script_editor.rs` vượt ngưỡng 650 LOC (~1.443 LOC) | `crates/app/src/components/script_editor.rs` | 🔵 **Low** | Trung bình | 📋 Theo dõi (Cycle 2) |
 | **TD-204** | `response_inspector.rs` vượt ngưỡng 650 LOC (~1.334 LOC) | `crates/app/src/components/response_inspector.rs` | 🔵 **Low** | Trung bình | 📋 Theo dõi (Cycle 2) |
-| **TD-205** | `env_modal.rs` (~1.050 LOC) & `import_modal.rs` (~934 LOC) vượt ngưỡng 650 LOC | `crates/app/src/components/` | 🔵 **Low** | Trung bình | 📋 Theo dõi (Cycle 2) |
+| **TD-205** | `import_modal.rs` (~934 LOC) vượt ngưỡng 650 LOC (`env_modal/` đã tách xong <650 LOC) | `crates/app/src/components/` | 🔵 **Low** | Trung bình | 📋 Theo dõi (Cycle 2) |
 | **TD-206** | `#[allow(clippy::too_many_arguments)]` còn sót ở sidebar & command palette | `crates/app/src/components/sidebar/`, `command_palette.rs` | 🔵 **Low** | Thấp | 📋 Theo dõi (Cycle 2) |
 
 ### Hướng dẫn xử lý cho Cycle 2:
@@ -43,7 +43,7 @@ Toàn bộ các nền tảng kiến trúc dưới đây đã được hoàn tấ
 4. **File Watcher Defense-in-Depth & GitService Extraction (`PERF-005`, `CC-002`, `CC-003`, `TD-003`, `TD-018`, `TD-019`):**
    - Tách toàn bộ lệnh Git CLI sang `GitService` (`services/git_service.rs`) chạy bất đồng bộ với timeout 30s (`run_git_cmd_timeout`).
    - Bảo vệ file untracked khi discard từ sidebar (`delete_untracked = false`) và tự động hạ cấp sự kiện `RequestDeleted` -> `RequestChanged` khi file vẫn tồn tại trên đĩa (chống mất request khi `git restore` hoặc atomic save).
-   - Theo dõi chọn lọc `.git/` (`FsEvent::GitChanged`) và gom lô sự kiện watcher (debounce 100ms–200ms), dùng duy nhất 1 luồng dọn `suppressed_paths` (`workspace-suppress-cleaner`).
+   - Theo dõi chọn lọc `.git/` (`FsEvent::GitChanged`), gom lô sự kiện watcher (debounce 100ms–200ms), nhận diện self-echo bằng SHA-256 `DiskFingerprints` + `AtomicWriter` (stage file tạm tại `.local/tmp/`), bảo toàn dữ liệu đang gõ (`apply_disk_changes` / `reload_tree_preserving`) và đồng bộ `EnvVarTable` thuần qua kênh sự kiện.
 5. **Tối ưu Mạng, Bộ nhớ & Schema (`PERF-001..004`, `PERF-007..010`, `SL-002`, `SL-005..007`, `TD-005..017`):**
    - Chia sẻ connection pool trong `ReqwestExecutor`, xoá bỏ TCP probe thừa.
    - Cache phản hồi giới hạn kép `LruMemoryCache` (100 entries / 50MB RAM) bọc trong `Arc<HttpResponseRecord>`, kèm cache định dạng `Pretty`/`Raw` (`CachedResponseFormat`).

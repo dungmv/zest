@@ -51,6 +51,7 @@ pub fn handle_workspace_event(
 
             this.state.env.update(cx, |env, cx| {
                 env.set_workspace(store.clone(), workspace_name.clone(), active_env);
+                cx.emit(EnvironmentEvent::EnvironmentsReloaded);
                 cx.notify();
             });
 
@@ -97,7 +98,7 @@ pub fn handle_workspace_event(
         WorkspaceEvent::RequestsReloaded { req_ids } => {
             let active_id = this.state.session.read(cx).active_request_id().to_string();
             let should_sync = match req_ids {
-                None => true,
+                None => !this.state.persistence.read(cx).is_dirty(&active_id),
                 Some(ids) => ids.iter().any(|id| id == &active_id),
             };
             if should_sync
@@ -296,5 +297,6 @@ pub fn handle_environment_event(
                 per.schedule_save_globals(env, cx);
             });
         }
+        EnvironmentEvent::EnvironmentsReloaded => {}
     }
 }

@@ -1,5 +1,5 @@
 use crate::storage::models::{FolderFile, RequestFile};
-use crate::storage::serialize::{atomic_write_str, to_yaml_string, with_retry};
+use crate::storage::serialize::{to_yaml_string, with_retry, AtomicWriter};
 use crate::storage::slug::{loc_path_for_yaml, slugify, unique_slug, unique_slug_excluding};
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
@@ -12,7 +12,7 @@ pub fn path_to_forward_slash(path: &Path) -> String {
 /// Rewrites `dir/_folder.yaml`, applying `edit` to the `order:` list.
 /// Best-effort: missing or corrupt metadata files are ignored, and the file is
 /// only rewritten when the edited order actually changed.
-fn update_folder_order(dir: &Path, edit: impl FnOnce(&mut Vec<String>)) {
+fn update_folder_order(writer: &AtomicWriter, dir: &Path, edit: impl FnOnce(&mut Vec<String>)) {
     let meta_file = dir.join("_folder.yaml");
     if !meta_file.exists() {
         return;
@@ -27,7 +27,7 @@ fn update_folder_order(dir: &Path, edit: impl FnOnce(&mut Vec<String>)) {
     edit(&mut meta.order);
     if meta.order != before {
         if let Ok(content) = to_yaml_string(&meta) {
-            let _ = atomic_write_str(&meta_file, &content);
+            let _ = writer.write_str(&meta_file, &content);
         }
     }
 }
@@ -35,6 +35,7 @@ fn update_folder_order(dir: &Path, edit: impl FnOnce(&mut Vec<String>)) {
 /// Create a new request in `collections_dir` (inside `folder_rel` if specified):
 /// Writes `<slug>.yaml` atomically.
 pub fn create_request(
+    writer: &AtomicWriter,
     collections_dir: &Path,
     folder_rel: Option<&str>,
     name: &str,
@@ -53,7 +54,8 @@ pub fn create_request(
 
     req.name = name.to_string();
     let content = to_yaml_string(&req)?;
-    atomic_write_str(&yaml_path, &content)
+    writer
+        .write_str(&yaml_path, &content)
         .with_context(|| format!("Failed to atomically write request at {:?}", yaml_path))?;
 
     let rel_path = yaml_path
@@ -66,24 +68,30 @@ pub fn create_request(
 
 /// Delete a request: acts on `<slug>.yaml` FIRST (must succeed),
 /// then on `<slug>.loc` (best-effort, ignore errors).
-pub fn delete_request(collections_dir: &Path, rel_path: &Path) -> Result<()> {
+pub fn delete_request(
+    writer: &AtomicWriter,
+    collections_dir: &Path,
+    rel_path: &Path,
+) -> Result<()> {
     let yaml_path = collections_dir.join(rel_path);
-    if yaml_path.exists() {
-        with_retry(|| std::fs::remove_file(&yaml_path))
-            .with_context(|| format!("Failed to delete request file at {:?}", yaml_path))?;
-    }
+    writer
+        .remove_file(&yaml_path)
+        .with_context(|| format!("Failed to delete request file at {:?}", yaml_path))?;
 
     let loc_path = loc_path_for_yaml(&yaml_path);
-    if loc_path.exists() {
-        let _ = with_retry(|| std::fs::remove_file(&loc_path));
-    }
+    let _ = writer.remove_file(&loc_path);
 
     Ok(())
 }
 
 /// Rename a request:
 /// Renames `<slug>.yaml` and matching `<slug>.loc` atomically, updating display name in yaml.
-pub fn rename_request(collections_dir: &Path, rel_path: &Path, new_name: &str) -> Result<PathBuf> {
+pub fn rename_request(
+    writer: &AtomicWriter,
+    collections_dir: &Path,
+    rel_path: &Path,
+    new_name: &str,
+) -> Result<PathBuf> {
     let old_yaml_path = collections_dir.join(rel_path);
     if !old_yaml_path.exists() {
         anyhow::bail!("Request file {:?} does not exist", old_yaml_path);
@@ -119,10 +127,10 @@ pub fn rename_request(collections_dir: &Path, rel_path: &Path, new_name: &str) -
     let updated_content = to_yaml_string(&req)?;
 
     if old_yaml_path != new_yaml_path {
-        // Write new yaml atomically
-        atomic_write_str(&new_yaml_path, &updated_content)?;
-        // Remove old yaml
-        let _ = with_retry(|| std::fs::remove_file(&old_yaml_path));
+        // Write new yaml atomically (records fingerprint on new_yaml_path)
+        writer.write_str(&new_yaml_path, &updated_content)?;
+        // Remove old yaml (records Absent on old_yaml_path)
+        let _ = writer.remove_file(&old_yaml_path);
 
         // Rename .loc best-effort
         if old_loc_path.exists() {
@@ -141,7 +149,7 @@ pub fn rename_request(collections_dir: &Path, rel_path: &Path, new_name: &str) -
         }
 
         // Update _folder.yaml in parent_dir if present
-        update_folder_order(&parent_dir, |order| {
+        update_folder_order(writer, &parent_dir, |order| {
             for stem in order.iter_mut() {
                 if stem == old_stem {
                     *stem = new_slug.clone();
@@ -150,7 +158,7 @@ pub fn rename_request(collections_dir: &Path, rel_path: &Path, new_name: &str) -
         });
     } else {
         // Same slug, just write updated content
-        atomic_write_str(&new_yaml_path, &updated_content)?;
+        writer.write_str(&new_yaml_path, &updated_content)?;
     }
 
     let new_rel = new_yaml_path
@@ -164,6 +172,7 @@ pub fn rename_request(collections_dir: &Path, rel_path: &Path, new_name: &str) -
 /// Moves `<slug>.yaml` first (resolving collisions in destination),
 /// then moves matching `<slug>.loc` (best-effort).
 pub fn move_request(
+    writer: &AtomicWriter,
     collections_dir: &Path,
     rel_path: &Path,
     target_folder: Option<&str>,
@@ -194,12 +203,15 @@ pub fn move_request(
     let new_loc_path = target_dir.join(format!("{}.loc", new_slug));
     let old_loc_path = loc_path_for_yaml(&old_yaml_path);
 
-    // Atomic move of yaml
-    with_retry(|| std::fs::rename(&old_yaml_path, &new_yaml_path))
-        .with_context(|| format!("Failed to move request to {:?}", new_yaml_path))?;
+    // Atomic move of yaml (records Absent on old_yaml_path and content on new_yaml_path)
+    if old_yaml_path != new_yaml_path {
+        writer
+            .rename_file(&old_yaml_path, &new_yaml_path)
+            .with_context(|| format!("Failed to move request to {:?}", new_yaml_path))?;
+    }
 
     // Best-effort move of loc
-    if old_loc_path.exists() {
+    if old_loc_path != new_loc_path && old_loc_path.exists() {
         let rename_res = with_retry(|| {
             if new_loc_path.exists() {
                 let _ = std::fs::remove_file(&new_loc_path);
@@ -219,9 +231,11 @@ pub fn move_request(
     let source_parent = old_yaml_path.parent().map(Path::to_path_buf);
     if source_parent.as_deref() != Some(target_dir.as_path()) {
         if let Some(src_parent) = source_parent {
-            update_folder_order(&src_parent, |order| order.retain(|s| *s != old_stem));
+            update_folder_order(writer, &src_parent, |order| {
+                order.retain(|s| *s != old_stem)
+            });
         }
-        update_folder_order(&target_dir, |order| {
+        update_folder_order(writer, &target_dir, |order| {
             if !order.contains(&new_slug) {
                 order.push(new_slug.clone());
             }
@@ -238,6 +252,7 @@ pub fn move_request(
 /// Create a group (folder) under `collections_dir`:
 /// Creates directory and writes `_folder.yaml`.
 pub fn create_group(
+    writer: &AtomicWriter,
     collections_dir: &Path,
     parent_folder: Option<&str>,
     name: &str,
@@ -267,7 +282,7 @@ pub fn create_group(
         auth: crate::storage::models::RequestAuth::Inherit,
     };
     let content = to_yaml_string(&folder_meta)?;
-    atomic_write_str(&group_dir.join("_folder.yaml"), &content)?;
+    writer.write_str(&group_dir.join("_folder.yaml"), &content)?;
 
     let rel_path = group_dir
         .strip_prefix(collections_dir)
@@ -289,7 +304,12 @@ pub fn delete_group(collections_dir: &Path, folder_rel: &str) -> Result<()> {
 }
 
 /// Rename a group: updates display name in `_folder.yaml` and renames directory.
-pub fn rename_group(collections_dir: &Path, folder_rel: &str, new_name: &str) -> Result<PathBuf> {
+pub fn rename_group(
+    writer: &AtomicWriter,
+    collections_dir: &Path,
+    folder_rel: &str,
+    new_name: &str,
+) -> Result<PathBuf> {
     let old_group_dir = collections_dir.join(folder_rel);
     if !old_group_dir.exists() {
         anyhow::bail!("Group {:?} does not exist", old_group_dir);
@@ -320,9 +340,12 @@ pub fn rename_group(collections_dir: &Path, folder_rel: &str, new_name: &str) ->
     };
     meta.name = new_name.to_string();
     let meta_yaml = to_yaml_string(&meta)?;
-    atomic_write_str(&meta_file, &meta_yaml)?;
+    writer.write_str(&meta_file, &meta_yaml)?;
 
     if old_group_dir != new_group_dir {
+        let new_meta_file = new_group_dir.join("_folder.yaml");
+        writer.fingerprints().record_absent(&meta_file);
+        writer.record_read(&new_meta_file, meta_yaml.as_bytes());
         with_retry(|| std::fs::rename(&old_group_dir, &new_group_dir))
             .with_context(|| format!("Failed to rename group dir to {:?}", new_group_dir))?;
     }
@@ -378,6 +401,7 @@ pub fn move_group(
 
 /// Reorder requests in a folder by writing the stems to `_folder.yaml`.
 pub fn reorder_folder(
+    writer: &AtomicWriter,
     collections_dir: &Path,
     folder_rel: Option<&str>,
     order: &[String],
@@ -408,6 +432,6 @@ pub fn reorder_folder(
 
     meta.order = order.to_vec();
     let yaml = to_yaml_string(&meta)?;
-    atomic_write_str(&meta_file, &yaml)?;
+    writer.write_str(&meta_file, &yaml)?;
     Ok(())
 }
