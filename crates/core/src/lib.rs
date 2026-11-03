@@ -7,3 +7,4 @@ pub mod interpolation;
 pub mod models;
 pub mod scripting;
 pub mod storage;
+pub mod updater;

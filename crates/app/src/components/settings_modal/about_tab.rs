@@ -1,10 +1,11 @@
+use crate::components::about_modal::render_update_section;
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::Icon;
 use gpui_kit::{
     div, img, px, App, Entity, FontWeight, Image, ImageFormat, InteractiveElement as _,
-    IntoElement, MouseButton, ParentElement, Styled,
+    IntoElement, ParentElement, Styled,
 };
 use std::sync::{Arc, OnceLock};
 
@@ -22,7 +23,7 @@ fn settings_about_app_icon() -> Arc<Image> {
 
 pub fn render_about_tab(
     modal_state: &Entity<crate::state::ModalState>,
-    _cx: &App,
+    cx: &App,
 ) -> impl IntoElement {
     let t = theme();
     let modal_clone = modal_state.clone();
@@ -31,6 +32,7 @@ pub fn render_about_tab(
     let os = std::env::consts::OS;
     let arch = std::env::consts::ARCH;
     let platform_label = format!("{os} ({arch})");
+    let update_status = modal_clone.read(cx).update_status.clone();
 
     div()
         .w_full()
@@ -116,7 +118,7 @@ pub fn render_about_tab(
                                         ),
                                 )
                                 .child({
-                                    let modal_s = modal_clone;
+                                    let modal_s = modal_clone.clone();
                                     Button::new("btn-open-about-popup")
                                         .secondary()
                                         .compact()
@@ -145,6 +147,23 @@ pub fn render_about_tab(
                                 }),
                         ),
                 ),
+        )
+        // Section: Software Updates
+        .child(
+            div()
+                .w_full()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(px(10.))
+                .child(
+                    div()
+                        .text_xs()
+                        .font_weight(FontWeight::BOLD)
+                        .text_color(t.text_secondary)
+                        .child("SOFTWARE UPDATES"),
+                )
+                .child(render_update_section(&modal_clone, &update_status)),
         )
         // Section: System & Engine Details
         .child(

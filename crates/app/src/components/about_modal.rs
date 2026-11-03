@@ -1,9 +1,11 @@
 use crate::components::ModalDialog;
-use crate::state::{ModalState, ToastState};
+use crate::state::{ModalState, ToastState, UpdateStatus};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::spinner::Spinner;
 use gpui_kit::component::Icon;
+use gpui_kit::component::Sizable as _;
 use gpui_kit::{
     div, img, px, App, Entity, FontWeight, Image, ImageFormat, InteractiveElement as _,
     IntoElement, MouseButton, ParentElement, RenderOnce, Styled, Window,
@@ -38,7 +40,7 @@ impl AboutModal {
 }
 
 impl RenderOnce for AboutModal {
-    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let t = theme();
         let modal_clone = self.modal_state.clone();
         let toast_clone = self.toast_state;
@@ -47,6 +49,7 @@ impl RenderOnce for AboutModal {
         let os = std::env::consts::OS;
         let arch = std::env::consts::ARCH;
         let platform_label = format!("{os} ({arch})");
+        let update_status = modal_clone.read(cx).update_status.clone();
 
         ModalDialog::new("about-modal")
             .w(px(460.))
@@ -128,7 +131,7 @@ impl RenderOnce for AboutModal {
                                             .child(format!("v{version}")),
                                     )
                                     .child({
-                                        let toast_c = toast_clone.clone();
+                                        let toast_c = toast_clone;
                                         let plat_c = platform_label.clone();
                                         Button::new("btn-copy-version")
                                             .ghost()
@@ -158,6 +161,8 @@ impl RenderOnce for AboutModal {
                                     }),
                             ),
                     )
+                    // Update Checker Card
+                    .child(render_update_section(&modal_clone, &update_status))
                     // Details Table Card
                     .child(
                         div()
@@ -219,6 +224,226 @@ impl RenderOnce for AboutModal {
             )
             .into_any_element()
     }
+}
+
+pub fn render_update_section(
+    modal_state: &Entity<ModalState>,
+    status: &UpdateStatus,
+) -> impl IntoElement {
+    let t = theme();
+    let modal_s = modal_state.clone();
+
+    div()
+        .w_full()
+        .rounded(px(8.))
+        .bg(t.bg_app)
+        .border_1()
+        .border_color(t.border)
+        .p(px(10.))
+        .flex()
+        .items_center()
+        .justify_between()
+        .gap(px(10.))
+        .child(match status {
+            UpdateStatus::Idle => {
+                let m = modal_s;
+                div()
+                    .w_full()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(6.))
+                            .child(
+                                Icon::new(IconName::CloudDownload)
+                                    .size(px(14.))
+                                    .text_color(t.text_secondary),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(t.text_secondary)
+                                    .child("Software Updates"),
+                            ),
+                    )
+                    .child(
+                        Button::new("btn-check-updates")
+                            .secondary()
+                            .compact()
+                            .px(px(10.))
+                            .py(px(3.))
+                            .h(px(24.))
+                            .on_click(move |_, _, cx| {
+                                m.update(cx, |state, cx| {
+                                    state.check_for_updates(cx);
+                                });
+                            })
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(t.text_primary)
+                                    .child("Check for Updates"),
+                            ),
+                    )
+                    .into_any_element()
+            }
+            UpdateStatus::Checking => div()
+                .w_full()
+                .flex()
+                .items_center()
+                .gap(px(8.))
+                .child(Spinner::new().with_size(px(12.)).color(t.primary))
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(t.text_muted)
+                        .child("Checking GitHub for updates..."),
+                )
+                .into_any_element(),
+            UpdateStatus::UpToDate { checked_version } => {
+                let m = modal_s;
+                let ver = checked_version.clone();
+                div()
+                    .w_full()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(6.))
+                            .child(
+                                Icon::new(IconName::CircleCheck)
+                                    .size(px(14.))
+                                    .text_color(t.status_2xx),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(t.text_secondary)
+                                    .child(format!("Zest v{ver} is up to date")),
+                            ),
+                    )
+                    .child(
+                        Button::new("btn-recheck-updates")
+                            .ghost()
+                            .compact()
+                            .px(px(8.))
+                            .py(px(2.))
+                            .h(px(22.))
+                            .on_click(move |_, _, cx| {
+                                m.update(cx, |state, cx| {
+                                    state.check_for_updates(cx);
+                                });
+                            })
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(t.text_muted)
+                                    .child("Check again"),
+                            ),
+                    )
+                    .into_any_element()
+            }
+            UpdateStatus::UpdateAvailable {
+                latest_version,
+                release_url,
+                ..
+            } => {
+                let url = release_url.clone();
+                let tag = latest_version.clone();
+                div()
+                    .w_full()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(6.))
+                            .child(
+                                Icon::new(IconName::ArrowDown)
+                                    .size(px(14.))
+                                    .text_color(t.primary),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(t.primary)
+                                    .child(format!("New version available: {tag}")),
+                            ),
+                    )
+                    .child(
+                        Button::new("btn-download-update")
+                            .primary()
+                            .compact()
+                            .px(px(10.))
+                            .py(px(3.))
+                            .h(px(24.))
+                            .on_click(move |_, _, _| {
+                                crate::state::open_browser_url(&url);
+                            })
+                            .child(Icon::new(IconName::Globe).size(px(12.)))
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .child("View Release"),
+                            ),
+                    )
+                    .into_any_element()
+            }
+            UpdateStatus::Error(err) => {
+                let m = modal_s;
+                let err_msg = err.clone();
+                div()
+                    .w_full()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(6.))
+                            .child(
+                                Icon::new(IconName::CircleX)
+                                    .size(px(14.))
+                                    .text_color(t.status_5xx),
+                            )
+                            .child(div().text_xs().text_color(t.status_5xx).child(
+                                if err_msg.len() > 30 {
+                                    format!("Check failed: {}...", &err_msg[..27])
+                                } else {
+                                    format!("Check failed: {}", err_msg)
+                                },
+                            )),
+                    )
+                    .child(
+                        Button::new("btn-retry-updates")
+                            .ghost()
+                            .compact()
+                            .px(px(8.))
+                            .py(px(2.))
+                            .h(px(22.))
+                            .on_click(move |_, _, cx| {
+                                m.update(cx, |state, cx| {
+                                    state.check_for_updates(cx);
+                                });
+                            })
+                            .child(div().text_xs().text_color(t.text_muted).child("Retry")),
+                    )
+                    .into_any_element()
+            }
+        })
 }
 
 fn render_meta_row(

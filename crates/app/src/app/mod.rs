@@ -59,12 +59,7 @@ impl AppView {
         };
 
         let executor = state.workspace.read(cx).executor.clone();
-        let tokio_rt = Arc::new(
-            tokio::runtime::Builder::new_multi_thread()
-                .enable_all()
-                .build()
-                .expect("Failed to create tokio runtime"),
-        );
+        let tokio_rt = crate::services::global_tokio_runtime();
         let engine = Arc::new(HttpEngine::new(executor, tokio_rt));
         let runner = Runner::new(
             state.session.clone(),

@@ -18,6 +18,23 @@ pub enum SettingsTab {
     About,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum UpdateStatus {
+    #[default]
+    Idle,
+    Checking,
+    UpToDate {
+        checked_version: String,
+    },
+    UpdateAvailable {
+        current_version: String,
+        latest_version: String,
+        release_url: String,
+        release_name: Option<String>,
+    },
+    Error(String),
+}
+
 #[derive(Debug, Clone)]
 pub struct ModalState {
     pub show_env_modal: bool,
@@ -26,6 +43,7 @@ pub struct ModalState {
     pub show_command_palette: bool,
     pub show_settings_modal: bool,
     pub show_about_modal: bool,
+    pub update_status: UpdateStatus,
     pub settings_tab: SettingsTab,
     pub cookie_filter_query: String,
     pub scope_settings_target: Option<ScopeSettingsTarget>,
@@ -47,6 +65,7 @@ impl Default for ModalState {
             show_command_palette: false,
             show_settings_modal: false,
             show_about_modal: false,
+            update_status: UpdateStatus::Idle,
             settings_tab: SettingsTab::General,
             cookie_filter_query: String::new(),
             scope_settings_target: None,
@@ -256,6 +275,53 @@ impl ModalState {
         cx.notify();
     }
 
+    pub fn check_for_updates(&mut self, cx: &mut Context<Self>) {
+        if self.update_status == UpdateStatus::Checking {
+            return;
+        }
+        self.update_status = UpdateStatus::Checking;
+        cx.notify();
+
+        let current_version = env!("CARGO_PKG_VERSION");
+        let (tx, rx) = tokio::sync::oneshot::channel();
+
+        crate::services::global_tokio_runtime().spawn(async move {
+            let res =
+                zest_core::updater::check_github_release("dungmv", "zest", current_version).await;
+            let _ = tx.send(res);
+        });
+
+        cx.spawn(async move |this, cx| {
+            let result = rx
+                .await
+                .unwrap_or_else(|_| Err("Background update task was cancelled".to_string()));
+
+            let _ = this.update(cx, |state, cx| {
+                state.update_status = match result {
+                    Ok(zest_core::updater::UpdateCheckResult::UpToDate { current_version }) => {
+                        UpdateStatus::UpToDate {
+                            checked_version: current_version,
+                        }
+                    }
+                    Ok(zest_core::updater::UpdateCheckResult::UpdateAvailable {
+                        current_version,
+                        latest_version,
+                        release_url,
+                        release_name,
+                    }) => UpdateStatus::UpdateAvailable {
+                        current_version,
+                        latest_version,
+                        release_url,
+                        release_name,
+                    },
+                    Err(err) => UpdateStatus::Error(err),
+                };
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     pub fn dismiss_top_modal(&mut self, cx: &mut Context<Self>) -> bool {
         if self.show_about_modal {
             self.show_about_modal = false;
@@ -290,4 +356,15 @@ impl ModalState {
         }
         false
     }
+}
+
+pub fn open_browser_url(url: &str) {
+    #[cfg(target_os = "windows")]
+    let _ = std::process::Command::new("rundll32")
+        .args(["url.dll,FileProtocolHandler", url])
+        .spawn();
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open").arg(url).spawn();
+    #[cfg(target_os = "linux")]
+    let _ = std::process::Command::new("xdg-open").arg(url).spawn();
 }
