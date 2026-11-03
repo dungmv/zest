@@ -277,6 +277,14 @@ impl Render for AppView {
             })
             .on_action({
                 let modal_c = modal_entity.clone();
+                move |_: &ToggleAboutModal, _, cx| {
+                    modal_c.update(cx, |state, cx| {
+                        state.toggle_about_modal(cx);
+                    });
+                }
+            })
+            .on_action({
+                let modal_c = modal_entity.clone();
                 move |_: &OpenImportModal, _, cx| {
                     modal_c.update(cx, |state, cx| {
                         state.open_import_modal(None, cx);

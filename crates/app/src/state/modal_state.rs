@@ -15,6 +15,7 @@ pub enum SettingsTab {
     Network,
     Cookies,
     Shortcuts,
+    About,
 }
 
 #[derive(Debug, Clone)]
@@ -24,6 +25,7 @@ pub struct ModalState {
     pub env_filter_query: String,
     pub show_command_palette: bool,
     pub show_settings_modal: bool,
+    pub show_about_modal: bool,
     pub settings_tab: SettingsTab,
     pub cookie_filter_query: String,
     pub scope_settings_target: Option<ScopeSettingsTarget>,
@@ -44,6 +46,7 @@ impl Default for ModalState {
             env_filter_query: String::new(),
             show_command_palette: false,
             show_settings_modal: false,
+            show_about_modal: false,
             settings_tab: SettingsTab::General,
             cookie_filter_query: String::new(),
             scope_settings_target: None,
@@ -238,7 +241,27 @@ impl ModalState {
         cx.notify();
     }
 
+    pub fn open_about_modal(&mut self, cx: &mut Context<Self>) {
+        self.show_about_modal = true;
+        cx.notify();
+    }
+
+    pub fn close_about_modal(&mut self, cx: &mut Context<Self>) {
+        self.show_about_modal = false;
+        cx.notify();
+    }
+
+    pub fn toggle_about_modal(&mut self, cx: &mut Context<Self>) {
+        self.show_about_modal = !self.show_about_modal;
+        cx.notify();
+    }
+
     pub fn dismiss_top_modal(&mut self, cx: &mut Context<Self>) -> bool {
+        if self.show_about_modal {
+            self.show_about_modal = false;
+            cx.notify();
+            return true;
+        }
         if self.show_command_palette {
             self.show_command_palette = false;
             cx.notify();

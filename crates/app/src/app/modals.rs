@@ -41,6 +41,7 @@ pub fn attach_modal_overlays(
     let show_scope_settings_modal = modal.scope_settings_target.is_some();
     let show_import_modal = modal.show_import_modal;
     let show_command_palette = modal.show_command_palette;
+    let show_about_modal = modal.show_about_modal;
 
     let show_git_modal = git_state.read(cx).show_modal;
 
@@ -86,6 +87,9 @@ pub fn attach_modal_overlays(
             modal_entity.clone(),
             toast_entity.clone(),
         ))
+    })
+    .when(show_about_modal, |this| {
+        this.child(AboutModal::new(modal_entity.clone(), toast_entity.clone()))
     })
     .when(show_command_palette, move |this| {
         this.child(CommandPalette::new(

@@ -8,6 +8,7 @@ actions!(
         ToggleSidebar,
         ToggleSettings,
         ToggleGitModal,
+        ToggleAboutModal,
         OpenImportModal,
         NavigateBack,
         NavigateForward,

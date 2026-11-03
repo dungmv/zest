@@ -1,3 +1,4 @@
+mod about_tab;
 mod cookies_tab;
 mod general_tab;
 mod network_tab;
@@ -42,7 +43,7 @@ impl RenderOnce for SettingsModal {
         let active_tab = modal_clone.read(cx).settings_tab;
         let cookie_count = ws_clone.read(cx).cookies.len();
 
-        let nav_items: [(SettingsTab, IconName, &'static str, Option<usize>); 4] = [
+        let nav_items: [(SettingsTab, IconName, &'static str, Option<usize>); 5] = [
             (
                 SettingsTab::General,
                 IconName::SlidersHorizontal,
@@ -67,6 +68,7 @@ impl RenderOnce for SettingsModal {
                 "Shortcuts",
                 None,
             ),
+            (SettingsTab::About, IconName::Info, "About", None),
         ];
 
         ModalDialog::new("settings-modal")
@@ -219,6 +221,10 @@ impl RenderOnce for SettingsModal {
                                         .into_any_element(),
                                         SettingsTab::Shortcuts => {
                                             shortcuts_tab::render_shortcuts_tab().into_any_element()
+                                        }
+                                        SettingsTab::About => {
+                                            about_tab::render_about_tab(&modal_clone, cx)
+                                                .into_any_element()
                                         }
                                     }),
                             ),

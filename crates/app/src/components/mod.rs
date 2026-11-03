@@ -1,4 +1,5 @@
 #![allow(unused_imports)]
+pub mod about_modal;
 pub mod body_editor;
 pub mod command_palette;
 pub mod console_panel;
@@ -21,6 +22,7 @@ pub mod tabs_with_badge;
 pub mod titlebar;
 pub mod toast;
 
+pub use about_modal::*;
 pub use body_editor::*;
 pub use command_palette::*;
 pub use console_panel::*;

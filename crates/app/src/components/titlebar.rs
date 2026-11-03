@@ -248,8 +248,19 @@ impl RenderOnce for AppTitleBar {
                         let ws_folder = ws_s.clone();
                         let ws_clean = ws_s.clone();
                         let modal_import = modal_s.clone();
+                        let modal_about = modal_s.clone();
 
                         let mut m = menu
+                            .item(
+                                PopupMenuItem::new("About Zest")
+                                    .icon(IconName::Info)
+                                    .on_click(move |_, _, cx| {
+                                        modal_about.update(cx, |state, cx| {
+                                            state.open_about_modal(cx);
+                                        });
+                                    }),
+                            )
+                            .separator()
                             .item(
                                 PopupMenuItem::new("Workspace Settings...")
                                     .icon(IconName::Settings)
