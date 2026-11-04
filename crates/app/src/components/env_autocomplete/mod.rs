@@ -1,9 +1,11 @@
 mod render;
+mod var_tokens;
 
 pub use render::{
     candidate_type_badge, render_candidate_detail_card, render_candidate_row, CANDIDATE_DETAIL_GAP,
     CANDIDATE_DETAIL_WIDTH, CANDIDATE_LIST_WIDTH,
 };
+pub use var_tokens::attach_missing_var_tokens;
 
 use crate::state::EnvironmentState;
 use anyhow::Result;

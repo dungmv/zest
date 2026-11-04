@@ -50,9 +50,22 @@ pub fn setup_app_subscriptions(
     // 1. Subscribe to URL input change
     let ed_url = editor_state.clone();
     let ws_url = workspace_state.clone();
-    subscriptions.push(
-        cx.subscribe(url_input, move |this, input, event, cx| match event {
+    subscriptions.push(cx.subscribe_in(
+        url_input,
+        window,
+        move |this, input, event, window, cx| match event {
             InputEvent::Change => {
+                // A closing `}}` typed or pasted by the user completes a raw
+                // `{{var}}` span; convert it into an inline variable tag.
+                let effective_env = this.state.env.read(cx).effective_environment();
+                input.update(cx, |inp, cx| {
+                    crate::components::env_autocomplete::attach_missing_var_tokens(
+                        inp,
+                        &effective_env,
+                        window,
+                        cx,
+                    );
+                });
                 let val = input.read(cx).value().to_string();
                 let active_id = ed_url.read(cx).active_request_id().to_string();
                 if zest_core::curl::is_curl_command(&val) {
@@ -115,8 +128,8 @@ pub fn setup_app_subscriptions(
                 this.send_current_request(cx);
             }
             _ => {}
-        }),
-    );
+        },
+    ));
 
     // 2. Subscribe to JSON editor change
     let ed_json = editor_state.clone();
