@@ -117,12 +117,7 @@ pub fn render_sidebar_footer(
                                                     .child(format!("{}", behind)),
                                             ),
                                     )
-                                })
-                                .child(
-                                    Icon::new(IconName::ChevronDown)
-                                        .size(px(10.))
-                                        .text_color(t.text_muted),
-                                ),
+                                }),
                         ),
                 )
                 .dropdown_menu(move |menu, window, cx| {
