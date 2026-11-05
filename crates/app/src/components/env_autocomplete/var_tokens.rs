@@ -86,6 +86,8 @@ impl RetokenizeGuard {
 mod tests {
     use super::*;
     use gpui_kit::component::input::{Input, InputEvent, Redo, Undo};
+    #[cfg(test)]
+    use gpui_kit::test::TestWindowExt as _;
     use gpui_kit::{AppContext as _, Entity, IntoElement, Render, Subscription, TestAppContext};
     use std::cell::RefCell;
     use std::rc::Rc;
@@ -261,5 +263,130 @@ mod tests {
         let (value, tokens, _) = snapshot(cx);
         assert_eq!(value, "a{{h}}/x/{{b}}/tail");
         assert_eq!(tokens, 2);
+    }
+
+    /// The Windows platform layer delivers every committed IME character
+    /// through `InputHandler::replace_text_in_range` (gpui-pre-windows
+    /// `handle_char_msg`). This drives the composed `á` exactly that way to
+    /// verify the model receives it intact — the crash dumps show a panic
+    /// unwinding through the `window_procedure` FFI boundary right after a
+    /// WM_CHAR/Backspace storm, so this path is the prime suspect.
+    #[gpui_kit::test]
+    fn test_replace_text_in_range_delivers_composed_vietnamese_char(cx: &mut TestAppContext) {
+        cx.update(gpui_kit::component::init);
+        let (host, cx) = cx.add_window_view(|window, cx| {
+            let input = cx.new(|cx| InputState::new(window, cx));
+            let sub: Subscription = cx.subscribe_in(
+                &input,
+                window,
+                |_: &mut RetokHost,
+                 _: &Entity<InputState>,
+                 _: &gpui_kit::component::input::InputEvent,
+                 _,
+                 _| {},
+            );
+            RetokHost {
+                input,
+                changes: 0,
+                _sub: sub,
+            }
+        });
+        let input = host.read_with(cx, |h, _| h.input.clone());
+
+        cx.update(|window, cx| {
+            input.update(cx, |inp, cx| {
+                inp.focus(window, cx);
+                use gpui_kit::EntityInputHandler as _;
+                inp.replace_text_in_range(None, "á", window, cx);
+                inp.replace_text_in_range(None, "ộ", window, cx);
+                inp.replace_text_in_range(None, "ế", window, cx);
+                inp.replace_text_in_range(None, "Đ", window, cx);
+                assert_eq!(
+                    inp.value(),
+                    "áộếĐ",
+                    "platform-delivered composed chars must arrive intact"
+                );
+            });
+        });
+    }
+
+    /// A Backspace-mechanism Vietnamese IME (Unikey/EVKey/OpenKey) never uses
+    /// the preedit protocol: each composed keystroke arrives as a Backspace
+    /// key-down followed by a committed multi-byte character (e.g. `a` then
+    /// Backspace then `á`). This drives that exact event pattern through real
+    /// key dispatch while the URL wiring retokenizes `{{var}}` spans on every
+    /// Change, with the caret sitting right after an attached token — the
+    /// state that crashed the app on Windows (STATUS_STACK_BUFFER_OVERRUN).
+    #[gpui_kit::test]
+    fn test_vietnamese_backspace_ime_storm_around_tokens(cx: &mut TestAppContext) {
+        cx.update(gpui_kit::component::init);
+        let (host, cx) = cx.add_window_view(|window, cx| {
+            let input = cx.new(|cx| InputState::new(window, cx));
+            let guard = Rc::new(RefCell::new(RetokenizeGuard::default()));
+            let _sub = {
+                let guard = guard.clone();
+                cx.subscribe_in(
+                    &input,
+                    window,
+                    move |_: &mut RetokHost, input, ev, window, cx| {
+                        if let InputEvent::Change = ev {
+                            let val = input.read(cx).value().to_string();
+                            if guard.borrow_mut().should_process(&val) {
+                                input.update(cx, |inp, cx| {
+                                    attach_missing_var_tokens(inp, window, cx);
+                                });
+                            }
+                        }
+                    },
+                )
+            };
+            RetokHost {
+                input,
+                changes: 0,
+                _sub,
+            }
+        });
+        let input = host.read_with(cx, |h, _| h.input.clone());
+
+        cx.update(|window, cx| {
+            input.update(cx, |inp, cx| inp.focus(window, cx));
+        });
+
+        // A realistic URL: one closed span (becomes a token) and an open
+        // `{{` query with the suggestion popup active in the real app.
+        cx.update(|window, cx| window.input("https://api.com/{{host}}/{{", cx));
+        cx.update(|window, cx| window.input("á", cx));
+
+        // The IME storm: every Vietnamese syllable is Backspace + replacement.
+        for (plain, composed) in [("a", "á"), ("e", "ế"), ("a", "ấ"), ("o", "ộ"), ("u", "ữ")]
+        {
+            cx.update(|window, cx| window.press("backspace", cx));
+            cx.update(|window, cx| window.input(composed, cx));
+            cx.update(|window, cx| window.input(plain, cx));
+            cx.update(|window, cx| window.press("backspace", cx));
+        }
+
+        // Backspace into and across the attached token boundary.
+        for _ in 0..6 {
+            cx.update(|window, cx| window.press("backspace", cx));
+        }
+
+        cx.update(|window, cx| {
+            window.input("p", cx);
+            window.press("backspace", cx);
+            window.input("ộ", cx);
+        });
+
+        let value = input.read_with(cx, |i, _| i.value().to_string());
+        let token_count = input.read_with(cx, |i, _| i.tokens().len());
+        // The trailing backspaces reach the `{{host}}` span, whose token
+        // deletes atomically (one Backspace removes the whole tag), so exact
+        // text is not stable. What matters: the model stays coherent and the
+        // storm never panics or corrupts the URL prefix.
+        assert!(
+            value.starts_with("https://api.com"),
+            "URL prefix must survive the storm, got {value:?}"
+        );
+        assert!(token_count <= 1, "at most the host span carries a token");
     }
 }

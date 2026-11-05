@@ -15,12 +15,15 @@ pub fn is_curl_command(s: &str) -> bool {
     if trimmed.starts_with('$') || trimmed.starts_with('>') {
         trimmed = trimmed[1..].trim_start();
     }
-    if trimmed.len() >= 8 && trimmed[..8].eq_ignore_ascii_case("curl.exe") {
-        let rest = &trimmed[8..];
-        return rest.is_empty()
-            || rest.starts_with(|c: char| c.is_whitespace() || c == '\'' || c == '"' || c == '-');
-    }
-    if trimmed.len() >= 4 && trimmed[..4].eq_ignore_ascii_case("curl") {
+    // The prefix check uses `get` instead of byte slicing: with an IME-typed
+    // URL (e.g. Vietnamese) byte 4 can fall inside a multi-byte character,
+    // and slicing there panics — which, fired from the per-keystroke URL
+    // change handler, unwinds through the window procedure and aborts the
+    // app. A non-boundary prefix simply means "not a curl command".
+    if trimmed
+        .get(..4)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("curl"))
+    {
         let rest = &trimmed[4..];
         return rest.is_empty()
             || rest.starts_with(|c: char| c.is_whitespace() || c == '\'' || c == '"' || c == '-');
@@ -64,10 +67,15 @@ pub fn curl_to_request(workspace_id: &str, curl_str: &str) -> Result<HttpRequest
         return Err(anyhow!("Empty command"));
     }
 
-    let mut start_idx = 0;
-    if tokens[0].eq_ignore_ascii_case("curl") || tokens[0].eq_ignore_ascii_case("curl.exe") {
-        start_idx = 1;
-    }
+    // Only the plain `curl` command is importable; `curl.exe` is rejected so
+    // the parser stays consistent with `is_curl_command`.
+    let start_idx = if tokens[0].eq_ignore_ascii_case("curl") {
+        1
+    } else {
+        return Err(anyhow!(
+            "Not a curl command (expected it to start with 'curl')"
+        ));
+    };
 
     let mut method = HttpMethod::Get;
     let mut method_explicit = false;
@@ -493,14 +501,36 @@ mod tests {
     #[test]
     fn test_is_curl_command() {
         assert!(is_curl_command("curl https://example.com"));
-        assert!(is_curl_command("curl.exe -X POST https://example.com"));
         assert!(is_curl_command("$ curl 'https://example.com'"));
         assert!(is_curl_command("> curl -H 'accept: json' https://api.com"));
         assert!(is_curl_command("curl\n -X GET https://api.com"));
         assert!(!is_curl_command("https://example.com"));
         assert!(!is_curl_command("curl://example.com"));
         assert!(!is_curl_command("curling"));
+        // `curl.exe` is deliberately not treated as an importable command.
+        assert!(!is_curl_command("curl.exe -X POST https://example.com"));
         assert!(!is_curl_command(""));
+    }
+
+    /// Regression: the URL change handler runs `is_curl_command` on every
+    /// keystroke. A URL typed with a Vietnamese IME starts with multi-byte
+    /// characters, and byte-slicing the 4/8-char prefixes used to panic ("end
+    /// byte index 4 is not a char boundary"), which unwound through the
+    /// window procedure and aborted the whole app (STATUS_STACK_BUFFER_OVERRUN).
+    #[test]
+    fn test_is_curl_command_multibyte_prefix_never_panics() {
+        // Byte 4 lands inside 'á' (bytes 3..5).
+        assert!(!is_curl_command("há á độ"));
+        // Byte 4 lands inside 'ộ' (bytes 3..5).
+        assert!(!is_curl_command("ộếạ"));
+        // "curl.exá" reads as the plain "curl" prefix followed by ".exá",
+        // which is not a valid command tail.
+        assert!(!is_curl_command("curl.exá"));
+        // Multi-byte text everywhere, ASCII "curl" still detected.
+        assert!(is_curl_command("curl https://há.ộ/api"));
+        assert!(is_curl_command("  curl https://example.com  "));
+        assert!(!is_curl_command("ácurl"));
+        assert!(!is_curl_command("ế"));
     }
 
     #[test]
@@ -560,7 +590,7 @@ mod tests {
 
     #[test]
     fn test_parse_curl_powershell_backtick() {
-        let curl = "curl.exe --location 'https://httpbin.org/post' `\n  --header 'Content-Type: application/json' `\n  --data '{\"ps\": 1}'";
+        let curl = "curl --location 'https://httpbin.org/post' `\n  --header 'Content-Type: application/json' `\n  --data '{\"ps\": 1}'";
         let req = curl_to_request("ws1", curl).unwrap();
         assert_eq!(req.method, HttpMethod::Post);
         assert_eq!(req.url, "https://httpbin.org/post");
@@ -570,6 +600,14 @@ mod tests {
                 content: "{\"ps\": 1}".to_string()
             }
         );
+    }
+
+    /// `curl.exe` is not an importable command: the parser must reject it,
+    /// mirroring `is_curl_command`.
+    #[test]
+    fn test_parse_curl_rejects_curl_exe() {
+        let result = curl_to_request("ws1", "curl.exe -X POST https://example.com");
+        assert!(result.is_err(), "curl.exe must not parse as a curl command");
     }
 
     #[test]

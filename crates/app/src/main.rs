@@ -15,7 +15,51 @@ use gpui_kit::assets::AllAssets;
 use gpui_kit::*;
 use platform::default_window_options;
 
+/// Appends every panic message with a backtrace to a log file.
+///
+/// The default hook only prints to stderr, which users never see in a GUI
+/// app, and a panic that aborts during reporting (or an `extern "system"`
+/// unwind boundary) loses the message entirely — the process just dies with
+/// `STATUS_STACK_BUFFER_OVERRUN`. Writing to a file from the hook preserves
+/// the original panic site for crash reports.
+fn install_panic_logger() {
+    let log_path = std::env::temp_dir().join("zest-panic.log");
+    std::panic::set_hook(Box::new(move |info| {
+        let backtrace = std::backtrace::Backtrace::force_capture();
+        let thread = std::thread::current();
+        let thread_name = thread.name().unwrap_or("<unnamed>");
+        let _ = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+            .and_then(|mut file| {
+                use std::io::Write as _;
+                writeln!(file, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    .and_then(|_| {
+                        writeln!(
+                            file,
+                            "[{}] panic on thread '{}'",
+                            unix_timestamp(),
+                            thread_name
+                        )
+                    })
+                    .and_then(|_| writeln!(file, "{}", info))
+                    .and_then(|_| writeln!(file, "backtrace:\n{}", backtrace))
+            });
+    }));
+}
+
+/// Seconds since the Unix epoch; no chrono dependency needed for a log line.
+fn unix_timestamp() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
 fn main() {
+    install_panic_logger();
+
     #[cfg(target_os = "macos")]
     {
         // Suppress benign internal Apple InputMethodKit / TSM logs
