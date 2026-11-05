@@ -497,32 +497,44 @@ impl RenderOnce for AppTitleBar {
                     let full_path = segments.join(" / ");
                     let total = segments.len();
 
-                    let items = if total > 2 {
-                        vec![
-                            BreadcrumbItem::new("…"),
-                            BreadcrumbItem::new(segments[total - 2].clone())
-                                .max_w(px(90.))
-                                .truncate(),
-                            BreadcrumbItem::new(segments[total - 1].clone())
-                                .max_w(px(160.))
-                                .truncate(),
-                        ]
-                    } else if total == 2 {
-                        vec![
-                            BreadcrumbItem::new(segments[0].clone())
-                                .max_w(px(100.))
-                                .truncate(),
-                            BreadcrumbItem::new(segments[1].clone())
-                                .max_w(px(160.))
-                                .truncate(),
-                        ]
-                    } else if total == 1 {
-                        vec![BreadcrumbItem::new(segments[0].clone())
-                            .max_w(px(240.))
-                            .truncate()]
-                    } else {
-                        Vec::new()
-                    };
+                    // Truncate by character budget instead of a fixed segment
+                    // count: keep as many trailing segments as fit, eliding
+                    // leading ancestors, so short names can still show deep
+                    // paths while long names never overflow the 340px button.
+                    const FOLDER_MAX_CHARS: usize = 20; // ~120px at text_xs
+                    const NAME_MAX_CHARS: usize = 26; // ~160px at text_xs
+                    const PATH_CHAR_BUDGET: usize = 44; // incl. " / " separators
+
+                    let mut items = Vec::new();
+                    if total > 0 {
+                        let mut used = segments[total - 1].chars().count().min(NAME_MAX_CHARS);
+                        let mut first_shown = total - 1;
+                        for i in (0..first_shown).rev() {
+                            let cost = segments[i].chars().count().min(FOLDER_MAX_CHARS) + 3; // " / "
+                            if used + cost > PATH_CHAR_BUDGET {
+                                break;
+                            }
+                            used += cost;
+                            first_shown = i;
+                        }
+                        if first_shown > 0 {
+                            items.push(BreadcrumbItem::new("…"));
+                        }
+                        for (i, seg) in segments[first_shown..].iter().enumerate() {
+                            let is_name = first_shown + i == total - 1;
+                            let max_w = if is_name {
+                                if total == 1 {
+                                    240.
+                                } else {
+                                    160.
+                                }
+                            } else {
+                                120.
+                            };
+                            items
+                                .push(BreadcrumbItem::new(seg.clone()).max_w(px(max_w)).truncate());
+                        }
+                    }
 
                     (items, full_path)
                 } else {
