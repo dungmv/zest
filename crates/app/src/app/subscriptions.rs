@@ -3,6 +3,7 @@ use super::workspace_event_handler::{
     handle_environment_event, handle_response_event, handle_session_event, handle_workspace_event,
 };
 use super::AppView;
+use crate::components::env_autocomplete::{attach_missing_var_tokens, RetokenizeGuard};
 use crate::state::{
     EnvironmentEvent, EnvironmentState, GitState, ModalState, PersistenceState,
     RequestSessionState, ResponseEvent, ResponseState, SessionEvent, SidebarState, ToastState,
@@ -10,6 +11,8 @@ use crate::state::{
 };
 use gpui_kit::component::input::InputEvent;
 use gpui_kit::*;
+use std::cell::RefCell;
+use std::rc::Rc;
 use zest_core::models::{ApiKeyLocation, Auth, RequestBody};
 
 pub struct SubscriptionTargets<'a> {
@@ -50,23 +53,26 @@ pub fn setup_app_subscriptions(
     // 1. Subscribe to URL input change
     let ed_url = editor_state.clone();
     let ws_url = workspace_state.clone();
+    // Retokenizing a span re-emits `Change` with an identical value, and
+    // undoing a conversion restores token-less text with an identical value.
+    // The guard recognizes both so undo is never cancelled by an immediate
+    // re-attach (see RetokenizeGuard).
+    let url_retoken_guard = Rc::new(RefCell::new(RetokenizeGuard::default()));
     subscriptions.push(cx.subscribe_in(
         url_input,
         window,
         move |this, input, event, window, cx| match event {
             InputEvent::Change => {
+                let val = input.read(cx).value().to_string();
+                let is_new_value = url_retoken_guard.borrow_mut().should_process(&val);
+                if !is_new_value {
+                    return;
+                }
                 // A closing `}}` typed or pasted by the user completes a raw
                 // `{{var}}` span; convert it into an inline variable tag.
-                let effective_env = this.state.env.read(cx).effective_environment();
                 input.update(cx, |inp, cx| {
-                    crate::components::env_autocomplete::attach_missing_var_tokens(
-                        inp,
-                        &effective_env,
-                        window,
-                        cx,
-                    );
+                    attach_missing_var_tokens(inp, window, cx);
                 });
-                let val = input.read(cx).value().to_string();
                 let active_id = ed_url.read(cx).active_request_id().to_string();
                 if zest_core::curl::is_curl_command(&val) {
                     let ws_id = ws_url

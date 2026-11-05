@@ -217,8 +217,49 @@ pub fn scan_variables(raw_text: &str, env: Option<&Environment>) -> Vec<Variable
     spans
 }
 
+/// Find variable placeholder spans without resolving them: no environment
+/// lookup and no fake-variable generation.
+///
+/// Use this on hot paths such as editor retokenization, where only the
+/// position and name of each `{{var}}` placeholder matter and running the
+/// resolution machinery (per-call env map, RNG-backed fake variables) would
+/// be wasted work on every keystroke.
+pub fn scan_variable_spans(raw_text: &str) -> Vec<VariableSpan> {
+    if !raw_text.contains("{{") {
+        return Vec::new();
+    }
+    VAR_REGEX
+        .captures_iter(raw_text)
+        .map(|caps| {
+            let whole_match = caps.get(0).unwrap();
+            VariableSpan {
+                start: whole_match.start(),
+                end: whole_match.end(),
+                name: caps.get(1).unwrap().as_str().trim().to_string(),
+                is_resolved: false,
+                value: None,
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn test_scan_variable_spans_positions_and_names() {
+        let spans = scan_variable_spans("https://{{host}}/x/{{  user_id  }}?q={{open");
+        assert_eq!(spans.len(), 2);
+        assert_eq!(spans[0].start, 8);
+        assert_eq!(spans[0].end, 16);
+        assert_eq!(spans[0].name, "host");
+        assert_eq!(spans[1].start, 19);
+        assert_eq!(spans[1].name, "user_id");
+        // Lean scan never resolves values, so it must not touch the env map
+        // or the RNG-backed fake variable catalog.
+        assert!(spans.iter().all(|s| !s.is_resolved && s.value.is_none()));
+
+        assert!(scan_variable_spans("no placeholders here").is_empty());
+    }
     use super::*;
 
     #[test]
