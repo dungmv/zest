@@ -222,6 +222,7 @@ pub fn render_folder_row(
                 }
                 let ws_n = ws_new.clone();
                 let ed_n = ed_new.clone();
+                let sb_n = sb_menu.clone();
                 let f_id_n = f_id_new.clone();
 
                 let ws_ns = ws_new_sub.clone();
@@ -242,12 +243,19 @@ pub fn render_folder_row(
                 menu.item(
                     gpui_kit::component::menu::PopupMenuItem::new("New Request")
                         .icon(IconName::Plus)
-                        .on_click(move |_, _, cx| {
+                        .on_click(move |_, window, cx| {
+                            let ws_c = ws_n.clone();
                             let req = ws_n.update(cx, |state, cx| {
                                 state.create_request(Some(f_id_n.clone()), cx)
                             });
+                            let req_id = req.id.clone();
+                            let req_name = req.name.clone();
                             ed_n.update(cx, |state, cx| {
-                                state.set_active_request_id(&req.id, cx);
+                                state.set_active_request_id(&req_id, cx);
+                            });
+                            sb_n.update(cx, |state, cx| {
+                                state.collapsed_folders.remove(&f_id_n);
+                                state.start_renaming_request(req_id, req_name, ws_c, window, cx);
                             });
                         }),
                 )
@@ -265,6 +273,7 @@ pub fn render_folder_row(
                             });
                             if let Some(new_id) = created {
                                 sb_ns.update(cx, |state, cx| {
+                                    state.collapsed_folders.remove(&f_id_ns);
                                     state.start_renaming_folder(
                                         new_id,
                                         "new-folder".to_string(),

@@ -437,18 +437,27 @@ impl RenderOnce for SidebarTree {
                                 move |menu, _window, _cx| {
                                     let ws_req = ws_menu.clone();
                                     let ed_req = ed_menu.clone();
+                                    let sb_req = sb_menu.clone();
                                     let ws_folder = ws_menu.clone();
                                     let sb_folder = sb_menu.clone();
 
                                     menu.item(
                                         PopupMenuItem::new("New Request")
                                             .icon(Icon::new(IconName::FileText))
-                                            .on_click(move |_, _, cx| {
+                                            .on_click(move |_, window, cx| {
+                                                let ws_c = ws_req.clone();
                                                 let req = ws_req.update(cx, |state, cx| {
                                                     state.create_request(None, cx)
                                                 });
+                                                let req_id = req.id.clone();
+                                                let req_name = req.name.clone();
                                                 ed_req.update(cx, |state, cx| {
-                                                    state.set_active_request_id(&req.id, cx);
+                                                    state.set_active_request_id(&req_id, cx);
+                                                });
+                                                sb_req.update(cx, |state, cx| {
+                                                    state.start_renaming_request(
+                                                        req_id, req_name, ws_c, window, cx,
+                                                    );
                                                 });
                                             }),
                                     )
@@ -492,6 +501,7 @@ impl RenderOnce for SidebarTree {
                     .when(has_nothing, |this| {
                         let ws_new = ws_clone.clone();
                         let ed_new = ed_clone.clone();
+                        let sb_new = sb_clone.clone();
                         this.child(
                             div()
                                 .py(px(32.))
@@ -521,12 +531,20 @@ impl RenderOnce for SidebarTree {
                                         .text_xs()
                                         .font_weight(gpui_kit::FontWeight::MEDIUM)
                                         .text_color(t.text_secondary)
-                                        .on_click(move |_, _, cx| {
+                                        .on_click(move |_, window, cx| {
+                                            let ws_c = ws_new.clone();
                                             let req = ws_new.update(cx, |state, cx| {
                                                 state.create_request(None, cx)
                                             });
+                                            let req_id = req.id.clone();
+                                            let req_name = req.name.clone();
                                             ed_new.update(cx, |state, cx| {
-                                                state.set_active_request_id(&req.id, cx);
+                                                state.set_active_request_id(&req_id, cx);
+                                            });
+                                            sb_new.update(cx, |state, cx| {
+                                                state.start_renaming_request(
+                                                    req_id, req_name, ws_c, window, cx,
+                                                );
                                             });
                                         })
                                         .child("+ New Request"),

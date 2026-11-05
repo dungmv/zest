@@ -5,3 +5,4 @@ target/
 .vscode/
 .local/
 *.loc
+.agents/.DS_Store
