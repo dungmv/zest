@@ -1,6 +1,7 @@
 pub mod branch_modal;
 pub mod commit_modal;
 pub mod common;
+pub mod diff_parser;
 pub mod diff_view;
 pub mod history_modal;
 pub mod remotes_modal;

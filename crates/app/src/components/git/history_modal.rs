@@ -1,7 +1,6 @@
 use super::common::{render_error_banner, render_not_a_repo_view};
-use super::diff_view::{
-    render_diff_content, render_diff_view_toggle, split_diff_into_file_slices, DiffViewMode,
-};
+use super::diff_parser::{split_diff_into_file_slices, DiffViewMode};
+use super::diff_view::{render_diff_content, render_diff_view_toggle};
 use crate::components::modal_dialog::{DialogHeader, DialogTitle, ModalDialog};
 use crate::services::GitService;
 use crate::state::GitState;
