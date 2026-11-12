@@ -992,29 +992,66 @@ impl RenderOnce for ResponseInspector {
                                     div()
                                         .size_full()
                                         .overflow_y_scrollbar()
-                                        .p(px(12.))
+                                        .overflow_x_hidden()
+                                        .px(px(8.))
+                                        .py(px(4.))
                                         .flex()
                                         .flex_col()
-                                        .gap(px(6.))
                                         .children(resp.headers.iter().enumerate().map(|(idx, (k, v))| {
                                             let val_copy = v.clone();
+                                            let val_tip = v.clone();
+                                            let key_tip = k.clone();
                                             div()
+                                                .id(format!("resp-hdr-row-{}", idx))
+                                                .w_full()
                                                 .flex()
                                                 .items_center()
-                                                .gap(px(12.))
-                                                .py(px(4.))
+                                                .gap(px(10.))
+                                                .px(px(6.))
+                                                .py(px(3.))
+                                                .rounded(px(4.))
                                                 .border_b_1()
                                                 .border_color(t.border_subtle)
+                                                .hover(|s| s.bg(t.bg_hover))
                                                 .text_xs()
                                                 .font_family(".SystemMonoFont")
-                                                .child(div().w(px(200.)).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(t.primary).child(k.clone()))
-                                                .child(div().flex_1().text_color(t.text_primary).child(v.clone()))
+                                                .child(
+                                                    div()
+                                                        .id(format!("hdr-key-{}", idx))
+                                                        .w(px(180.))
+                                                        .flex_shrink_0()
+                                                        .truncate()
+                                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
+                                                        .text_color(t.primary)
+                                                        .tooltip(move |window, cx| {
+                                                            gpui_kit::component::tooltip::Tooltip::new(key_tip.clone()).build(window, cx)
+                                                        })
+                                                        .child(k.clone()),
+                                                )
+                                                .child(
+                                                    div()
+                                                        .id(format!("hdr-val-{}", idx))
+                                                        .flex_1()
+                                                        .min_w(px(0.))
+                                                        .truncate()
+                                                        .text_color(t.text_primary)
+                                                        .tooltip(move |window, cx| {
+                                                            gpui_kit::component::tooltip::Tooltip::new(val_tip.clone()).build(window, cx)
+                                                        })
+                                                        .child(v.clone()),
+                                                )
                                                 .child(
                                                     div()
                                                         .id(format!("copy-hdr-{}", idx))
+                                                        .flex_shrink_0()
                                                         .cursor_pointer()
+                                                        .p(px(2.))
+                                                        .rounded(px(4.))
                                                         .text_color(t.text_muted)
-                                                        .hover(|s| s.text_color(t.text_primary))
+                                                        .hover(|s| s.text_color(t.text_primary).bg(t.bg_card))
+                                                        .tooltip(move |window, cx| {
+                                                            gpui_kit::component::tooltip::Tooltip::new("Copy value").build(window, cx)
+                                                        })
                                                         .on_click(move |_, _, cx| {
                                                             cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(val_copy.clone()));
                                                         })
@@ -1059,7 +1096,8 @@ impl RenderOnce for ResponseInspector {
                                             .flex()
                                             .flex_col()
                                             .gap(px(8.))
-                                            .children(parsed_cookies.into_iter().map(|cookie| {
+                                            .children(parsed_cookies.into_iter().enumerate().map(|(c_idx, cookie)| {
+                                                let cookie_val_tip = cookie.value.clone();
                                                 div()
                                                     .p(px(8.))
                                                     .rounded(px(6.))
@@ -1094,9 +1132,14 @@ impl RenderOnce for ResponseInspector {
                                                     )
                                                     .child(
                                                         div()
+                                                            .id(format!("cookie-val-{}", c_idx))
                                                             .font_family(".SystemMonoFont")
                                                             .text_xs()
                                                             .text_color(t.text_primary)
+                                                            .truncate()
+                                                            .tooltip(move |window, cx| {
+                                                                gpui_kit::component::tooltip::Tooltip::new(cookie_val_tip.clone()).build(window, cx)
+                                                            })
                                                             .child(cookie.value.clone()),
                                                     )
                                                     .child(
