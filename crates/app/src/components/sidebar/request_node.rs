@@ -15,8 +15,6 @@ use gpui_kit::{
     ParentElement, StatefulInteractiveElement as _, Styled,
 };
 use zest_core::models::HttpMethod;
-use zest_core::storage::models::RequestFile;
-use zest_core::storage::serialize::to_yaml_string;
 
 #[derive(Clone, Debug)]
 pub struct SidebarExampleItem {
@@ -253,26 +251,10 @@ pub fn render_request_inner_pill(
                 let ws_p = ws_menu.clone();
                 let r_id_p = r_id_menu.clone();
 
-                let ws_yaml = ws_menu.clone();
-                let r_id_yaml = r_id_menu.clone();
                 let ws_curl = ws_menu.clone();
                 let r_id_curl = r_id_menu.clone();
 
                 let mut m = menu
-                    .item(
-                        PopupMenuItem::new("Copy as YAML")
-                            .icon(IconName::FileCode)
-                            .on_click(move |_, _, cx| {
-                                if let Some(r) = ws_yaml.read(cx).find_request(&r_id_yaml) {
-                                    let rf = RequestFile::from_item(r);
-                                    if let Ok(yaml) = to_yaml_string(&rf) {
-                                        cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(
-                                            yaml,
-                                        ));
-                                    }
-                                }
-                            }),
-                    )
                     .item(
                         PopupMenuItem::new("Copy as cURL")
                             .icon(IconName::Terminal)
