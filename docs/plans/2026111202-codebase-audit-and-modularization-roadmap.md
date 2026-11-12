@@ -91,7 +91,7 @@ Sử dụng checklist dưới đây để theo dõi tiến độ. Mỗi mục ho
     - `completion.rs`: `ScriptCompletionProvider` (656 LOC).
     - `editor.rs`: `ScriptEditor` view component (269 LOC).
     - `tests.rs`: Unit tests tách riêng (169 LOC).
-- [ ] **Step 2.2 (`TD-202` - Tách `scope_settings_modal.rs` ~1,466 LOC)**:
+- [x] **Step 2.2 (`TD-202` - Tách `scope_settings_modal.rs` ~1,466 LOC)**:
   - Chuyển `crates/app/src/components/scope_settings_modal.rs` thành thư mục `crates/app/src/components/scope_settings_modal/`:
     - `mod.rs`: State đồng bộ input, khung modal và điều hướng tab (< 500 LOC).
     - `headers_tab.rs`: Giao diện và sự kiện chỉnh sửa Scope Headers (< 450 LOC).
