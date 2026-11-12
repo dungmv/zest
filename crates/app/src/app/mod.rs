@@ -213,16 +213,16 @@ impl Render for AppView {
                     resizable_panel()
                         .size(sidebar_width)
                         .size_range(px(200.)..px(480.))
-                        .child(SidebarTree::new(
-                            ws_entity.clone(),
-                            self.state.persistence.clone(),
-                            sidebar_entity.clone(),
-                            modal_entity.clone(),
-                            git_entity.clone(),
-                            session_entity.clone(),
-                            resp_entity.clone(),
-                            toast_entity.clone(),
-                        )),
+                        .child(SidebarTree {
+                            workspace_state: ws_entity.clone(),
+                            persistence_state: self.state.persistence.clone(),
+                            sidebar_state: sidebar_entity.clone(),
+                            modal_state: modal_entity.clone(),
+                            git_state: git_entity.clone(),
+                            editor_state: session_entity.clone(),
+                            response_state: resp_entity.clone(),
+                            toast_state: toast_entity.clone(),
+                        }),
                 )
                 .child(resizable_panel().child(main_content))
                 .on_resize({

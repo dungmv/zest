@@ -269,41 +269,19 @@ fn render_flat_sidebar_row(row: &FlatSidebarRow, ctx: &SidebarRenderContext) -> 
     }
 }
 
+/// Built directly via struct literal at the call site — the eight entity
+/// handles are the element's entire state, so a constructor would only
+/// re-emit them.
 #[derive(IntoElement)]
 pub struct SidebarTree {
-    workspace_state: Entity<WorkspaceDataState>,
-    persistence_state: Entity<PersistenceState>,
-    sidebar_state: Entity<SidebarState>,
-    modal_state: Entity<ModalState>,
-    git_state: Entity<GitState>,
-    editor_state: Entity<RequestSessionState>,
-    response_state: Entity<ResponseState>,
-    toast_state: Entity<ToastState>,
-}
-
-impl SidebarTree {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        workspace_state: Entity<WorkspaceDataState>,
-        persistence_state: Entity<PersistenceState>,
-        sidebar_state: Entity<SidebarState>,
-        modal_state: Entity<ModalState>,
-        git_state: Entity<GitState>,
-        editor_state: Entity<RequestSessionState>,
-        response_state: Entity<ResponseState>,
-        toast_state: Entity<ToastState>,
-    ) -> Self {
-        Self {
-            workspace_state,
-            persistence_state,
-            sidebar_state,
-            modal_state,
-            git_state,
-            editor_state,
-            response_state,
-            toast_state,
-        }
-    }
+    pub workspace_state: Entity<WorkspaceDataState>,
+    pub persistence_state: Entity<PersistenceState>,
+    pub sidebar_state: Entity<SidebarState>,
+    pub modal_state: Entity<ModalState>,
+    pub git_state: Entity<GitState>,
+    pub editor_state: Entity<RequestSessionState>,
+    pub response_state: Entity<ResponseState>,
+    pub toast_state: Entity<ToastState>,
 }
 
 impl RenderOnce for SidebarTree {

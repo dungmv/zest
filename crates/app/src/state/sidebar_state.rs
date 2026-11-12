@@ -1,6 +1,7 @@
 use super::{EnvironmentState, GitState, PersistenceState, WorkspaceDataState};
 use crate::components::sidebar::{
-    build_sidebar_req_items, flatten_sidebar_tree, FlatSidebarRow, SidebarCacheKey,
+    build_sidebar_req_items, flatten_sidebar_tree, FlatSidebarRow, FlatTreeInput,
+    SidebarCacheKey,
     SidebarFlatCache,
 };
 use gpui_kit::component::input::InputState;
@@ -235,18 +236,18 @@ impl SidebarState {
         }
 
         let query_lower = self.filter_query.to_lowercase();
-        let rows = flatten_sidebar_tree(
-            &ws.folders,
-            &cache.req_raw_items,
-            &cache.req_items,
-            &ws.pins,
-            &query_lower,
-            &self.collapsed_folders,
-            &self.collapsed_requests,
-            self.pinned_collapsed,
-            git.status.as_ref(),
-            &per.unsaved_requests,
-        );
+        let rows = flatten_sidebar_tree(FlatTreeInput {
+            folders: &ws.folders,
+            raw_requests: &cache.req_raw_items,
+            arc_requests: &cache.req_items,
+            pins: &ws.pins,
+            query_lower: &query_lower,
+            collapsed_folders: &self.collapsed_folders,
+            collapsed_requests: &self.collapsed_requests,
+            pinned_collapsed: self.pinned_collapsed,
+            git_status: git.status.as_ref(),
+            unsaved_requests: &per.unsaved_requests,
+        });
         let arc_rows = Arc::new(rows);
         cache.key = Some(key);
         cache.rows = arc_rows.clone();

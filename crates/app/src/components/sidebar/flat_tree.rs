@@ -57,6 +57,21 @@ pub struct SidebarFlatCache {
     pub rows: Arc<Vec<FlatSidebarRow>>,
 }
 
+/// Borrowed inputs for [`flatten_sidebar_tree`], grouped so the builder keeps
+/// a single parameter instead of a ten-argument signature.
+pub struct FlatTreeInput<'a> {
+    pub folders: &'a [Folder],
+    pub raw_requests: &'a [SidebarReqItem],
+    pub arc_requests: &'a [Arc<SidebarReqItem>],
+    pub pins: &'a [String],
+    pub query_lower: &'a str,
+    pub collapsed_folders: &'a HashSet<String>,
+    pub collapsed_requests: &'a HashSet<String>,
+    pub pinned_collapsed: bool,
+    pub git_status: Option<&'a GitStatusResult>,
+    pub unsaved_requests: &'a HashSet<String>,
+}
+
 pub fn build_sidebar_req_items(
     requests: &[HttpRequestItem],
 ) -> (Vec<SidebarReqItem>, Vec<Arc<SidebarReqItem>>) {
@@ -99,21 +114,115 @@ pub fn build_sidebar_req_items(
     (raw_vec, arc_vec)
 }
 
+/// Adjacency and match state shared by the recursive flatten helpers.
+struct FlatTreeCtx<'a> {
+    folders: &'a [Folder],
+    query_lower: &'a str,
+    child_folder_indices: HashMap<&'a str, Vec<usize>>,
+    folder_req_indices: HashMap<&'a str, Vec<usize>>,
+    req_matches: Vec<bool>,
+    folder_matches: Vec<bool>,
+    folder_statuses: Vec<SidebarGitStatus>,
+    collapsed_folders: &'a HashSet<String>,
+    has_query: bool,
+}
+
+impl FlatTreeCtx<'_> {
+    /// Bottom-up folder search-match check with memoization, O(F + R).
+    fn check_folder_match(
+        &self,
+        f_idx: usize,
+        memo: &mut [Option<bool>],
+        visited: &mut [bool],
+    ) -> bool {
+        if let Some(res) = memo[f_idx] {
+            return res;
+        }
+        if visited[f_idx] {
+            return false;
+        }
+        visited[f_idx] = true;
+
+        let f = &self.folders[f_idx];
+        let mut matched = f.name.to_lowercase().contains(self.query_lower);
+
+        if !matched {
+            if let Some(reqs) = self.folder_req_indices.get(f.id.as_str()) {
+                if reqs.iter().any(|&r_idx| self.req_matches[r_idx]) {
+                    matched = true;
+                }
+            }
+        }
+
+        if let Some(children) = self.child_folder_indices.get(f.id.as_str()) {
+            for &child_idx in children {
+                if self.check_folder_match(child_idx, memo, visited) {
+                    matched = true;
+                }
+            }
+        }
+
+        memo[f_idx] = Some(matched);
+        matched
+    }
+
+    fn emit_folder(
+        &self,
+        f_idx: usize,
+        depth: usize,
+        emit_request: &impl Fn(usize, usize, &mut Vec<FlatSidebarRow>),
+        rows: &mut Vec<FlatSidebarRow>,
+        visited: &mut [bool],
+    ) {
+        if visited[f_idx] || !self.folder_matches[f_idx] {
+            return;
+        }
+        visited[f_idx] = true;
+
+        let f = &self.folders[f_idx];
+        let is_collapsed = self.collapsed_folders.contains(&f.id) && !self.has_query;
+        rows.push(FlatSidebarRow::Folder {
+            folder_id: f.id.clone(),
+            name: f.name.clone(),
+            depth,
+            is_collapsed,
+            git_status: self.folder_statuses[f_idx],
+        });
+
+        if !is_collapsed {
+            if let Some(children) = self.child_folder_indices.get(f.id.as_str()) {
+                for &child_idx in children {
+                    self.emit_folder(child_idx, depth + 1, emit_request, rows, visited);
+                }
+            }
+
+            if let Some(reqs) = self.folder_req_indices.get(f.id.as_str()) {
+                for &r_idx in reqs {
+                    if self.req_matches[r_idx] {
+                        emit_request(r_idx, depth + 1, rows);
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Flattens the workspace folder & request hierarchy into a flat list of uniform-height rows
 /// in a single O(F + R + G) pass.
-#[allow(clippy::too_many_arguments)]
-pub fn flatten_sidebar_tree(
-    folders: &[Folder],
-    raw_requests: &[SidebarReqItem],
-    arc_requests: &[Arc<SidebarReqItem>],
-    pins: &[String],
-    query_lower: &str,
-    collapsed_folders: &HashSet<String>,
-    collapsed_requests: &HashSet<String>,
-    pinned_collapsed: bool,
-    git_status: Option<&GitStatusResult>,
-    unsaved_requests: &HashSet<String>,
-) -> Vec<FlatSidebarRow> {
+pub fn flatten_sidebar_tree(input: FlatTreeInput<'_>) -> Vec<FlatSidebarRow> {
+    let FlatTreeInput {
+        folders,
+        raw_requests,
+        arc_requests,
+        pins,
+        query_lower,
+        collapsed_folders,
+        collapsed_requests,
+        pinned_collapsed,
+        git_status,
+        unsaved_requests,
+    } = input;
+
     if folders.is_empty() && raw_requests.is_empty() {
         return Vec::new();
     }
@@ -189,77 +298,27 @@ pub fn flatten_sidebar_tree(
         }
     }
 
+    let mut ctx = FlatTreeCtx {
+        folders,
+        query_lower,
+        child_folder_indices,
+        folder_req_indices,
+        req_matches,
+        folder_matches: Vec::new(),
+        folder_statuses,
+        collapsed_folders,
+        has_query,
+    };
+
     // 3. Compute folder search match flags in a single bottom-up pass O(F + R)
-    let folder_matches: Vec<bool> = if !has_query {
+    ctx.folder_matches = if !has_query {
         vec![true; folders.len()]
     } else {
         let mut memo: Vec<Option<bool>> = vec![None; folders.len()];
         let mut visited = vec![false; folders.len()];
-
-        #[allow(clippy::too_many_arguments)]
-        fn check_folder_match(
-            f_idx: usize,
-            folders: &[Folder],
-            child_folder_indices: &HashMap<&str, Vec<usize>>,
-            folder_req_indices: &HashMap<&str, Vec<usize>>,
-            req_matches: &[bool],
-            query_lower: &str,
-            memo: &mut [Option<bool>],
-            visited: &mut [bool],
-        ) -> bool {
-            if let Some(res) = memo[f_idx] {
-                return res;
-            }
-            if visited[f_idx] {
-                return false;
-            }
-            visited[f_idx] = true;
-
-            let f = &folders[f_idx];
-            let mut matched = f.name.to_lowercase().contains(query_lower);
-
-            if !matched {
-                if let Some(reqs) = folder_req_indices.get(f.id.as_str()) {
-                    if reqs.iter().any(|&r_idx| req_matches[r_idx]) {
-                        matched = true;
-                    }
-                }
-            }
-
-            if let Some(children) = child_folder_indices.get(f.id.as_str()) {
-                for &child_idx in children {
-                    if check_folder_match(
-                        child_idx,
-                        folders,
-                        child_folder_indices,
-                        folder_req_indices,
-                        req_matches,
-                        query_lower,
-                        memo,
-                        visited,
-                    ) {
-                        matched = true;
-                    }
-                }
-            }
-
-            memo[f_idx] = Some(matched);
-            matched
-        }
-
         for f_idx in 0..folders.len() {
-            check_folder_match(
-                f_idx,
-                folders,
-                &child_folder_indices,
-                &folder_req_indices,
-                &req_matches,
-                query_lower,
-                &mut memo,
-                &mut visited,
-            );
+            ctx.check_folder_match(f_idx, &mut memo, &mut visited);
         }
-
         memo.into_iter().map(|m| m.unwrap_or(false)).collect()
     };
 
@@ -288,89 +347,13 @@ pub fn flatten_sidebar_tree(
         }
     };
 
-    #[allow(clippy::too_many_arguments)]
-    fn emit_folder<'a>(
-        f_idx: usize,
-        depth: usize,
-        folders: &'a [Folder],
-        child_folder_indices: &HashMap<&'a str, Vec<usize>>,
-        folder_req_indices: &HashMap<&'a str, Vec<usize>>,
-        folder_matches: &[bool],
-        req_matches: &[bool],
-        folder_statuses: &[SidebarGitStatus],
-        collapsed_folders: &HashSet<String>,
-        has_query: bool,
-        emit_request: &impl Fn(usize, usize, &mut Vec<FlatSidebarRow>),
-        rows: &mut Vec<FlatSidebarRow>,
-        visited: &mut [bool],
-    ) {
-        if visited[f_idx] || !folder_matches[f_idx] {
-            return;
-        }
-        visited[f_idx] = true;
-
-        let f = &folders[f_idx];
-        let is_collapsed = collapsed_folders.contains(&f.id) && !has_query;
-        rows.push(FlatSidebarRow::Folder {
-            folder_id: f.id.clone(),
-            name: f.name.clone(),
-            depth,
-            is_collapsed,
-            git_status: folder_statuses[f_idx],
-        });
-
-        if !is_collapsed {
-            if let Some(children) = child_folder_indices.get(f.id.as_str()) {
-                for &child_idx in children {
-                    emit_folder(
-                        child_idx,
-                        depth + 1,
-                        folders,
-                        child_folder_indices,
-                        folder_req_indices,
-                        folder_matches,
-                        req_matches,
-                        folder_statuses,
-                        collapsed_folders,
-                        has_query,
-                        emit_request,
-                        rows,
-                        visited,
-                    );
-                }
-            }
-
-            if let Some(reqs) = folder_req_indices.get(f.id.as_str()) {
-                for &r_idx in reqs {
-                    if req_matches[r_idx] {
-                        emit_request(r_idx, depth + 1, rows);
-                    }
-                }
-            }
-        }
-    }
-
     let mut visited_emit = vec![false; folders.len()];
     for f_idx in root_folder_indices {
-        emit_folder(
-            f_idx,
-            0,
-            folders,
-            &child_folder_indices,
-            &folder_req_indices,
-            &folder_matches,
-            &req_matches,
-            &folder_statuses,
-            collapsed_folders,
-            has_query,
-            &emit_request,
-            &mut rows,
-            &mut visited_emit,
-        );
+        ctx.emit_folder(f_idx, 0, &emit_request, &mut rows, &mut visited_emit);
     }
 
     for r_idx in root_req_indices {
-        if req_matches[r_idx] {
+        if ctx.req_matches[r_idx] {
             emit_request(r_idx, 0, &mut rows);
         }
     }
@@ -380,230 +363,5 @@ pub fn flatten_sidebar_tree(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use zest_core::git::{GitFileStatus, GitStatusItem, GitStatusResult};
-    use zest_core::models::{Auth, HttpMethod};
-
-    fn make_folder(id: &str, parent_id: Option<&str>, name: &str) -> Folder {
-        Folder {
-            id: id.to_string(),
-            workspace_id: "ws".to_string(),
-            parent_id: parent_id.map(ToString::to_string),
-            name: name.to_string(),
-            sort_order: 0,
-            headers: Vec::new(),
-            auth: Auth::Inherit,
-        }
-    }
-
-    fn make_req(
-        id: &str,
-        folder_id: Option<&str>,
-        name: &str,
-        examples: Vec<SidebarExampleItem>,
-    ) -> SidebarReqItem {
-        SidebarReqItem {
-            id: id.to_string(),
-            folder_id: folder_id.map(ToString::to_string),
-            name: name.to_string(),
-            display_name: name.to_string(),
-            method: HttpMethod::Get,
-            url: format!("https://api.example.com/{}", id),
-            last_status_code: Some(200),
-            examples,
-        }
-    }
-
-    #[test]
-    fn test_flatten_sidebar_tree_hierarchy_and_collapse() {
-        let folders = vec![
-            make_folder("auth", None, "Auth"),
-            make_folder("auth/oauth", Some("auth"), "OAuth"),
-        ];
-        let raw_reqs = vec![
-            make_req(
-                "auth/oauth/token.yaml",
-                Some("auth/oauth"),
-                "Get Token",
-                vec![SidebarExampleItem {
-                    name: "200 OK".to_string(),
-                    status: 200,
-                }],
-            ),
-            make_req("health.yaml", None, "Health Check", vec![]),
-        ];
-        let arc_reqs: Vec<_> = raw_reqs.iter().cloned().map(Arc::new).collect();
-        let pins = vec!["health.yaml".to_string()];
-        let collapsed_folders = HashSet::new();
-        let collapsed_requests = HashSet::new();
-        let unsaved = HashSet::from(["auth/oauth/token.yaml".to_string()]);
-
-        let rows = flatten_sidebar_tree(
-            &folders,
-            &raw_reqs,
-            &arc_reqs,
-            &pins,
-            "",
-            &collapsed_folders,
-            &collapsed_requests,
-            false,
-            None,
-            &unsaved,
-        );
-
-        // Expected: PinnedHeader, PinnedRequest(health), Folder(auth, depth 0),
-        // Folder(auth/oauth, depth 1), Request(token, depth 2), Example(200 OK, depth 3),
-        // Request(health, depth 0), RootDropzone -> 8 rows
-        assert_eq!(rows.len(), 8);
-        assert!(matches!(
-            rows[0],
-            FlatSidebarRow::PinnedHeader {
-                is_collapsed: false
-            }
-        ));
-        assert!(matches!(
-            &rows[2],
-            FlatSidebarRow::Folder {
-                folder_id,
-                depth: 0,
-                git_status: SidebarGitStatus::Modified,
-                ..
-            } if folder_id == "auth"
-        ));
-        assert!(matches!(
-            &rows[3],
-            FlatSidebarRow::Folder {
-                folder_id,
-                depth: 1,
-                git_status: SidebarGitStatus::Modified,
-                ..
-            } if folder_id == "auth/oauth"
-        ));
-        assert!(matches!(
-            &rows[4],
-            FlatSidebarRow::Request {
-                depth: 2,
-                git_status: SidebarGitStatus::Modified,
-                ..
-            }
-        ));
-        assert!(matches!(&rows[5], FlatSidebarRow::Example { depth: 3, .. }));
-
-        // Collapse root "auth" folder: children should be hidden, but folder git_status remains Modified
-        let collapsed_folders = HashSet::from(["auth".to_string()]);
-        let rows_collapsed = flatten_sidebar_tree(
-            &folders,
-            &raw_reqs,
-            &arc_reqs,
-            &pins,
-            "",
-            &collapsed_folders,
-            &collapsed_requests,
-            false,
-            None,
-            &unsaved,
-        );
-        // Expected: PinnedHeader, PinnedRequest, Folder(auth, collapsed=true), Request(health), RootDropzone -> 5 rows
-        assert_eq!(rows_collapsed.len(), 5);
-        assert!(matches!(
-            &rows_collapsed[2],
-            FlatSidebarRow::Folder {
-                folder_id,
-                is_collapsed: true,
-                git_status: SidebarGitStatus::Modified,
-                ..
-            } if folder_id == "auth"
-        ));
-
-        // Test collapsing pinned folder: PinnedRequest should be hidden
-        let rows_pinned_collapsed = flatten_sidebar_tree(
-            &folders,
-            &raw_reqs,
-            &arc_reqs,
-            &pins,
-            "",
-            &collapsed_folders,
-            &collapsed_requests,
-            true,
-            None,
-            &unsaved,
-        );
-        // Expected: PinnedHeader (collapsed=true), Folder(auth, collapsed=true), Request(health), RootDropzone -> 4 rows
-        assert_eq!(rows_pinned_collapsed.len(), 4);
-        assert!(matches!(
-            rows_pinned_collapsed[0],
-            FlatSidebarRow::PinnedHeader { is_collapsed: true }
-        ));
-    }
-
-    #[test]
-    fn test_flatten_sidebar_large_collection_performance() {
-        // 80 folders (nested up to 4 levels) + 500 requests + 500 git status items
-        let mut folders = Vec::with_capacity(80);
-        for i in 0..20 {
-            let root_id = format!("f_{}", i);
-            folders.push(make_folder(&root_id, None, &format!("Folder {}", i)));
-            for j in 0..3 {
-                let sub_id = format!("{}/sub_{}", root_id, j);
-                folders.push(make_folder(
-                    &sub_id,
-                    Some(&root_id),
-                    &format!("Sub {}-{}", i, j),
-                ));
-            }
-        }
-
-        let mut raw_reqs = Vec::with_capacity(500);
-        let mut untracked = Vec::with_capacity(500);
-        for i in 0..500 {
-            let folder_idx = i % folders.len();
-            let fid = folders[folder_idx].id.clone();
-            let req_id = format!("{}/req_{}.yaml", fid, i);
-            raw_reqs.push(make_req(
-                &req_id,
-                Some(&fid),
-                &format!("Request Item {}", i),
-                vec![SidebarExampleItem {
-                    name: "Default 200".to_string(),
-                    status: 200,
-                }],
-            ));
-            untracked.push(GitStatusItem {
-                path: format!("collections/{}", req_id),
-                status: GitFileStatus::Untracked,
-                staged: false,
-            });
-        }
-        let arc_reqs: Vec<_> = raw_reqs.iter().cloned().map(Arc::new).collect();
-        let git_status = GitStatusResult {
-            is_repo: true,
-            untracked_files: untracked,
-            ..Default::default()
-        };
-
-        let start = std::time::Instant::now();
-        let rows = flatten_sidebar_tree(
-            &folders,
-            &raw_reqs,
-            &arc_reqs,
-            &[],
-            "",
-            &HashSet::new(),
-            &HashSet::new(),
-            false,
-            Some(&git_status),
-            &HashSet::new(),
-        );
-        let elapsed = start.elapsed();
-
-        // 80 folders + 500 requests + 500 examples + 1 RootDropzone = 1081 rows
-        assert_eq!(rows.len(), 1081);
-        // Should easily complete under 25ms even in unoptimized debug builds
-        assert!(
-            elapsed.as_millis() < 50,
-            "Flattening 500 requests took too long: {:?}",
-            elapsed
-        );
-    }
-}
+#[path = "flat_tree_tests.rs"]
+mod tests;
