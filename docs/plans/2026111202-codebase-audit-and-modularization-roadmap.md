@@ -2,7 +2,7 @@
 
 - **Date**: 2026-11-12
 - **Plan File**: `docs/plans/2026111202-codebase-audit-and-modularization-roadmap.md`
-- **Status**: 📋 Planned (Ready for Incremental Execution)
+- **Status**: ✅ Completed (2026-11-13)
 
 ---
 
@@ -111,32 +111,37 @@ Sử dụng checklist dưới đây để theo dõi tiến độ. Mỗi mục ho
 ---
 
 ### 📦 Phase 3: Modular hóa `crates/core` & `crates/app/src/state` (< 650 LOC Rule)
-- [ ] **Step 3.1 (Dọn dẹp `crates/core/src/storage/mod.rs` ~846 LOC)**:
-  - Chuyển toàn bộ ~830 dòng unit tests trong `crates/core/src/storage/mod.rs` sang `crates/core/src/storage/tests.rs`.
-  - Tách `crates/core/src/storage/fs_store.rs` (801 LOC) hoặc `storage/models.rs` (705 LOC) nếu cần để mọi file trong `storage/` đều <= 650 LOC.
-- [ ] **Step 3.2 (Tách Tests khỏi các file lớn trong `crates/core`)**:
-  - `crates/core/src/git/mod.rs` (1,090 LOC) -> tách unit tests sang `crates/core/src/git/tests.rs` (và tách `git/history.rs` nếu phần code chính > 650 LOC).
-  - `crates/core/src/models.rs` (1,075 LOC) -> tách unit tests sang `crates/core/src/models_tests.rs` (hoặc chuyển thành `models/mod.rs` + `models/tests.rs`).
-  - `crates/core/src/http/executor.rs` (1,030 LOC) -> tách unit tests sang `crates/core/src/http/executor_tests.rs` (phần code chính giảm xuống ~530 LOC).
-  - `crates/core/src/scripting/sandbox.rs` (867 LOC) -> tách unit tests sang `crates/core/src/scripting/sandbox_tests.rs` (phần code chính giảm xuống ~415 LOC).
-- [ ] **Step 3.3 (Làm gọn các file State trong `crates/app/src/state`)**:
-  - `state/response_state.rs` (864 LOC) -> tách unit tests ở cuối file sang `state/response_state_tests.rs` (phần code chính còn ~610 LOC).
-  - `state/workspace_crud.rs` (766 LOC) -> tách phần Folder & Move/Repath CRUD sang `state/workspace_folder_crud.rs` (mỗi file ~380 LOC).
-  - `state/persistence_state.rs` (728 LOC) -> tách phần xử lý sự kiện File Watcher (`apply_disk_changes` & helpers) sang `state/watcher_reconciler.rs`.
+- [x] **Step 3.1 (Dọn dẹp `crates/core/src/storage/mod.rs` ~846 LOC)**:
+  - Tests chuyển sang `crates/core/src/storage/tests.rs` (mod.rs còn 15 LOC).
+  - `fs_store.rs` (791 LOC) -> inherent impl (214 LOC) + `fs_store_ops.rs` (593 LOC, toàn bộ `impl WorkspaceStore`; Rust không cho phép tách 1 trait impl thành 2 block — E0119).
+  - `storage/models.rs` (705 LOC) -> 557 LOC + `models_tests.rs` (149 LOC).
+- [x] **Step 3.2 (Tách Tests khỏi các file lớn trong `crates/core`)**:
+  - `git/mod.rs` (1,090 LOC) -> tests sang `git/tests.rs`; production code tách tiếp `git/status.rs` + `git/refs.rs` (mod.rs giữ runner + types).
+  - `models.rs` (1,075 LOC) -> thư mục `models/` (`request.rs`, `workspace.rs`, `response.rs`) + `models/tests.rs`; giữ path `zest_core::models::*` qua wildcard re-export.
+  - `http/executor.rs` (1,030 LOC) -> `executor.rs` 436 LOC + `http/resolved.rs` 314 LOC (`parse_query_from_url`, `build_url_with_query`, `ResolvedRequest`) + `executor_tests.rs`.
+  - `scripting/sandbox.rs` (867 LOC) -> 633 LOC + `sandbox_tests.rs`.
+  - Bổ sung: `curl/mod.rs` (652) + `importers/mod.rs` (651) -> tách `tests.rs` cho cả hai.
+  - ⚠️ Bài học: dedent khi tách test block phải raw-string-aware — lần đầu đã làm hỏng indentation bên trong YAML/diff literals trong test; đã sửa bằng re-extract từ git history.
+- [x] **Step 3.3 (Làm gọn các file State trong `crates/app/src/state`)**:
+  - `response_state.rs` (864 LOC) -> 433 LOC + `response_state_tests.rs` (431 LOC).
+  - `workspace_crud.rs` (766 LOC) -> 414 LOC + `workspace_folder_crud.rs` (363 LOC — folder CRUD, move/repath, folder-tree helpers; inherent impl block thứ hai của `WorkspaceDataState`).
+  - `persistence_state.rs` (728 LOC) -> 492 LOC + `watcher_reconciler.rs` (257 LOC — `start_watcher`, `handle_fs_event`, `handle_fs_events_batch`).
 
 ---
 
 ### 🧱 Phase 4: Gom nhóm Context Tham số (`TD-206`) & Thu gọn State Structs
-- [ ] **Step 4.1 (`TD-206` - Xoá `#[allow(clippy::too_many_arguments)]` ở Sidebar)**:
-  - Tạo các struct ngữ cảnh (ví dụ `FlatTreeBuildInput<'a>`, `SidebarFolderRowProps<'a>`) trong `crates/app/src/components/sidebar/flat_tree.rs` và `components/sidebar/mod.rs`.
-  - Xoá toàn bộ 4 thuộc tính `#[allow(clippy::too_many_arguments)]`.
-- [ ] **Step 4.2 (Chuẩn hoá số lượng field <= 15 cho các State Struct)**:
-  - `GitState` (21 fields -> <= 12 fields): Gom các trường trạng thái giao diện modal (`show_modal`, `active_modal`, `tab`, `selected_file`, `diff_content`, `selected_commit`, `expanded_history_files`, `selected_commit_files`, `commit_and_push`) vào sub-struct `GitModalUiState` (hoặc giữ field truy cập rõ ràng).
-  - `ModalState` (17 fields -> <= 12 fields): Gom các cấu hình mạng (`request_timeout_secs`, `follow_redirects`, `validate_tls`) vào sub-struct `NetworkPrefs` (hoặc gom các trạng thái của Env/Settings modal).
-  - `SidebarState` (17 fields -> <= 13 fields): Gom 4 trường `renaming_request`, `renaming_folder`, `renaming_env`, `renaming_example` vào sub-struct `SidebarRenaming`.
-- [ ] **Step 4.3 (Cập nhật Tài liệu & Debt Registry)**:
-  - Cập nhật [`docs/technical-debt.md`](../technical-debt.md) chuyển trạng thái `TD-201` .. `TD-206` sang **✅ Đã giải quyết (100% Resolved)**.
-  - Đồng bộ lại bảng Watchlist trong [`.agents/skills/tech-debt-auditor/SKILL.md`](../../.agents/skills/tech-debt-auditor/SKILL.md).
+- [x] **Step 4.1 (`TD-206` - Xoá `#[allow(clippy::too_many_arguments)]` ở Sidebar)**:
+  - `flatten_sidebar_tree` nhận `FlatTreeInput<'a>`; 2 hàm đệ quy inline (`check_folder_match`, `emit_folder`) chuyển thành methods của `FlatTreeCtx<'a>` (giữ `query_lower`, adjacency maps, match flags).
+  - `SidebarTree::new` (8 tham số) bị xoá — call site construct struct literal trực tiếp (fields pub).
+  - Toàn workspace: 0 `#[allow(clippy::too_many_arguments)]` còn lại; tests chuyển sang `flat_tree_tests.rs` với call shape mới.
+- [x] **Step 4.2 (Chuẩn hoá số lượng field <= 15 cho các State Struct)**:
+  - `GitState` 21 -> 13 fields: sub-struct `GitModalUiState` (`is_open`, `active`, `tab`, `selected_file`, `diff_content`, `selected_commit`, `expanded_history_files`, `selected_commit_files`, `commit_and_push`).
+  - `ModalState` 17 -> 12 fields: `NetworkPrefs` (`request_timeout_secs`, `follow_redirects`, `validate_tls`), `EnvModalUi` (`is_open`, `selected_id`, `filter_query`), `ImportModalUi` (`is_open`, `target_folder_rel`).
+  - `SidebarState` 17 -> 14 fields: `SidebarRenaming` (`request`, `folder`, `env`, `example` rename sessions).
+  - ~170 call sites cập nhật bằng cách thay `.field` -> `.sub.field`, compiler là safety net; method names trùng tiền tố (`renaming_request_id()`...) được bảo vệ và revert thủ công.
+- [x] **Step 4.3 (Cập nhật Tài liệu & Debt Registry)**:
+  - [`docs/technical-debt.md`](../technical-debt.md): Cycle 2 table chuyển sang **✅ 100% Resolved (2026-11-13)** kèm kết quả từng khoản.
+  - [`.agents/skills/tech-debt-auditor/SKILL.md`](../../.agents/skills/tech-debt-auditor/SKILL.md): Watchlist Cycle 2 chuyển thành archive + regression guards.
 
 ---
 

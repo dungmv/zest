@@ -1,4 +1,5 @@
 pub mod completion;
+mod completion_catalog;
 pub mod editor;
 pub mod highlighter;
 #[cfg(test)]

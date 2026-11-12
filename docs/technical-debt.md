@@ -4,25 +4,20 @@
 
 ---
 
-## 📊 1. Bảng tổng hợp trạng thái hiện tại (Cycle 2 — Active Watchlist)
+## 🏅 1. Cycle 2 Watchlist (TD-201..TD-206 — ✅ 100% Resolved, 2026-11-13)
 
-Toàn bộ **31/31 khoản nợ kỹ thuật của Vòng 1 (Cycle 1)** cùng các đợt đại phẫu kiến trúc (Typed Event Emitter, Unified Write-Behind Persistence, GitService Extraction, External Change Reconciliation) đã hoàn thành 100%.
+Toàn bộ **31/31 khoản nợ kỹ thuật của Vòng 1 (Cycle 1)** và **6/6 khoản của Cycle 2** đã hoàn thành. Chi tiết giải pháp từng khoản:
 
-Dưới đây là danh sách theo dõi (Watchlist) cho **Vòng phát triển mới (Cycle 2)**, tập trung vào việc loại bỏ các thuộc tính `#![allow(...)]` cấp module và chia nhỏ các component lớn vượt ngưỡng `~650 LOC` khi phát triển tính năng mới:
+| ID | Vấn đề / Khoản nợ | Kết quả |
+| :--- | :--- | :--- |
+| **TD-201** | Module-wide `#![allow(dead_code)]` / `#![allow(unused_imports)]` | ✅ Đã xoá ở `state/mod.rs`, `components/mod.rs`; alias cũ (`WorkspaceState`, `response_viewer`) dọn sạch; `#[allow(dead_code)]` scope hẹp có chú thích chỉ còn ở helper/barrier thật sự |
+| **TD-202** | `scope_settings_modal.rs` ~1.515 LOC | ✅ Tách thành `components/scope_settings_modal/` (`mod.rs`, `general_tab.rs`, `headers_tab.rs`, `auth_tab.rs`, `auth_inputs.rs`) |
+| **TD-203** | `script_editor.rs` ~1.443 LOC | ✅ Tách thành `components/script_editor/` (`mod.rs`, `highlighter.rs`, `completion.rs`, `editor.rs`, `tests.rs`) |
+| **TD-204** | `response_inspector.rs` ~1.334 LOC | ✅ Tách thành `components/response_inspector/` (`mod.rs`, `body_tab.rs`, `headers_tab.rs`, `cookies_tab.rs`, `console_tab.rs`, `request_sent_tab.rs`, `timing_popover.rs`, `json_highlight.rs`) |
+| **TD-205** | Các component 650–875 LOC (`titlebar`, `import_modal`, `body_editor/multipart`, `git/diff_view`) | ✅ `titlebar/` (mod+menus+breadcrumb), `import_modal/` (mod+preview), `body_editor/multipart/` (mod+state+row), `git/diff_view.rs` + `git/diff_parser.rs` |
+| **TD-206** | `#[allow(clippy::too_many_arguments)]` ở sidebar | ✅ `flatten_sidebar_tree(FlatTreeInput)` + `FlatTreeCtx` methods; `SidebarTree` construct qua struct literal; 0 allow còn lại trong workspace. Đồng thời gom field: `GitState` 21→13 (`GitModalUiState`), `ModalState` 17→12 (`NetworkPrefs`, `EnvModalUi`, `ImportModalUi`), `SidebarState` 17→14 (`SidebarRenaming`) |
 
-| ID | Vấn đề / Khoản nợ | Khu vực ảnh hưởng | Mức độ | Độ phức tạp | Trạng thái |
-| :--- | :--- | :--- | :---: | :---: | :---: |
-| **TD-201** | Module-wide `#![allow(dead_code)]` & `#![allow(unused_imports)]` | `crates/app/src/state/mod.rs`, `crates/app/src/components/mod.rs` | 🟡 **Medium** | Thấp | 📋 Theo dõi (Cycle 2) |
-| **TD-202** | `scope_settings_modal.rs` vượt ngưỡng 650 LOC (~1.515 LOC) | `crates/app/src/components/scope_settings_modal.rs` | 🔵 **Low** | Trung bình | 📋 Theo dõi (Cycle 2) |
-| **TD-203** | `script_editor.rs` vượt ngưỡng 650 LOC (~1.443 LOC) | `crates/app/src/components/script_editor.rs` | 🔵 **Low** | Trung bình | 📋 Theo dõi (Cycle 2) |
-| **TD-204** | `response_inspector.rs` vượt ngưỡng 650 LOC (~1.334 LOC) | `crates/app/src/components/response_inspector.rs` | 🔵 **Low** | Trung bình | 📋 Theo dõi (Cycle 2) |
-| **TD-205** | `import_modal.rs` (~934 LOC) vượt ngưỡng 650 LOC (`env_modal/` đã tách xong <650 LOC) | `crates/app/src/components/` | 🔵 **Low** | Trung bình | 📋 Theo dõi (Cycle 2) |
-| **TD-206** | `#[allow(clippy::too_many_arguments)]` còn sót ở sidebar & command palette | `crates/app/src/components/sidebar/`, `command_palette.rs` | 🔵 **Low** | Thấp | 📋 Theo dõi (Cycle 2) |
-
-### Hướng dẫn xử lý cho Cycle 2:
-- **TD-201:** Gỡ bỏ `#![allow(dead_code)]` ở đầu `crates/app/src/state/mod.rs` và `#![allow(unused_imports)]` ở `crates/app/src/components/mod.rs`; dọn dẹp các hàm/re-export không còn sử dụng hoặc gắn `#[allow(dead_code)]` có chú thích tại đúng hàm dự phòng.
-- **TD-202..TD-205:** Khi bổ sung tính năng mới vào các modal/component này (như OAuth 2.0 trong `scope_settings_modal`, Insomnia/HAR trong `import_modal`, JSONPath/Diff trong `response_inspector`), thực hiện tách thành thư mục module con (`components/<name>/mod.rs` + các tab/sub-views) tương tự như `components/body_editor/` và `components/settings_modal/`.
-- **TD-206:** Gom các tham số rời rạc vào struct ngữ cảnh (theo mẫu `AuthTabContext<'a>` và `ModalOverlayEntities<'a>`).
+Ngoài Cycle 2, các file core vượt ngưỡng cũng đã được modular hóa trong cùng đợt: `storage/` (mod 15 LOC + `tests.rs`, `fs_store.rs` + `fs_store_ops.rs`, `models.rs` + `models_tests.rs`), `git/` (mod + `status.rs` + `refs.rs` + `tests.rs`), `models/` (request + workspace + response), `http/executor.rs` + `http/resolved.rs`, `scripting/sandbox_tests.rs`, `curl/tests.rs`, `importers/tests.rs`, `state/` (`response_state_tests.rs`, `workspace_folder_crud.rs`, `watcher_reconciler.rs`). Verification: `cargo test --workspace` 223/223 pass, `cargo clippy --workspace --all-targets -- -D warnings` 0 warnings, toàn bộ file production (ngoại trừ theme palette) ≤ 650 LOC.
 
 ---
 

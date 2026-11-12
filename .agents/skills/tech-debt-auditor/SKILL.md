@@ -11,18 +11,20 @@ This skill provides diagnostic checklists and validation procedures to maintain 
 
 ---
 
-## 1. Cycle 2 Modularization & Hygiene Watchlist
+## 1. Cycle 1 & 2 Debt Archives (100% Resolved)
 
-All 31 Cycle 1 technical debt items (`SL-001..007`, `PERF-001..013`, `CC-001..004`, `TD-01..019`) have been 100% resolved. When auditing or touching the following areas in Cycle 2, prioritize these modularization and hygiene items:
+All 31 Cycle 1 technical debt items (`SL-001..007`, `PERF-001..013`, `CC-001..004`, `TD-01..019`) and all 6 Cycle 2 items (`TD-201..206`) have been 100% resolved (2026-11-13). When auditing, verify the resolved structures stay intact rather than re-deriving them:
 
-| ID | Issue | Impact | Target Location | Recommended Remedy |
-| :--- | :--- | :---: | :--- | :--- |
-| **TD-201** | Crate/module-wide `#![allow(dead_code)]` & `#![allow(unused_imports)]` | 🟡 Med | `crates/app/src/state/mod.rs`, `crates/app/src/components/mod.rs` | Remove module-level `#![allow(...)]` and prune unused methods/re-exports or scope `#[allow]` to specific items. |
-| **TD-202** | `scope_settings_modal.rs` exceeds 650 LOC (~1,515 LOC) | 🔵 Low | `crates/app/src/components/scope_settings_modal.rs` | Split into `components/scope_settings_modal/` (`mod.rs`, `headers_tab.rs`, `auth_tab.rs`). |
-| **TD-203** | `script_editor.rs` exceeds 650 LOC (~1,443 LOC) | 🔵 Low | `crates/app/src/components/script_editor.rs` | Split JS highlighter/snippets from the `ScriptEditor` GPUI view into `components/script_editor/`. |
-| **TD-204** | `response_inspector.rs` exceeds 650 LOC (~1,334 LOC) | 🔵 Low | `crates/app/src/components/response_inspector.rs` | Extract tab sub-renderers (`body_tab.rs`, `headers_cookies_tab.rs`, `timing_popover.rs`) into `components/response_inspector/`. |
-| **TD-205** | `env_modal.rs` & `import_modal.rs` exceed 650 LOC (~1,050 / ~934 LOC) | 🔵 Low | `crates/app/src/components/env_modal.rs`, `import_modal.rs` | Modularize into submodules when adding new import formats or environment features. |
-| **TD-206** | `#[allow(clippy::too_many_arguments)]` in sidebar & command palette | 🔵 Low | `crates/app/src/components/sidebar/`, `command_palette.rs` | Group entity/callback parameters into dedicated context structs (following `AuthTabContext` pattern). |
+| ID | Issue | Resolved As |
+| :--- | :--- | :--- |
+| **TD-201** | Module-wide `#![allow(dead_code)]` / `#![allow(unused_imports)]` | ✅ Removed; `#[allow]` only at narrowly-scoped, commented items |
+| **TD-202** | `scope_settings_modal.rs` ~1,515 LOC | ✅ `components/scope_settings_modal/` (`mod`, `general_tab`, `headers_tab`, `auth_tab`, `auth_inputs`) |
+| **TD-203** | `script_editor.rs` ~1,443 LOC | ✅ `components/script_editor/` (`mod`, `highlighter`, `completion`, `editor`, `tests`) |
+| **TD-204** | `response_inspector.rs` ~1,334 LOC | ✅ `components/response_inspector/` (`mod`, `body_tab`, `headers_tab`, `cookies_tab`, `console_tab`, `request_sent_tab`, `timing_popover`, `json_highlight`) |
+| **TD-205** | 650–875 LOC components (`titlebar`, `import_modal`, `body_editor/multipart`, `git/diff_view`) | ✅ `titlebar/` (mod+menus+breadcrumb), `import_modal/` (mod+preview), `body_editor/multipart/` (mod+state+row), `git/diff_view.rs` + `git/diff_parser.rs` |
+| **TD-206** | `#[allow(clippy::too_many_arguments)]` in sidebar | ✅ `FlatTreeInput` + `FlatTreeCtx` methods; direct `SidebarTree` struct literal; 0 allows left. State structs grouped: `GitState` 13 fields (`GitModalUiState`), `ModalState` 12 (`NetworkPrefs`, `EnvModalUi`, `ImportModalUi`), `SidebarState` 14 (`SidebarRenaming`) |
+
+**Regression guards when touching these areas:** keep `#[cfg(test)]` blocks in dedicated `*_tests.rs` files (or `tests.rs` inside module folders) instead of growing the production file past 650 LOC; keep sub-state grouping (`GitModalUiState`, `NetworkPrefs`, `EnvModalUi`, `ImportModalUi`, `SidebarRenaming`) and access nested fields instead of flattening fields back onto the parent struct; never reintroduce module-level `#![allow(...)]`.
 
 ---
 
