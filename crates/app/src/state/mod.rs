@@ -10,6 +10,7 @@ pub mod request_session_state;
 pub mod response_state;
 pub mod sidebar_state;
 pub mod toast_state;
+mod watcher_reconciler;
 #[cfg(test)]
 pub mod workspace_collision_tests;
 pub mod workspace_crud;
@@ -17,6 +18,7 @@ pub mod workspace_data_state;
 #[cfg(test)]
 pub mod workspace_data_tests;
 pub mod workspace_events;
+mod workspace_folder_crud;
 
 pub use app_state::*;
 pub use environment_state::*;
