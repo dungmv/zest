@@ -212,8 +212,7 @@ fn test_ordering_with_missing_and_extra_entries() {
 
 #[test]
 fn test_secret_split() {
-    let temp_dir =
-        std::env::temp_dir().join(format!("test_sec_{}", uuid::Uuid::new_v4().simple()));
+    let temp_dir = std::env::temp_dir().join(format!("test_sec_{}", uuid::Uuid::new_v4().simple()));
     let store = FsWorkspaceStore::new(&temp_dir);
     store.init_workspace("Test Sec").unwrap();
 

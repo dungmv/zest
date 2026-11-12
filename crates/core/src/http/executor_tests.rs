@@ -1,5 +1,5 @@
-use crate::http::resolved::{build_url_with_query, parse_query_from_url};
 use super::*;
+use crate::http::resolved::{build_url_with_query, parse_query_from_url};
 use crate::models::{HttpMethod, HttpRequestItem, KeyValuePair, MultipartItem, RequestBody};
 
 #[test]

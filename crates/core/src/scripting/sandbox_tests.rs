@@ -17,25 +17,25 @@ fn test_pre_request_env_and_headers() {
     };
 
     let script = r#"
-        // Read env
-        const t = z.environment.get("token");
-        z.assert(t === "old_token", "Token should match");
+            // Read env
+            const t = z.environment.get("token");
+            z.assert(t === "old_token", "Token should match");
 
-        // Mutate env
-        z.environment.set("token", "new_token_123");
-        z.environment.set("computed", 42);
+            // Mutate env
+            z.environment.set("token", "new_token_123");
+            z.environment.set("computed", 42);
 
-        // Add dynamic header
-        z.request.headers.add("X-Custom-Header", "Value123");
+            // Add dynamic header
+            z.request.headers.add("X-Custom-Header", "Value123");
 
-        // Mutate body
-        const body = z.request.body.json();
-        body.count = body.count + 5;
-        body.injected = true;
-        z.request.body.setJson(body);
+            // Mutate body
+            const body = z.request.body.json();
+            body.count = body.count + 5;
+            body.injected = true;
+            z.request.body.setJson(body);
 
-        console.log("Pre-request finished with token:", z.environment.get("token"));
-    "#;
+            console.log("Pre-request finished with token:", z.environment.get("token"));
+        "#;
 
     let output = ScriptSandbox::run_pre_request(script, ctx_data);
     assert!(output.error.is_none(), "Error: {:?}", output.error);
@@ -82,24 +82,24 @@ fn test_post_response_test_assertions_and_chaining() {
     };
 
     let script = r#"
-        // Test assertions
-        z.test("Status code is 200", () => {
-            z.assert(z.response.status === 200);
-        });
+            // Test assertions
+            z.test("Status code is 200", () => {
+                z.assert(z.response.status === 200);
+            });
 
-        z.test("Response time is under 500ms", () => {
-            z.assert(z.response.time < 500);
-        });
+            z.test("Response time is under 500ms", () => {
+                z.assert(z.response.time < 500);
+            });
 
-        z.test("Status is active", () => {
-            const j = z.response.json();
-            z.assert(j.status === "active", "Status must be active");
-        });
+            z.test("Status is active", () => {
+                const j = z.response.json();
+                z.assert(j.status === "active", "Status must be active");
+            });
 
-        // Request chaining: extract access token to environment
-        const data = z.response.json();
-        z.environment.set("access_token", data.access_token);
-    "#;
+            // Request chaining: extract access token to environment
+            const data = z.response.json();
+            z.environment.set("access_token", data.access_token);
+        "#;
 
     let output = ScriptSandbox::run_post_response(script, ctx_data);
     assert!(output.error.is_none(), "Error: {:?}", output.error);
@@ -133,10 +133,10 @@ fn test_post_response_failing_assertion() {
     };
 
     let script = r#"
-        z.test("Should fail assertion", () => {
-            z.assert(z.response.status === 200, "Expected 200 OK");
-        });
-    "#;
+            z.test("Should fail assertion", () => {
+                z.assert(z.response.status === 200, "Expected 200 OK");
+            });
+        "#;
 
     let output = ScriptSandbox::run_post_response(script, ctx_data);
     assert_eq!(output.test_results.len(), 1);
@@ -152,17 +152,17 @@ fn test_post_response_failing_assertion() {
 fn test_crypto_utilities() {
     let ctx_data = PreRequestContext::default();
     let script = r#"
-        const sig = z.crypto.hmacSha256("my_secret", "payload_data");
-        z.environment.set("hmac", sig);
+            const sig = z.crypto.hmacSha256("my_secret", "payload_data");
+            z.environment.set("hmac", sig);
 
-        const md5 = z.crypto.md5("hello world");
-        z.environment.set("md5", md5);
+            const md5 = z.crypto.md5("hello world");
+            z.environment.set("md5", md5);
 
-        const b64 = z.crypto.base64Encode("Antigravity Client");
-        z.environment.set("b64", b64);
-        const dec = z.crypto.base64Decode(b64);
-        z.assert(dec === "Antigravity Client");
-    "#;
+            const b64 = z.crypto.base64Encode("Antigravity Client");
+            z.environment.set("b64", b64);
+            const dec = z.crypto.base64Decode(b64);
+            z.assert(dec === "Antigravity Client");
+        "#;
 
     let output = ScriptSandbox::run_pre_request(script, ctx_data);
     assert!(output.error.is_none(), "Error: {:?}", output.error);
@@ -192,8 +192,8 @@ fn test_crypto_utilities() {
 fn test_z_primary() {
     let ctx_data = PreRequestContext::default();
     let script = r#"
-        z.environment.set("from_z", "success");
-    "#;
+            z.environment.set("from_z", "success");
+        "#;
 
     let output = ScriptSandbox::run_pre_request(script, ctx_data);
     assert!(output.error.is_none());
@@ -207,11 +207,11 @@ fn test_z_primary() {
 fn test_console_logging_levels() {
     let ctx_data = PreRequestContext::default();
     let script = r#"
-        console.log("standard log", 123);
-        console.info("info log");
-        console.warn("warning log");
-        console.error("error log");
-    "#;
+            console.log("standard log", 123);
+            console.info("info log");
+            console.warn("warning log");
+            console.error("error log");
+        "#;
 
     let output = ScriptSandbox::run_pre_request(script, ctx_data);
     assert!(output.error.is_none());

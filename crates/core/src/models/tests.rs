@@ -16,8 +16,7 @@ fn test_http_request_item_mutations() {
     assert_eq!(req.method, HttpMethod::Get);
 
     // URL & query params parsing
-    let (has_query, has_template) =
-        req.apply_url("https://api.example.com/items?q=rust&limit=20");
+    let (has_query, has_template) = req.apply_url("https://api.example.com/items?q=rust&limit=20");
     assert!(has_query);
     assert!(!has_template);
     assert_eq!(req.url, "https://api.example.com/items");
@@ -177,7 +176,6 @@ fn test_auth_apikey_yaml_serialization() {
     };
     let yaml_query_str = serde_yaml::to_string(&auth_query).expect("serialize yaml");
     assert!(yaml_query_str.contains("add_to: query"));
-    let deserialized_query: Auth =
-        serde_yaml::from_str(&yaml_query_str).expect("deserialize yaml");
+    let deserialized_query: Auth = serde_yaml::from_str(&yaml_query_str).expect("deserialize yaml");
     assert_eq!(auth_query, deserialized_query);
 }

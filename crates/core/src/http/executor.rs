@@ -42,7 +42,6 @@ pub enum HttpProgress {
     },
 }
 
-
 pub trait HttpExecutor: Send + Sync {
     fn send(
         &self,
