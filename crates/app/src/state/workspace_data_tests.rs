@@ -15,17 +15,17 @@ mod tests {
     #[test]
     fn test_git_state_defaults_and_toggle() {
         let mut git = GitState::new("/tmp/test-repo".into());
-        assert_eq!(git.tab, GitTab::Changes);
-        assert!(!git.show_modal);
-        assert!(git.active_modal.is_none());
+        assert_eq!(git.modal.tab, GitTab::Changes);
+        assert!(!git.modal.is_open);
+        assert!(git.modal.active.is_none());
         assert!(!git.loading);
         assert!(!git.is_syncing);
         assert!(git.error.is_none());
 
-        git.active_modal = Some(GitActiveModal::Commit);
-        git.show_modal = true;
-        assert!(git.show_modal);
-        assert_eq!(git.active_modal, Some(GitActiveModal::Commit));
+        git.modal.active = Some(GitActiveModal::Commit);
+        git.modal.is_open = true;
+        assert!(git.modal.is_open);
+        assert_eq!(git.modal.active, Some(GitActiveModal::Commit));
 
         // Test loading & syncing flag states
         git.loading = true;
@@ -45,14 +45,14 @@ mod tests {
     #[test]
     fn test_modal_state_defaults() {
         let mut modals = ModalState::default();
-        assert!(!modals.show_env_modal);
+        assert!(!modals.env_modal.is_open);
         assert!(!modals.show_settings_modal);
         assert_eq!(modals.settings_tab, SettingsTab::General);
         assert!(modals.cookie_filter_query.is_empty());
         assert!(!modals.show_command_palette);
-        assert_eq!(modals.request_timeout_secs, 30);
-        assert!(modals.follow_redirects);
-        assert!(modals.validate_tls);
+        assert_eq!(modals.network.request_timeout_secs, 30);
+        assert!(modals.network.follow_redirects);
+        assert!(modals.network.validate_tls);
 
         modals.show_settings_modal = true;
         modals.settings_tab = SettingsTab::Cookies;
@@ -168,10 +168,10 @@ mod tests {
     #[test]
     fn test_sidebar_renaming_state_accessors() {
         let sidebar = SidebarState::new();
-        assert!(sidebar.renaming_request.is_none());
-        assert!(sidebar.renaming_folder.is_none());
-        assert!(sidebar.renaming_env.is_none());
-        assert!(sidebar.renaming_example.is_none());
+        assert!(sidebar.renaming.request.is_none());
+        assert!(sidebar.renaming.folder.is_none());
+        assert!(sidebar.renaming.env.is_none());
+        assert!(sidebar.renaming.example.is_none());
 
         assert!(sidebar.renaming_request_id().is_none());
         assert!(sidebar.rename_input().is_none());

@@ -388,9 +388,9 @@ impl RenderOnce for GitHistoryModal {
                 git.status.as_ref().map(|s| s.is_repo).unwrap_or(false),
                 git.branch.clone().unwrap_or_else(|| "main".to_string()),
                 git.history.clone(),
-                git.selected_commit.clone(),
+                git.modal.selected_commit.clone(),
                 git.error.clone(),
-                git.expanded_history_files.clone(),
+                git.modal.expanded_history_files.clone(),
                 git.loading,
             )
         };

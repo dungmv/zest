@@ -36,14 +36,14 @@ pub fn attach_modal_overlays(
     let env_var_table = entities.env_var_table;
 
     let modal = modal_state.read(cx);
-    let show_env_modal = modal.show_env_modal;
+    let show_env_modal = modal.env_modal.is_open;
     let show_settings_modal = modal.show_settings_modal;
     let show_scope_settings_modal = modal.scope_settings_target.is_some();
-    let show_import_modal = modal.show_import_modal;
+    let show_import_modal = modal.import_modal.is_open;
     let show_command_palette = modal.show_command_palette;
     let show_about_modal = modal.show_about_modal;
 
-    let show_git_modal = git_state.read(cx).show_modal;
+    let show_git_modal = git_state.read(cx).modal.is_open;
 
     let ws_entity = workspace_state.clone();
     let env_entity = env_state.clone();

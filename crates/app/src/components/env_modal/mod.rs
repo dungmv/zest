@@ -50,7 +50,8 @@ impl RenderOnce for EnvironmentModal {
         let envs = ws.environments.clone();
         let global_var_count = ws.global_environment.variables.len();
         let selected_id = modal
-            .selected_env_modal_id
+            .env_modal
+            .selected_id
             .clone()
             .unwrap_or_else(|| "globals".to_string());
         let is_global_selected = selected_id == "globals";

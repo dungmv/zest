@@ -63,9 +63,9 @@ impl Runner {
         // Apply Global Network & Execution settings
         {
             let modal = self.modal_state.read(cx);
-            req_item.set_timeout_secs(modal.request_timeout_secs);
-            req_item.set_follow_redirects(modal.follow_redirects);
-            req_item.set_validate_tls(modal.validate_tls);
+            req_item.set_timeout_secs(modal.network.request_timeout_secs);
+            req_item.set_follow_redirects(modal.network.follow_redirects);
+            req_item.set_validate_tls(modal.network.validate_tls);
         }
 
         let cached_env = self.env_state.read(cx).effective_environment();

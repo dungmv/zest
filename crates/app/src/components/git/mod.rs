@@ -38,7 +38,7 @@ impl GitModal {
 
 impl RenderOnce for GitModal {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let active_modal = self.git_state.read(cx).active_modal;
+        let active_modal = self.git_state.read(cx).modal.active;
 
         match active_modal {
             Some(GitActiveModal::Commit) => GitCommitModal::new(

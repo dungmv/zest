@@ -18,29 +18,36 @@ pub enum GitTab {
     Branches,
 }
 
+/// Modal-local UI state of the Git panel (commit / history / branch /
+/// remotes dialogs). Grouped so [`GitState`] stays under 15 fields.
+#[derive(Debug, Clone, Default)]
+pub struct GitModalUiState {
+    pub is_open: bool,
+    pub active: Option<GitActiveModal>,
+    pub tab: GitTab,
+    pub selected_file: Option<(String, bool)>,
+    pub diff_content: Option<String>,
+    pub selected_commit: Option<zest_core::git::GitCommitDetail>,
+    pub expanded_history_files: HashSet<String>,
+    pub selected_commit_files: HashSet<String>,
+    pub commit_and_push: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct GitState {
     pub repo_path: PathBuf,
     pub branch: Option<String>,
     pub tracked_warning: bool,
-    pub show_modal: bool,
-    pub active_modal: Option<GitActiveModal>,
-    pub tab: GitTab,
     pub status: Option<zest_core::git::GitStatusResult>,
     pub history: Vec<zest_core::git::GitCommitInfo>,
     pub branches: Vec<zest_core::git::GitBranchInfo>,
     pub remotes: Vec<zest_core::git::GitRemote>,
-    pub selected_commit_files: HashSet<String>,
-    pub commit_and_push: bool,
-    pub selected_file: Option<(String, bool)>,
-    pub diff_content: Option<String>,
-    pub selected_commit: Option<zest_core::git::GitCommitDetail>,
-    pub expanded_history_files: HashSet<String>,
     pub error: Option<String>,
     pub loading: bool,
     pub is_syncing: bool,
     pub sync_message: Option<String>,
     pub status_version: usize,
+    pub modal: GitModalUiState,
 }
 
 impl Default for GitState {
@@ -49,24 +56,19 @@ impl Default for GitState {
             repo_path: PathBuf::new(),
             branch: None,
             tracked_warning: false,
-            show_modal: false,
-            active_modal: None,
-            tab: GitTab::Changes,
             status: None,
             history: Vec::new(),
             branches: Vec::new(),
             remotes: Vec::new(),
-            selected_commit_files: HashSet::new(),
-            commit_and_push: false,
-            selected_file: None,
-            diff_content: None,
-            selected_commit: None,
-            expanded_history_files: HashSet::new(),
             error: None,
             loading: false,
             is_syncing: false,
             sync_message: None,
             status_version: 0,
+            modal: GitModalUiState {
+                tab: GitTab::Changes,
+                ..Default::default()
+            },
         }
     }
 }
@@ -129,17 +131,17 @@ impl GitState {
     }
 
     pub fn open_modal(&mut self, modal: GitActiveModal, cx: &mut Context<Self>) {
-        self.active_modal = Some(modal);
-        self.show_modal = true;
+        self.modal.active = Some(modal);
+        self.modal.is_open = true;
         self.error = None;
         match modal {
             GitActiveModal::Commit => {
-                self.selected_commit_files.clear();
-                self.commit_and_push = false;
+                self.modal.selected_commit_files.clear();
+                self.modal.commit_and_push = false;
                 self.refresh_status(cx);
             }
             GitActiveModal::History => {
-                self.expanded_history_files.clear();
+                self.modal.expanded_history_files.clear();
                 self.refresh_history(cx);
             }
             GitActiveModal::NewBranch => {
@@ -153,13 +155,13 @@ impl GitState {
     }
 
     pub fn close_modal(&mut self, cx: &mut Context<Self>) -> bool {
-        if self.show_modal || self.active_modal.is_some() {
-            self.active_modal = None;
-            self.show_modal = false;
+        if self.modal.is_open || self.modal.active.is_some() {
+            self.modal.active = None;
+            self.modal.is_open = false;
             self.error = None;
-            self.selected_commit_files.clear();
-            self.commit_and_push = false;
-            self.expanded_history_files.clear();
+            self.modal.selected_commit_files.clear();
+            self.modal.commit_and_push = false;
+            self.modal.expanded_history_files.clear();
             cx.notify();
             true
         } else {
@@ -168,7 +170,7 @@ impl GitState {
     }
 
     pub fn toggle_modal(&mut self, cx: &mut Context<Self>) {
-        if self.show_modal || self.active_modal.is_some() {
+        if self.modal.is_open || self.modal.active.is_some() {
             self.close_modal(cx);
         } else {
             self.open_modal(GitActiveModal::Commit, cx);
@@ -176,7 +178,7 @@ impl GitState {
     }
 
     pub fn set_tab(&mut self, tab: GitTab, cx: &mut Context<Self>) {
-        self.tab = tab;
+        self.modal.tab = tab;
         match tab {
             GitTab::Changes => self.refresh_status(cx),
             GitTab::History => self.refresh_history(cx),
@@ -213,8 +215,8 @@ impl GitState {
 
     pub fn refresh_status(&mut self, cx: &mut Context<Self>) {
         let ws_path = self.repo_path.clone();
-        let show_modal = self.show_modal;
-        let selected_file = self.selected_file.clone();
+        let show_modal = self.modal.is_open;
+        let selected_file = self.modal.selected_file.clone();
 
         cx.spawn(async move |this, cx| {
             let ws_status = ws_path.clone();
@@ -304,12 +306,13 @@ impl GitState {
                         .chain(&st.untracked_files)
                         .map(|f| f.path.clone())
                         .collect();
-                    git.selected_commit_files
+                    git.modal
+                        .selected_commit_files
                         .retain(|p| valid_paths.contains(p));
 
                     if let Some((file_sel, diff_content)) = diff_result {
-                        git.selected_file = file_sel;
-                        git.diff_content = diff_content;
+                        git.modal.selected_file = file_sel;
+                        git.modal.diff_content = diff_content;
                     }
 
                     if let Some(branches) = branches_res {
@@ -335,8 +338,10 @@ impl GitState {
             if let Some(this) = this.upgrade() {
                 this.update(cx, |git, cx| {
                     match res {
-                        Ok(d) => git.diff_content = Some(d),
-                        Err(e) => git.diff_content = Some(format!("Error loading diff: {}", e)),
+                        Ok(d) => git.modal.diff_content = Some(d),
+                        Err(e) => {
+                            git.modal.diff_content = Some(format!("Error loading diff: {}", e))
+                        }
                     }
                     cx.notify();
                 });
@@ -347,7 +352,7 @@ impl GitState {
 
     pub fn refresh_history(&mut self, cx: &mut Context<Self>) {
         let ws_path = self.repo_path.clone();
-        let needs_first = self.selected_commit.is_none();
+        let needs_first = self.modal.selected_commit.is_none();
         cx.spawn(async move |this, cx| {
             let ws_hist = ws_path.clone();
             let commits = cx
@@ -372,7 +377,7 @@ impl GitState {
                 if let Some(this) = this.upgrade() {
                     this.update(cx, |git, cx| {
                         if let Some(detail) = first_detail {
-                            git.selected_commit = Some(detail);
+                            git.modal.selected_commit = Some(detail);
                         }
                         git.history = commits;
                         cx.notify();
@@ -403,12 +408,12 @@ impl GitState {
     }
 
     pub fn select_file(&mut self, path: String, staged: bool, cx: &mut Context<Self>) {
-        self.selected_file = Some((path.clone(), staged));
+        self.modal.selected_file = Some((path.clone(), staged));
         self.load_diff(&path, staged, cx);
     }
 
     pub fn select_commit(&mut self, hash: &str, cx: &mut Context<Self>) {
-        self.expanded_history_files.clear();
+        self.modal.expanded_history_files.clear();
         let ws_path = self.repo_path.clone();
         let h = hash.to_string();
         cx.spawn(async move |this, cx| {
@@ -419,7 +424,7 @@ impl GitState {
             if let Some(detail) = detail {
                 if let Some(this) = this.upgrade() {
                     this.update(cx, |git, cx| {
-                        git.selected_commit = Some(detail);
+                        git.modal.selected_commit = Some(detail);
                         cx.notify();
                     });
                 }
@@ -429,19 +434,21 @@ impl GitState {
     }
 
     pub fn toggle_history_file_expansion(&mut self, file_path: &str, cx: &mut Context<Self>) {
-        if self.expanded_history_files.contains(file_path) {
-            self.expanded_history_files.remove(file_path);
+        if self.modal.expanded_history_files.contains(file_path) {
+            self.modal.expanded_history_files.remove(file_path);
         } else {
-            self.expanded_history_files.insert(file_path.to_string());
+            self.modal
+                .expanded_history_files
+                .insert(file_path.to_string());
         }
         cx.notify();
     }
 
     pub fn toggle_file_selection(&mut self, path: &str, cx: &mut Context<Self>) {
-        if self.selected_commit_files.contains(path) {
-            self.selected_commit_files.remove(path);
+        if self.modal.selected_commit_files.contains(path) {
+            self.modal.selected_commit_files.remove(path);
         } else {
-            self.selected_commit_files.insert(path.to_string());
+            self.modal.selected_commit_files.insert(path.to_string());
         }
         cx.notify();
     }
@@ -449,7 +456,7 @@ impl GitState {
     pub fn toggle_all_files_selection(&mut self, select: bool, cx: &mut Context<Self>) {
         if select {
             if let Some(st) = &self.status {
-                self.selected_commit_files = st
+                self.modal.selected_commit_files = st
                     .staged_files
                     .iter()
                     .chain(&st.unstaged_files)
@@ -458,13 +465,13 @@ impl GitState {
                     .collect();
             }
         } else {
-            self.selected_commit_files.clear();
+            self.modal.selected_commit_files.clear();
         }
         cx.notify();
     }
 
     pub fn set_commit_and_push(&mut self, value: bool, cx: &mut Context<Self>) {
-        self.commit_and_push = value;
+        self.modal.commit_and_push = value;
         cx.notify();
     }
 }

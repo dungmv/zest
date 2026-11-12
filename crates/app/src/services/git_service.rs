@@ -198,10 +198,10 @@ impl GitService {
                     match res {
                         Ok(()) => {
                             git.error = None;
-                            if let Some((sel, _)) = &git.selected_file {
+                            if let Some((sel, _)) = &git.modal.selected_file {
                                 if sel == &p {
-                                    git.selected_file = None;
-                                    git.diff_content = None;
+                                    git.modal.selected_file = None;
+                                    git.modal.diff_content = None;
                                 }
                             }
                             git.refresh_status(cx);
@@ -236,6 +236,7 @@ impl GitService {
         let paths: Vec<String> = self
             .git
             .read(cx)
+            .modal
             .selected_commit_files
             .iter()
             .cloned()
@@ -243,7 +244,7 @@ impl GitService {
         if paths.is_empty() {
             return;
         }
-        let and_push = self.git.read(cx).commit_and_push;
+        let and_push = self.git.read(cx).modal.commit_and_push;
         self.git.update(cx, |git, cx| {
             git.loading = true;
             if and_push {
@@ -288,10 +289,10 @@ impl GitService {
                     match res {
                         Ok(_) => {
                             git.error = None;
-                            git.selected_file = None;
-                            git.diff_content = None;
-                            git.selected_commit_files.clear();
-                            git.commit_and_push = false;
+                            git.modal.selected_file = None;
+                            git.modal.diff_content = None;
+                            git.modal.selected_commit_files.clear();
+                            git.modal.commit_and_push = false;
                             git.close_modal(cx);
                             git.refresh_all(cx);
                             cx.notify();

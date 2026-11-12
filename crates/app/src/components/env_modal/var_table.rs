@@ -40,7 +40,8 @@ impl EnvVarTable {
     ) -> Self {
         let initial_id = modal_state
             .read(cx)
-            .selected_env_modal_id
+            .env_modal
+            .selected_id
             .clone()
             .unwrap_or_else(|| "globals".to_string());
 
@@ -107,7 +108,8 @@ impl EnvVarTable {
     fn current_selected_env_id(&self, cx: &Context<Self>) -> String {
         self.modal_state
             .read(cx)
-            .selected_env_modal_id
+            .env_modal
+            .selected_id
             .clone()
             .unwrap_or_else(|| "globals".to_string())
     }

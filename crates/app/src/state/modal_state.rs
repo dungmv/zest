@@ -35,11 +35,43 @@ pub enum UpdateStatus {
     Error(String),
 }
 
+/// User-configurable network execution preferences, persisted via
+/// [`AppSettings`].
+#[derive(Debug, Clone)]
+pub struct NetworkPrefs {
+    pub request_timeout_secs: u64,
+    pub follow_redirects: bool,
+    pub validate_tls: bool,
+}
+
+impl Default for NetworkPrefs {
+    fn default() -> Self {
+        Self {
+            request_timeout_secs: 30,
+            follow_redirects: true,
+            validate_tls: true,
+        }
+    }
+}
+
+/// Environment-modal local UI state.
+#[derive(Debug, Clone, Default)]
+pub struct EnvModalUi {
+    pub is_open: bool,
+    pub selected_id: Option<String>,
+    pub filter_query: String,
+}
+
+/// Import-modal local UI state.
+#[derive(Debug, Clone, Default)]
+pub struct ImportModalUi {
+    pub is_open: bool,
+    pub target_folder_rel: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct ModalState {
-    pub show_env_modal: bool,
-    pub selected_env_modal_id: Option<String>,
-    pub env_filter_query: String,
+    pub env_modal: EnvModalUi,
     pub show_command_palette: bool,
     pub show_settings_modal: bool,
     pub show_about_modal: bool,
@@ -47,21 +79,16 @@ pub struct ModalState {
     pub settings_tab: SettingsTab,
     pub cookie_filter_query: String,
     pub scope_settings_target: Option<ScopeSettingsTarget>,
-    pub show_import_modal: bool,
-    pub import_target_folder_rel: Option<String>,
+    pub import_modal: ImportModalUi,
     pub theme_preference: crate::theme::ThemePreference,
     pub split_layout_vertical: bool,
-    pub request_timeout_secs: u64,
-    pub follow_redirects: bool,
-    pub validate_tls: bool,
+    pub network: NetworkPrefs,
 }
 
 impl Default for ModalState {
     fn default() -> Self {
         Self {
-            show_env_modal: false,
-            selected_env_modal_id: None,
-            env_filter_query: String::new(),
+            env_modal: EnvModalUi::default(),
             show_command_palette: false,
             show_settings_modal: false,
             show_about_modal: false,
@@ -69,13 +96,10 @@ impl Default for ModalState {
             settings_tab: SettingsTab::General,
             cookie_filter_query: String::new(),
             scope_settings_target: None,
-            show_import_modal: false,
-            import_target_folder_rel: None,
+            import_modal: ImportModalUi::default(),
             theme_preference: crate::theme::ThemePreference::System,
             split_layout_vertical: false,
-            request_timeout_secs: 30,
-            follow_redirects: true,
-            validate_tls: true,
+            network: NetworkPrefs::default(),
         }
     }
 }
@@ -86,14 +110,14 @@ impl ModalState {
         let settings = AppSettings::load();
         state.theme_preference =
             crate::theme::ThemePreference::from_str_opt(settings.theme.as_deref());
-        state.request_timeout_secs = settings.request_timeout_secs;
-        state.follow_redirects = settings.follow_redirects;
-        state.validate_tls = settings.validate_tls;
+        state.network.request_timeout_secs = settings.request_timeout_secs;
+        state.network.follow_redirects = settings.follow_redirects;
+        state.network.validate_tls = settings.validate_tls;
         state
     }
 
     pub fn set_request_timeout_secs(&mut self, secs: u64, cx: &mut Context<Self>) {
-        self.request_timeout_secs = secs;
+        self.network.request_timeout_secs = secs;
         let mut settings = AppSettings::load();
         settings.request_timeout_secs = secs;
         let _ = settings.save();
@@ -101,7 +125,7 @@ impl ModalState {
     }
 
     pub fn set_follow_redirects(&mut self, follow: bool, cx: &mut Context<Self>) {
-        self.follow_redirects = follow;
+        self.network.follow_redirects = follow;
         let mut settings = AppSettings::load();
         settings.follow_redirects = follow;
         let _ = settings.save();
@@ -109,7 +133,7 @@ impl ModalState {
     }
 
     pub fn set_validate_tls(&mut self, validate: bool, cx: &mut Context<Self>) {
-        self.validate_tls = validate;
+        self.network.validate_tls = validate;
         let mut settings = AppSettings::load();
         settings.validate_tls = validate;
         let _ = settings.save();
@@ -127,39 +151,39 @@ impl ModalState {
     }
 
     pub fn toggle_env_modal(&mut self, cx: &mut Context<Self>) {
-        self.show_env_modal = !self.show_env_modal;
-        if self.show_env_modal {
+        self.env_modal.is_open = !self.env_modal.is_open;
+        if self.env_modal.is_open {
             cx.emit(ModalEvent::EnvModalSelectionChanged);
         }
         cx.notify();
     }
 
     pub fn open_env_modal(&mut self, cx: &mut Context<Self>) {
-        self.show_env_modal = true;
+        self.env_modal.is_open = true;
         cx.emit(ModalEvent::EnvModalSelectionChanged);
         cx.notify();
     }
 
     pub fn close_env_modal(&mut self, cx: &mut Context<Self>) {
-        self.show_env_modal = false;
+        self.env_modal.is_open = false;
         cx.notify();
     }
 
     pub fn open_env_modal_with_id(&mut self, env_id: Option<String>, cx: &mut Context<Self>) {
-        self.show_env_modal = true;
-        self.selected_env_modal_id = env_id;
+        self.env_modal.is_open = true;
+        self.env_modal.selected_id = env_id;
         cx.emit(ModalEvent::EnvModalSelectionChanged);
         cx.notify();
     }
 
     pub fn select_modal_environment(&mut self, env_id: Option<String>, cx: &mut Context<Self>) {
-        self.selected_env_modal_id = env_id;
+        self.env_modal.selected_id = env_id;
         cx.emit(ModalEvent::EnvModalSelectionChanged);
         cx.notify();
     }
 
     pub fn set_env_filter_query(&mut self, query: String, cx: &mut Context<Self>) {
-        self.env_filter_query = query;
+        self.env_modal.filter_query = query;
         cx.notify();
     }
 
@@ -230,14 +254,14 @@ impl ModalState {
     }
 
     pub fn open_import_modal(&mut self, target_folder_rel: Option<String>, cx: &mut Context<Self>) {
-        self.import_target_folder_rel = target_folder_rel;
-        self.show_import_modal = true;
+        self.import_modal.target_folder_rel = target_folder_rel;
+        self.import_modal.is_open = true;
         cx.notify();
     }
 
     pub fn close_import_modal(&mut self, cx: &mut Context<Self>) {
-        self.show_import_modal = false;
-        self.import_target_folder_rel = None;
+        self.import_modal.is_open = false;
+        self.import_modal.target_folder_rel = None;
         cx.notify();
     }
 
@@ -333,9 +357,9 @@ impl ModalState {
             cx.notify();
             return true;
         }
-        if self.show_import_modal {
-            self.show_import_modal = false;
-            self.import_target_folder_rel = None;
+        if self.import_modal.is_open {
+            self.import_modal.is_open = false;
+            self.import_modal.target_folder_rel = None;
             cx.notify();
             return true;
         }
@@ -349,8 +373,8 @@ impl ModalState {
             cx.notify();
             return true;
         }
-        if self.show_env_modal {
-            self.show_env_modal = false;
+        if self.env_modal.is_open {
+            self.env_modal.is_open = false;
             cx.notify();
             return true;
         }
@@ -360,10 +384,10 @@ impl ModalState {
     pub fn has_any_modal_open(&self) -> bool {
         self.show_about_modal
             || self.show_command_palette
-            || self.show_import_modal
+            || self.import_modal.is_open
             || self.show_settings_modal
             || self.scope_settings_target.is_some()
-            || self.show_env_modal
+            || self.env_modal.is_open
     }
 }
 

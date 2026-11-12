@@ -123,7 +123,11 @@ impl RenderOnce for ImportModal {
             )
         };
 
-        let target_folder_rel = modal_entity_ref.read(cx).import_target_folder_rel.clone();
+        let target_folder_rel = modal_entity_ref
+            .read(cx)
+            .import_modal
+            .target_folder_rel
+            .clone();
 
         ModalDialog::new("import-modal")
             .w(px(640.))

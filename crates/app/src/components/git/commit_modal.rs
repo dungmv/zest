@@ -432,11 +432,11 @@ impl RenderOnce for GitCommitModal {
                 git.status.as_ref().map(|s| s.is_repo).unwrap_or(false),
                 git.branch.clone().unwrap_or_else(|| "main".to_string()),
                 git.status.clone(),
-                git.selected_file.clone(),
-                git.diff_content.clone(),
+                git.modal.selected_file.clone(),
+                git.modal.diff_content.clone(),
                 git.error.clone(),
-                git.selected_commit_files.clone(),
-                git.commit_and_push,
+                git.modal.selected_commit_files.clone(),
+                git.modal.commit_and_push,
                 git.loading,
             )
         };

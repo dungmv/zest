@@ -329,7 +329,7 @@ impl Render for AppView {
                 let modal_c = modal_entity.clone();
                 let git_c = git_entity.clone();
                 move |_: &DismissModal, _, cx| {
-                    let git_open = git_c.read(cx).show_modal;
+                    let git_open = git_c.read(cx).modal.is_open;
                     if git_open {
                         git_c.update(cx, |g, cx| g.close_modal(cx));
                     } else {
@@ -345,7 +345,7 @@ impl Render for AppView {
                 let view_handle = app_view_entity.clone();
                 move |event, _, cx| {
                     if event.keystroke.key.as_str() == "escape" {
-                        let git_open = git_c.read(cx).show_modal;
+                        let git_open = git_c.read(cx).modal.is_open;
                         if git_open {
                             git_c.update(cx, |g, cx| g.close_modal(cx));
                         } else {
@@ -359,7 +359,7 @@ impl Render for AppView {
                         && event.keystroke.key.eq_ignore_ascii_case("k")
                         && !event.keystroke.modifiers.alt
                     {
-                        let git_open = git_c.read(cx).show_modal;
+                        let git_open = git_c.read(cx).modal.is_open;
                         if !git_open {
                             modal_c.update(cx, |m, cx| {
                                 m.toggle_command_palette(cx);
@@ -373,7 +373,7 @@ impl Render for AppView {
                         && !event.keystroke.modifiers.alt
                         && !event.keystroke.modifiers.shift
                     {
-                        let git_open = git_c.read(cx).show_modal;
+                        let git_open = git_c.read(cx).modal.is_open;
                         let any_modal_open = modal_c.read(cx).has_any_modal_open();
                         if !git_open && !any_modal_open {
                             view_handle.update(cx, |view, cx| {

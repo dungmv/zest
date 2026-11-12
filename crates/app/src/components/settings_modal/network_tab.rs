@@ -11,9 +11,9 @@ pub fn render_network_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
     let t = theme();
     let modal_clone = modal_state.clone();
     let modal_ref = modal_clone.read(cx);
-    let cur_timeout = modal_ref.request_timeout_secs;
-    let cur_follow = modal_ref.follow_redirects;
-    let cur_tls = modal_ref.validate_tls;
+    let cur_timeout = modal_ref.network.request_timeout_secs;
+    let cur_follow = modal_ref.network.follow_redirects;
+    let cur_tls = modal_ref.network.validate_tls;
 
     div()
         .w_full()

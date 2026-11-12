@@ -1,7 +1,6 @@
 use super::{EnvironmentState, GitState, PersistenceState, WorkspaceDataState};
 use crate::components::sidebar::{
-    build_sidebar_req_items, flatten_sidebar_tree, FlatSidebarRow, FlatTreeInput,
-    SidebarCacheKey,
+    build_sidebar_req_items, flatten_sidebar_tree, FlatSidebarRow, FlatTreeInput, SidebarCacheKey,
     SidebarFlatCache,
 };
 use gpui_kit::component::input::InputState;
@@ -16,6 +15,16 @@ pub struct RenamingState<T> {
     pub _subscription: gpui_kit::Subscription,
 }
 
+/// Per-entity inline-rename sessions of the sidebar, grouped so
+/// [`SidebarState`] stays under 15 fields.
+#[derive(Default)]
+pub struct SidebarRenaming {
+    pub request: Option<RenamingState<String>>,
+    pub folder: Option<RenamingState<String>>,
+    pub env: Option<RenamingState<String>>,
+    pub example: Option<RenamingState<(String, String)>>,
+}
+
 pub struct SidebarState {
     pub filter_query: String,
     pub sidebar_collapsed: bool,
@@ -23,10 +32,7 @@ pub struct SidebarState {
     pub collapsed_folders: HashSet<String>,
     pub collapsed_requests: HashSet<String>,
     pub pinned_collapsed: bool,
-    pub renaming_request: Option<RenamingState<String>>,
-    pub renaming_folder: Option<RenamingState<String>>,
-    pub renaming_env: Option<RenamingState<String>>,
-    pub renaming_example: Option<RenamingState<(String, String)>>,
+    pub renaming: SidebarRenaming,
     pub nav_history: Vec<String>,
     pub nav_index: usize,
     pub ui_version: usize,
@@ -45,10 +51,7 @@ impl Default for SidebarState {
             collapsed_folders: HashSet::new(),
             collapsed_requests: HashSet::new(),
             pinned_collapsed: false,
-            renaming_request: None,
-            renaming_folder: None,
-            renaming_env: None,
-            renaming_example: None,
+            renaming: SidebarRenaming::default(),
             nav_history: Vec::new(),
             nav_index: 0,
             ui_version: 0,
@@ -340,7 +343,7 @@ impl SidebarState {
     ) {
         self.cancel_any_renaming(cx);
         let r_id = req_id.clone();
-        self.renaming_request = Some(self.spawn_renaming(
+        self.renaming.request = Some(self.spawn_renaming(
             req_id,
             initial_name,
             move |name, cx| {
@@ -362,7 +365,7 @@ impl SidebarState {
     ) {
         self.cancel_any_renaming(cx);
         let f_id = folder_id.clone();
-        self.renaming_folder = Some(self.spawn_renaming(
+        self.renaming.folder = Some(self.spawn_renaming(
             folder_id,
             initial_name,
             move |name, cx| {
@@ -385,7 +388,7 @@ impl SidebarState {
         self.cancel_any_renaming(cx);
         let r_id = req_id.clone();
         let old_ex_name = example_name.clone();
-        self.renaming_example = Some(self.spawn_renaming(
+        self.renaming.example = Some(self.spawn_renaming(
             (req_id, example_name.clone()),
             example_name,
             move |name, cx| {
@@ -411,7 +414,7 @@ impl SidebarState {
     ) {
         self.cancel_any_renaming(cx);
         let e_id = env_id.clone();
-        self.renaming_env = Some(self.spawn_renaming(
+        self.renaming.env = Some(self.spawn_renaming(
             env_id,
             initial_name,
             move |name, cx| {
@@ -426,73 +429,73 @@ impl SidebarState {
     }
 
     pub fn renaming_request_id(&self) -> Option<&str> {
-        self.renaming_request.as_ref().map(|r| r.id.as_str())
+        self.renaming.request.as_ref().map(|r| r.id.as_str())
     }
 
     pub fn rename_input(&self) -> Option<&Entity<InputState>> {
-        self.renaming_request.as_ref().map(|r| &r.input)
+        self.renaming.request.as_ref().map(|r| &r.input)
     }
 
     pub fn renaming_folder_id(&self) -> Option<&str> {
-        self.renaming_folder.as_ref().map(|r| r.id.as_str())
+        self.renaming.folder.as_ref().map(|r| r.id.as_str())
     }
 
     pub fn rename_folder_input(&self) -> Option<&Entity<InputState>> {
-        self.renaming_folder.as_ref().map(|r| &r.input)
+        self.renaming.folder.as_ref().map(|r| &r.input)
     }
 
     pub fn renaming_env_id(&self) -> Option<&str> {
-        self.renaming_env.as_ref().map(|r| r.id.as_str())
+        self.renaming.env.as_ref().map(|r| r.id.as_str())
     }
 
     pub fn rename_env_input(&self) -> Option<&Entity<InputState>> {
-        self.renaming_env.as_ref().map(|r| &r.input)
+        self.renaming.env.as_ref().map(|r| &r.input)
     }
 
     pub fn renaming_example(&self) -> Option<&(String, String)> {
-        self.renaming_example.as_ref().map(|r| &r.id)
+        self.renaming.example.as_ref().map(|r| &r.id)
     }
 
     pub fn rename_example_input(&self) -> Option<&Entity<InputState>> {
-        self.renaming_example.as_ref().map(|r| &r.input)
+        self.renaming.example.as_ref().map(|r| &r.input)
     }
 
     pub fn cancel_renaming_request(&mut self, cx: &mut Context<Self>) {
-        if self.renaming_request.take().is_some() {
+        if self.renaming.request.take().is_some() {
             cx.notify();
         }
     }
 
     pub fn cancel_renaming_folder(&mut self, cx: &mut Context<Self>) {
-        if self.renaming_folder.take().is_some() {
+        if self.renaming.folder.take().is_some() {
             cx.notify();
         }
     }
 
     pub fn cancel_renaming_environment(&mut self, cx: &mut Context<Self>) {
-        if self.renaming_env.take().is_some() {
+        if self.renaming.env.take().is_some() {
             cx.notify();
         }
     }
 
     pub fn cancel_renaming_example(&mut self, cx: &mut Context<Self>) {
-        if self.renaming_example.take().is_some() {
+        if self.renaming.example.take().is_some() {
             cx.notify();
         }
     }
 
     pub fn cancel_any_renaming(&mut self, cx: &mut Context<Self>) -> bool {
         let mut cancelled = false;
-        if self.renaming_request.take().is_some() {
+        if self.renaming.request.take().is_some() {
             cancelled = true;
         }
-        if self.renaming_folder.take().is_some() {
+        if self.renaming.folder.take().is_some() {
             cancelled = true;
         }
-        if self.renaming_env.take().is_some() {
+        if self.renaming.env.take().is_some() {
             cancelled = true;
         }
-        if self.renaming_example.take().is_some() {
+        if self.renaming.example.take().is_some() {
             cancelled = true;
         }
         if cancelled {
