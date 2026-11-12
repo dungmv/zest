@@ -96,7 +96,7 @@ Sử dụng checklist dưới đây để theo dõi tiến độ. Mỗi mục ho
     - `mod.rs`: State đồng bộ input, khung modal và điều hướng tab (< 500 LOC).
     - `headers_tab.rs`: Giao diện và sự kiện chỉnh sửa Scope Headers (< 450 LOC).
     - `auth_tab.rs`: Giao diện và sự kiện cấu hình Scope Auth (`Inherit`, `None`, `Bearer`, `Basic`, `ApiKey`) (< 550 LOC).
-- [ ] **Step 2.3 (`TD-204` - Tách `response_inspector.rs` ~1,307 LOC)**:
+- [x] **Step 2.3 (`TD-204` - Tách `response_inspector.rs` ~1,307 LOC)**:
   - Chuyển `crates/app/src/components/response_inspector.rs` thành thư mục `crates/app/src/components/response_inspector/`:
     - `mod.rs`: Khung `ResponseInspector`, thanh status bar và điều hướng tab (< 500 LOC).
     - `body_tab.rs`: Render body (`Pretty`, `Raw`, `Preview`, search/copy/save) và Sent Request tab (< 450 LOC).
