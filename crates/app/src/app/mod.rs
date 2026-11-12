@@ -27,11 +27,21 @@ pub struct AppView {
     pub(crate) inspector_displays: InspectorDisplays,
     pub(crate) env_var_table: Entity<EnvVarTable>,
     pub(crate) runner: Runner,
+    pub(crate) focus_handle: FocusHandle,
     pub(crate) _subscriptions: Vec<Subscription>,
+}
+
+impl Focusable for AppView {
+    fn focus_handle(&self, _cx: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
 }
 
 impl AppView {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let focus_handle = cx.focus_handle();
+        window.focus(&focus_handle, cx);
+
         let state = AppState::new(cx);
 
         type HighlighterFactory = std::rc::Rc<
@@ -104,7 +114,7 @@ impl AppView {
         }
 
         // Set up subscriptions:
-        let _subscriptions = setup_app_subscriptions(
+        let mut _subscriptions = setup_app_subscriptions(
             SubscriptionTargets {
                 workspace_state: &state.workspace,
                 env_state: &state.env,
@@ -120,6 +130,11 @@ impl AppView {
             window,
             cx,
         );
+
+        let focus_lost_sub = cx.on_focus_lost(window, |this, window, cx| {
+            window.focus(&this.focus_handle, cx);
+        });
+        _subscriptions.push(focus_lost_sub);
 
         if state.git.read(cx).tracked_warning {
             state.toast.update(cx, |t, cx| {
@@ -137,6 +152,7 @@ impl AppView {
             inspector_displays,
             env_var_table,
             runner,
+            focus_handle,
             _subscriptions,
         }
     }
@@ -224,6 +240,7 @@ impl Render for AppView {
         };
 
         let root = div()
+            .track_focus(&self.focus_handle)
             .size_full()
             .bg(t.bg_app)
             .text_color(t.text_primary)
@@ -325,6 +342,7 @@ impl Render for AppView {
             .on_key_down({
                 let modal_c = modal_entity.clone();
                 let git_c = git_entity.clone();
+                let view_handle = app_view_entity.clone();
                 move |event, _, cx| {
                     if event.keystroke.key.as_str() == "escape" {
                         let git_open = git_c.read(cx).show_modal;
@@ -345,6 +363,21 @@ impl Render for AppView {
                         if !git_open {
                             modal_c.update(cx, |m, cx| {
                                 m.toggle_command_palette(cx);
+                            });
+                            cx.stop_propagation();
+                        }
+                    } else if (event.keystroke.modifiers.control
+                        || event.keystroke.modifiers.platform)
+                        && (event.keystroke.key.as_str() == "enter"
+                            || event.keystroke.key.as_str() == "return")
+                        && !event.keystroke.modifiers.alt
+                        && !event.keystroke.modifiers.shift
+                    {
+                        let git_open = git_c.read(cx).show_modal;
+                        let any_modal_open = modal_c.read(cx).has_any_modal_open();
+                        if !git_open && !any_modal_open {
+                            view_handle.update(cx, |view, cx| {
+                                view.send_current_request(cx);
                             });
                             cx.stop_propagation();
                         }

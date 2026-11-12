@@ -356,6 +356,15 @@ impl ModalState {
         }
         false
     }
+
+    pub fn has_any_modal_open(&self) -> bool {
+        self.show_about_modal
+            || self.show_command_palette
+            || self.show_import_modal
+            || self.show_settings_modal
+            || self.scope_settings_target.is_some()
+            || self.show_env_modal
+    }
 }
 
 pub fn open_browser_url(url: &str) {
