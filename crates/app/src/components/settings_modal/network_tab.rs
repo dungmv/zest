@@ -5,11 +5,7 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::switch::Switch;
 use gpui_kit::component::Icon;
-use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{
-    div, px, App, Entity, InteractiveElement as _, IntoElement, ParentElement,
-    StatefulInteractiveElement as _, Styled,
-};
+use gpui_kit::{div, px, App, Entity, IntoElement, ParentElement, Styled};
 
 pub fn render_network_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl IntoElement {
     let t = theme();

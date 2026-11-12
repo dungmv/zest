@@ -88,6 +88,7 @@ impl PersistenceState {
         cx.notify();
     }
 
+    #[allow(dead_code)] // Legacy / testing manual dirty marker
     pub fn mark_dirty(&mut self, req_id: String, cx: &mut Context<Self>) {
         if self.unsaved_requests.insert(req_id) {
             self.unsaved_version = self.unsaved_version.wrapping_add(1);
@@ -112,14 +113,17 @@ impl PersistenceState {
                 .is_dirty(&PersistTarget::Request(req_id.to_string()))
     }
 
+    #[allow(dead_code)] // Target status query
     pub fn target_status(&self, target: &PersistTarget) -> TargetStatus {
         self.coordinator.status(target)
     }
 
+    #[allow(dead_code)] // Target dirty query
     pub fn is_target_dirty(&self, target: &PersistTarget) -> bool {
         self.coordinator.is_dirty(target)
     }
 
+    #[allow(dead_code)] // Target error query
     pub fn target_error(&self, target: &PersistTarget) -> Option<&str> {
         self.coordinator.last_error(target)
     }
@@ -365,6 +369,7 @@ impl PersistenceState {
         cx.notify();
     }
 
+    #[allow(dead_code)] // Useful for synchronous tests and manual sync
     pub fn flush_all(&mut self, cx: &mut Context<Self>) {
         let targets = self.coordinator.pending_targets();
         for target in targets {
@@ -416,6 +421,7 @@ impl PersistenceState {
         }
     }
 
+    #[allow(dead_code)] // Single fs event handler for testing
     pub fn handle_fs_event(
         &mut self,
         event: FsEvent,

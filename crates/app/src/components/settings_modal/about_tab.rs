@@ -4,8 +4,7 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::Icon;
 use gpui_kit::{
-    div, img, px, App, Entity, FontWeight, Image, ImageFormat, InteractiveElement as _,
-    IntoElement, ParentElement, Styled,
+    div, img, px, App, Entity, FontWeight, Image, ImageFormat, IntoElement, ParentElement, Styled,
 };
 use std::sync::{Arc, OnceLock};
 

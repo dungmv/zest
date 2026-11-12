@@ -8,8 +8,8 @@ use gpui_kit::component::spinner::Spinner;
 use gpui_kit::component::{Icon, Sizable};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    div, px, AnyElement, AppContext as _, Entity, InteractiveElement as _, IntoElement,
-    ParentElement, StatefulInteractiveElement as _, Styled,
+    div, px, AnyElement, Entity, InteractiveElement as _, IntoElement, ParentElement,
+    StatefulInteractiveElement as _, Styled,
 };
 use zest_core::git::GitStatusResult;
 

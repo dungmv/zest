@@ -553,7 +553,7 @@ impl Render for EnvVarTable {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui_kit::{AppContext as _, TestAppContext, VisualTestContext};
+    use gpui_kit::{TestAppContext, VisualTestContext};
     use std::sync::Arc;
     use tempfile::tempdir;
     use zest_core::storage::{FsWorkspaceStore, WorkspaceStore};

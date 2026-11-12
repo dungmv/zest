@@ -19,6 +19,7 @@ pub enum PersistTarget {
 }
 
 impl PersistTarget {
+    #[allow(dead_code)] // Useful debugging helper for persistence telemetry
     pub fn key(&self) -> String {
         match self {
             Self::Request(p) => format!("req:{}", p),
@@ -283,6 +284,7 @@ impl PersistenceCoordinator {
         self.status(target) != TargetStatus::Clean
     }
 
+    #[allow(dead_code)] // Coordinator status inspection helper
     pub fn has_any_dirty(&self) -> bool {
         self.entries.values().any(|e| e.is_dirty())
     }
@@ -295,6 +297,7 @@ impl PersistenceCoordinator {
             .collect()
     }
 
+    #[allow(dead_code)] // Coordinator target error inspection helper
     pub fn last_error(&self, target: &PersistTarget) -> Option<&str> {
         self.entries
             .get(target)
@@ -302,6 +305,7 @@ impl PersistenceCoordinator {
     }
 
     /// Returns targets that currently have a pending write ready to be flushed.
+    #[allow(dead_code)] // Coordinator pending target query
     pub fn pending_targets(&self) -> Vec<PersistTarget> {
         self.entries
             .iter()
@@ -311,6 +315,7 @@ impl PersistenceCoordinator {
     }
 
     /// Drains all pending writes across targets (barrier before git checkout, shutdown, etc.)
+    #[allow(dead_code)] // Barrier drain helper
     pub fn take_all_pending(&mut self) -> Vec<(PersistTarget, PendingWrite)> {
         let mut list = Vec::new();
         for (target, entry) in &mut self.entries {

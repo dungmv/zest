@@ -16,9 +16,8 @@ use gpui_kit::component::separator::Separator;
 use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    deferred, div, px, App, AppContext as _, Entity, Focusable as _, FontWeight,
-    InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
-    StatefulInteractiveElement as _, Styled, Window,
+    deferred, div, px, App, Entity, Focusable as _, InteractiveElement as _, IntoElement,
+    ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
 use zest_core::models::HttpMethod;
 

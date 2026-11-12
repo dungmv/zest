@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 pub mod app_state;
 pub mod environment_state;
 pub mod git_state;
@@ -32,5 +30,3 @@ pub use sidebar_state::*;
 pub use toast_state::*;
 pub use workspace_data_state::*;
 pub use workspace_events::*;
-
-pub type WorkspaceState = WorkspaceDataState;

@@ -23,11 +23,7 @@ use gpui_kit::component::input::{Editor, EditorState as CodeEditorState, Textare
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::Icon;
 use gpui_kit::component::Sizable as _;
-use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{
-    div, px, App, Entity, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
-    StatefulInteractiveElement as _, Styled, Window,
-};
+use gpui_kit::{div, px, App, Entity, IntoElement, ParentElement, RenderOnce, Styled, Window};
 use zest_core::models::{KeyValuePair, MultipartItem, RequestBody};
 
 pub(crate) fn clamp_char_boundary_left(s: &str, mut idx: usize) -> usize {

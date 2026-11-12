@@ -8,22 +8,44 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled,
 };
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::time::Instant;
+
+thread_local! {
+    static FILE_SIZE_CACHE: RefCell<HashMap<String, (Instant, String)>> = RefCell::new(HashMap::new());
+}
+
 pub fn format_file_size(path_str: &str) -> String {
     if path_str.is_empty() {
         return "".to_string();
     }
-    if let Ok(meta) = std::fs::metadata(path_str) {
-        let bytes = meta.len();
-        if bytes < 1024 {
-            format!("{} B", bytes)
-        } else if bytes < 1024 * 1024 {
-            format!("{:.1} KB", bytes as f64 / 1024.0)
-        } else {
-            format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
+    FILE_SIZE_CACHE.with(|cache| {
+        let mut map = cache.borrow_mut();
+        let now = Instant::now();
+        if let Some((cached_at, cached_str)) = map.get(path_str) {
+            // Re-stat at most once every 5 seconds per file path to keep render 100% pure & fast
+            if now.duration_since(*cached_at).as_secs() < 5 {
+                return cached_str.clone();
+            }
         }
-    } else {
-        "File not found".to_string()
-    }
+
+        let formatted = if let Ok(meta) = std::fs::metadata(path_str) {
+            let bytes = meta.len();
+            if bytes < 1024 {
+                format!("{} B", bytes)
+            } else if bytes < 1024 * 1024 {
+                format!("{:.1} KB", bytes as f64 / 1024.0)
+            } else {
+                format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
+            }
+        } else {
+            "File not found".to_string()
+        };
+
+        map.insert(path_str.to_string(), (now, formatted.clone()));
+        formatted
+    })
 }
 
 pub fn render_binary_editor(

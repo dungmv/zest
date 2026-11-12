@@ -6,10 +6,7 @@ use gpui_kit::component::empty::{
 };
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{
-    div, px, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
-    StatefulInteractiveElement as _, Styled,
-};
+use gpui_kit::{div, px, Entity, IntoElement, ParentElement, Styled};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum DiffViewMode {

@@ -12,8 +12,6 @@ pub use example_node::*;
 pub use flat_tree::*;
 pub use folder_node::*;
 pub use footer::*;
-pub use git_status::*;
-pub use item_actions::*;
 pub use request_node::*;
 
 pub const SIDEBAR_ROW_HEIGHT: f32 = 28.0;

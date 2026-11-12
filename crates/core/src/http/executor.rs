@@ -968,7 +968,7 @@ mod tests {
         // Intentionally poison the mutex
         let cs_clone = cookie_store.clone();
         let _ = std::panic::catch_unwind(move || {
-            let _guard = cs_clone.lock().unwrap();
+            let _guard = cs_clone.lock().unwrap_or_else(|p| p.into_inner());
             panic!("Poisoning cookie store mutex");
         });
 

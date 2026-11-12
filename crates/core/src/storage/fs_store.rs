@@ -286,21 +286,11 @@ impl WorkspaceStore for FsWorkspaceStore {
         let git_dir = self.root_dir.join(".git");
         let mut tracked_leak = false;
         if git_dir.exists() {
-            let mut cmd = std::process::Command::new("git");
-            cmd.arg("ls-files").arg(".local").arg("*.loc");
-            cmd.current_dir(&self.root_dir);
-            cmd.env("GIT_TERMINAL_PROMPT", "0");
-            #[cfg(target_os = "windows")]
+            if let Ok(output) =
+                crate::git::run_git_cmd(&self.root_dir, &["ls-files", ".local", "*.loc"])
             {
-                use std::os::windows::process::CommandExt;
-                cmd.creation_flags(0x08000000);
-            }
-            if let Ok(output) = cmd.output() {
-                if output.status.success() {
-                    let text = String::from_utf8_lossy(&output.stdout);
-                    if !text.trim().is_empty() {
-                        tracked_leak = true;
-                    }
+                if !output.trim().is_empty() {
+                    tracked_leak = true;
                 }
             }
         }

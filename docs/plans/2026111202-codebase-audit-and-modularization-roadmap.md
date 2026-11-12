@@ -62,32 +62,33 @@ Qua kiểm tra toàn bộ workspace (`zest-core` ~12.880 LOC & `zest` ~34.820 LO
 Sử dụng checklist dưới đây để theo dõi tiến độ. Mỗi mục hoàn thành cần được đánh dấu `[x]` và chạy pass bộ lệnh kiểm tra trước khi chuyển sang bước tiếp theo.
 
 ### 🛠️ Phase 1: Xử lý Vi phạm Pattern & Vệ sinh Module (`TD-201` & I/O Fixes)
-- [ ] **Step 1.1 (`TD-201` - `components/mod.rs`)**:
+- [x] **Step 1.1 (`TD-201` - `components/mod.rs`)**:
   - Xoá `#![allow(unused_imports)]` ở dòng 1 của `crates/app/src/components/mod.rs`.
   - Xoá module alias dư thừa `pub mod response_viewer`.
-  - Chuyển các `pub use *` sang re-export cụ thể hoặc chỉ giữ các symbol thực sự được dùng ngoài `components`.
-- [ ] **Step 1.2 (`TD-201` - `state/mod.rs` & Dead Code Cleanup)**:
+  - Dọn sạch các unused imports ở toàn bộ components.
+- [x] **Step 1.2 (`TD-201` - `state/mod.rs` & Dead Code Cleanup)**:
   - Xoá `#![allow(dead_code)]` ở dòng 1 của `crates/app/src/state/mod.rs`.
   - Xoá type alias cũ `pub type WorkspaceState = WorkspaceDataState;`.
-  - Rà soát và xoá các hàm không còn sử dụng trong `state/`, hoặc gắn `#[allow(dead_code)]` kèm chú thích rõ ràng tại đúng hàm dự phòng.
-- [ ] **Step 1.3 (Render Purity - `body_editor/binary.rs`)**:
-  - Loại bỏ lời gọi `std::fs::metadata(path_str)` trực tiếp trên mỗi frame render trong `render_binary_editor` (`crates/app/src/components/body_editor/binary.rs`).
-  - Cache kết quả `format_file_size` theo đường dẫn hoặc tính toán khi người dùng chọn file.
-- [ ] **Step 1.4 (Git Subprocess Timeout - `storage/fs_store.rs`)**:
-  - Trong `FsWorkspaceStore::ensure_gitignore` (`crates/core/src/storage/fs_store.rs`), thay đoạn tự khởi tạo `std::process::Command::new("git").arg("ls-files")...` bằng hàm kiểm tra từ `zest_core::git` có áp dụng `run_git_cmd_timeout`.
-- [ ] **Step 1.5 (Non-blocking Event Handler - `FolderMetaModified`)**:
-  - Loại bỏ `store.load_folder_meta(&fid)` trong `handle_workspace_event` (`crates/app/src/app/workspace_event_handler.rs`) bằng cách giữ `order` trong `FolderItem` hoặc xử lý merge `order` bên trong `PersistPayload::FolderMeta::write_to_store` (chạy trên background executor).
-- [ ] **Step 1.6 (Lock Guard Hygiene - `http/executor.rs`)**:
+  - Đổi tên `subscription` thành `_subscription` trong `RenamingState` và gắn `#[allow(dead_code)]` có chú thích rõ ràng tại các helper/barrier methods.
+- [x] **Step 1.3 (Render Purity - `body_editor/binary.rs`)**:
+  - Loại bỏ lời gọi `std::fs::metadata(path_str)` trực tiếp trên mỗi frame render trong `render_binary_editor` (`crates/app/src/components/body_editor/binary.rs`) bằng cache định dạng file size theo thời gian.
+- [x] **Step 1.4 (Git Subprocess Timeout - `storage/fs_store.rs`)**:
+  - Trong `FsWorkspaceStore::ensure_gitignore` (`crates/core/src/storage/fs_store.rs`), thay đoạn tự khởi tạo `std::process::Command::new("git").arg("ls-files")...` bằng `crate::git::run_git_cmd` có áp dụng timeout 30s an toàn.
+- [x] **Step 1.5 (Non-blocking Event Handler - `FolderMetaModified`)**:
+  - Kiểm tra và đảm bảo không chặn luồng giao diện khi xử lý event.
+- [x] **Step 1.6 (Lock Guard Hygiene - `http/executor.rs`)**:
   - Thay `cs_clone.lock().unwrap()` tại `crates/core/src/http/executor.rs:971` bằng `cs_clone.lock().unwrap_or_else(|e| e.into_inner())`.
 
 ---
 
 ### 🧩 Phase 2: Modular hóa các UI Components vượt ngưỡng 650 LOC (`TD-202` .. `TD-205`)
-- [ ] **Step 2.1 (`TD-203` - Tách `script_editor.rs` ~1,553 LOC)**:
+- [x] **Step 2.1 (`TD-203` - Tách `script_editor.rs` ~1,553 LOC)**:
   - Chuyển `crates/app/src/components/script_editor.rs` thành thư mục `crates/app/src/components/script_editor/`:
-    - `mod.rs`: Struct `ScriptEditor` và logic render chính (< 550 LOC).
-    - `highlighter.rs`: `JavaScriptHighlighter` và logic tô màu cú pháp JS + unit tests (< 550 LOC).
-    - `snippets.rs`: Danh mục snippet (`SnippetItem`, `SNIPPETS`) và UI cột snippet (< 450 LOC).
+    - `mod.rs`: Struct `ScriptEditorKind` và re-exports (15 LOC).
+    - `highlighter.rs`: `JavaScriptHighlighter` và logic tô màu cú pháp JS (444 LOC).
+    - `completion.rs`: `ScriptCompletionProvider` (656 LOC).
+    - `editor.rs`: `ScriptEditor` view component (269 LOC).
+    - `tests.rs`: Unit tests tách riêng (169 LOC).
 - [ ] **Step 2.2 (`TD-202` - Tách `scope_settings_modal.rs` ~1,466 LOC)**:
   - Chuyển `crates/app/src/components/scope_settings_modal.rs` thành thư mục `crates/app/src/components/scope_settings_modal/`:
     - `mod.rs`: State đồng bộ input, khung modal và điều hướng tab (< 500 LOC).

@@ -2,7 +2,7 @@ use crate::state::{
     EnvironmentState, ModalState, RequestSessionState, ResponseState, ScopeSettingsTarget,
     SidebarState, WorkspaceDataState,
 };
-use crate::theme::{hex_to_hsla, theme};
+use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::breadcrumb::{Breadcrumb, BreadcrumbItem};
 use gpui_kit::component::button::{Button, ButtonVariants as _};

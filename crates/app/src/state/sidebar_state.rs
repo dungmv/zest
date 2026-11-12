@@ -12,7 +12,7 @@ use std::sync::Arc;
 pub struct RenamingState<T> {
     pub id: T,
     pub input: Entity<InputState>,
-    pub subscription: gpui_kit::Subscription,
+    pub _subscription: gpui_kit::Subscription,
 }
 
 pub struct SidebarState {
@@ -325,7 +325,7 @@ impl SidebarState {
         RenamingState {
             id,
             input,
-            subscription: sub,
+            _subscription: sub,
         }
     }
 

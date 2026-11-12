@@ -1,8 +1,8 @@
-use crate::state::{RequestSessionState, SidebarState, WorkspaceState};
+use crate::state::{RequestSessionState, SidebarState, WorkspaceDataState};
 use gpui_kit::{App, Entity};
 
 pub fn delete_multi_selected_items(
-    ws_entity: &Entity<WorkspaceState>,
+    ws_entity: &Entity<WorkspaceDataState>,
     ed_entity: &Entity<RequestSessionState>,
     sb_entity: &Entity<SidebarState>,
     cx: &mut App,
@@ -45,7 +45,7 @@ pub fn delete_multi_selected_items(
 }
 
 pub fn delete_request_item(
-    ws_entity: &Entity<WorkspaceState>,
+    ws_entity: &Entity<WorkspaceDataState>,
     ed_entity: &Entity<RequestSessionState>,
     req_id: &str,
     cx: &mut App,

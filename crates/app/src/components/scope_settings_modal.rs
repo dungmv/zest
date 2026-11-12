@@ -13,8 +13,8 @@ use gpui_kit::component::separator::Separator;
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, MouseButton,
-    ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled, Window,
+    div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
+    RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
 use zest_core::models::{ApiKeyLocation, Auth, KeyValuePair};
 

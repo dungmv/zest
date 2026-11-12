@@ -1,32 +1,29 @@
 use crate::components::status_badge::MethodBadge;
 use crate::components::tabs_with_badge::render_tab_badge;
 use crate::state::{
-    RequestSessionState, ResponseState, ResponseTabKind, ResponseViewMode, WorkspaceState,
+    RequestSessionState, ResponseState, ResponseTabKind, ResponseViewMode, WorkspaceDataState,
 };
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Editor, EditorState as CodeEditorState};
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::progress::Progress;
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::skeleton::Skeleton;
 use gpui_kit::component::spinner::Spinner;
 use gpui_kit::component::tab::{Tab, TabBar};
 use gpui_kit::component::text::TextView;
-use gpui_kit::component::Selectable as _;
 use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    div, px, uniform_list, AnyElement, App, Entity, InteractiveElement as _, IntoElement,
-    ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled, Window,
+    div, px, uniform_list, App, Entity, InteractiveElement as _, IntoElement, ParentElement,
+    RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
-use zest_core::models::HttpResponseRecord;
-use zest_core::storage::models::{RequestExampleFile, RequestFile, RequestKvItem};
+use zest_core::storage::models::{RequestExampleFile, RequestKvItem};
 
 #[derive(IntoElement)]
 pub struct ResponseInspector {
-    workspace_state: Entity<WorkspaceState>,
+    workspace_state: Entity<WorkspaceDataState>,
     editor_state: Entity<RequestSessionState>,
     response_state: Entity<ResponseState>,
     response_editor: Entity<CodeEditorState>,
@@ -35,7 +32,7 @@ pub struct ResponseInspector {
 
 impl ResponseInspector {
     pub fn new(
-        workspace_state: Entity<WorkspaceState>,
+        workspace_state: Entity<WorkspaceDataState>,
         editor_state: Entity<RequestSessionState>,
         response_state: Entity<ResponseState>,
         response_editor: Entity<CodeEditorState>,

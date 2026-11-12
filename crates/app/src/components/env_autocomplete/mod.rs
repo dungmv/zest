@@ -2,8 +2,7 @@ mod render;
 mod var_tokens;
 
 pub use render::{
-    candidate_type_badge, render_candidate_detail_card, render_candidate_row, CANDIDATE_DETAIL_GAP,
-    CANDIDATE_DETAIL_WIDTH, CANDIDATE_LIST_WIDTH,
+    render_candidate_detail_card, render_candidate_row, CANDIDATE_DETAIL_GAP, CANDIDATE_LIST_WIDTH,
 };
 pub use var_tokens::{attach_missing_var_tokens, RetokenizeGuard};
 
@@ -11,10 +10,7 @@ use crate::state::EnvironmentState;
 use anyhow::Result;
 use gpui_kit::component::input::{CompletionProvider, InlineToken, InputContent};
 use gpui_kit::component::RopeExt;
-use gpui_kit::{
-    div, px, App, Div, Entity, InteractiveElement as _, KeyDownEvent, ParentElement as _,
-    ScrollHandle, Styled as _, Task, Window,
-};
+use gpui_kit::{App, Entity, KeyDownEvent, ScrollHandle, Styled as _, Task, Window};
 use lsp_types::{
     CompletionContext, CompletionItem, CompletionItemKind, CompletionResponse, CompletionTextEdit,
     Documentation, Range as LspRange, TextEdit,

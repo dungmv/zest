@@ -7,14 +7,12 @@ pub mod remotes_modal;
 
 pub use branch_modal::*;
 pub use commit_modal::*;
-pub use common::*;
-pub use diff_view::*;
 pub use history_modal::*;
 pub use remotes_modal::*;
 
 use crate::services::GitService;
 use crate::state::{GitActiveModal, GitState, WorkspaceDataState};
-use gpui_kit::{div, App, AppContext as _, Entity, IntoElement, RenderOnce, Window};
+use gpui_kit::{div, App, Entity, IntoElement, RenderOnce, Window};
 
 #[derive(IntoElement)]
 pub struct GitModal {

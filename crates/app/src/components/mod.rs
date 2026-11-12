@@ -1,4 +1,3 @@
-#![allow(unused_imports)]
 pub mod about_modal;
 pub mod body_editor;
 pub mod command_palette;
@@ -26,18 +25,13 @@ pub use about_modal::*;
 pub use body_editor::*;
 pub use command_palette::*;
 pub use console_panel::*;
-pub use env_autocomplete::*;
-pub use env_input::*;
 pub use env_modal::*;
-pub use kv_table::*;
-pub use modal_dialog::*;
-pub use request_bar::*;
-pub mod response_viewer {
-    pub use super::response_inspector::*;
-}
 pub use git::*;
 pub use import_modal::*;
 pub use inherited_headers::*;
+pub use kv_table::*;
+pub use modal_dialog::*;
+pub use request_bar::*;
 pub use response_inspector::*;
 pub use scope_settings_modal::*;
 pub use script_editor::*;

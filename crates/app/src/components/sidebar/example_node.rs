@@ -7,8 +7,8 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::menu::ContextMenuExt as _;
 use gpui_kit::component::Sizable as _;
 use gpui_kit::{
-    div, px, AnyElement, AppContext as _, InteractiveElement as _, IntoElement, MouseButton,
-    ParentElement, StatefulInteractiveElement as _, Styled,
+    div, px, AnyElement, InteractiveElement as _, IntoElement, MouseButton, ParentElement,
+    StatefulInteractiveElement as _, Styled,
 };
 
 pub fn render_example_row(

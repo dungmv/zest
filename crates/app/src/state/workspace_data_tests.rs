@@ -225,7 +225,7 @@ mod tests {
 
     #[gpui_kit::test]
     fn test_sidebar_delete_multi_selected_items(cx: &mut gpui_kit::TestAppContext) {
-        use crate::components::sidebar::delete_multi_selected_items;
+        use crate::components::sidebar::item_actions::delete_multi_selected_items;
         use crate::state::RequestSessionState;
         use gpui_kit::AppContext as _;
 

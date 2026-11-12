@@ -1,6 +1,6 @@
 use super::common::{
     collect_unified_changes, render_checkbox, render_error_banner, render_not_a_repo_view,
-    render_status_badge, UnifiedChangeItem,
+    render_status_badge,
 };
 use super::diff_view::{render_diff_content, render_diff_view_toggle, DiffViewMode};
 use crate::components::modal_dialog::{DialogHeader, DialogTitle, ModalDialog};

@@ -10,8 +10,7 @@ use gpui_kit::component::Disableable as _;
 use gpui_kit::component::Sizable as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
-    RenderOnce, StatefulInteractiveElement as _, Styled, Window,
+    div, px, App, AppContext as _, Entity, IntoElement, ParentElement, RenderOnce, Styled, Window,
 };
 
 #[derive(IntoElement)]

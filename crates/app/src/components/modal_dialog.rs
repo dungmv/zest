@@ -2,7 +2,7 @@ use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariant, ButtonVariants as _};
 pub use gpui_kit::component::dialog::{
-    DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+    DialogContent, DialogDescription, DialogHeader, DialogTitle,
 };
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder as _;
