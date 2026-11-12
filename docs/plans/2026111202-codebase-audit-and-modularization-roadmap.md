@@ -47,8 +47,10 @@ Qua kiểm tra toàn bộ workspace (`zest-core` ~12.880 LOC & `zest` ~34.820 LO
 
 ## 3. Architectural Decisions
 
-1. **Giữ nguyên Public API nội bộ khi tách Module**:
-   - Khi chuyển một file đơn (ví dụ `components/script_editor.rs`) thành thư mục (`components/script_editor/mod.rs`), `mod.rs` sẽ `pub use` các kiểu public hiện tại (`ScriptEditor`, `JavaScriptHighlighter`, v.v.) để không làm gãy các nơi import bên ngoài.
+1. **Refactor Toàn diện — Ưu tiên Code Simple, Dứt khoát, Tránh Fallback & Bypass**:
+   - Khi tái cấu trúc các module và component, **không** duy trì các tầng adapter tương thích ngược giả tạo, shim wrappers, type alias tạm bợ hay logic fallback/bypass rườm rà.
+   - Trực tiếp cập nhật các call site sang cấu trúc mới tinh gọn, rõ ràng, minh bạch (explicit is better than implicit).
+   - Thiết kế API nội bộ theo đúng nguyên tắc **KISS (Keep It Simple, Stupid)** & **YAGNI**: Chỉ giữ lại đúng những gì cần thiết cho tính năng, xoá bỏ các tham số hay hàm trung gian không mang lại giá trị thật.
 2. **Không I/O trong `render()` hoặc Event Handler trên UI Thread**:
    - Với `body_editor/binary.rs`: Không gọi `std::fs::metadata` trên mỗi frame. Dung lượng file được định dạng một lần hoặc đọc nhẹ qua cache theo đường dẫn file.
    - Với `FolderMetaModified`: Lưu `order: Vec<String>` trực tiếp trên `FolderItem` trong bộ nhớ (hoặc để `PersistPayload::FolderMeta` tự bảo toàn `order` trên đĩa khi ghi ở background worker) để `workspace_event_handler.rs` không cần gọi `store.load_folder_meta(&fid)` trên UI thread.
