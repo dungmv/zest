@@ -679,6 +679,8 @@ impl RenderOnce for AppTitleBar {
 
         #[cfg(not(target_os = "macos"))]
         {
+            use crate::theme::hex_to_hsla;
+
             let is_max = window.is_maximized();
             let icon_color = t.text_primary;
 

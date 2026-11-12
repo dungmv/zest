@@ -24,6 +24,17 @@ pub struct AuthTabContext<'a> {
     pub api_val_input: &'a Entity<InputState>,
 }
 
+/// Display name of an auth type, shared by the Auth tab title and its type dropdown.
+pub fn auth_type_label(auth: &Auth) -> &'static str {
+    match auth {
+        Auth::Inherit => "Inherit",
+        Auth::None => "None",
+        Auth::Bearer { .. } => "Bearer Token",
+        Auth::Basic { .. } => "Basic Auth",
+        Auth::ApiKey { .. } => "API Key",
+    }
+}
+
 pub fn render_auth_tab(
     ctx: AuthTabContext<'_>,
     window: &mut Window,
@@ -33,13 +44,7 @@ pub fn render_auth_tab(
     let ws_s = ctx.ws_state.clone();
     let tgt = ctx.target.clone();
 
-    let auth_label = match ctx.current_auth {
-        Auth::Inherit => "Inherit",
-        Auth::None => "None",
-        Auth::Bearer { .. } => "Bearer Token",
-        Auth::Basic { .. } => "Basic Auth",
-        Auth::ApiKey { .. } => "API Key",
-    };
+    let auth_label = auth_type_label(ctx.current_auth);
 
     let is_inherit = matches!(ctx.current_auth, Auth::Inherit);
     let is_none = matches!(ctx.current_auth, Auth::None);

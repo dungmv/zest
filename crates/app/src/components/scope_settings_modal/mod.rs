@@ -10,13 +10,12 @@ pub use headers_tab::*;
 
 use crate::components::ModalDialog;
 use crate::state::{EnvironmentState, ModalState, ScopeSettingsTarget, WorkspaceDataState};
-use crate::theme::theme;
+use gpui_kit::assets::IconName;
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::component::tab::{Tab, TabBar};
 use gpui_kit::{
-    div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
-    RenderOnce, StatefulInteractiveElement as _, Styled, Window,
+    div, px, App, AppContext as _, Entity, IntoElement, ParentElement, RenderOnce, Styled, Window,
 };
 use zest_core::models::Auth;
 
@@ -51,7 +50,6 @@ impl ScopeSettingsModal {
 
 impl RenderOnce for ScopeSettingsModal {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let t = theme();
         let ws_clone = self.workspace_state.clone();
         let modal_clone = self.modal_state.clone();
         let env_clone = self.env_state.clone();
@@ -115,7 +113,26 @@ impl RenderOnce for ScopeSettingsModal {
         } else {
             raw_tab
         };
-        let headers_count = current_headers.len();
+        // Visible tabs in display order; General is hidden for folders (they inherit
+        // workspace-level general settings, so only Headers/Auth apply).
+        let visible_tabs: Vec<(ScopeSettingsTab, String)> = [
+            (ScopeSettingsTab::General, "General".to_string()),
+            (
+                ScopeSettingsTab::Headers,
+                format!("Headers ({})", current_headers.len()),
+            ),
+            (
+                ScopeSettingsTab::Auth,
+                format!("Auth ({})", auth_type_label(&current_auth)),
+            ),
+        ]
+        .into_iter()
+        .filter(|(tab, _)| !is_folder || *tab != ScopeSettingsTab::General)
+        .collect();
+        let selected_index = visible_tabs
+            .iter()
+            .position(|(tab, _)| *tab == active_tab)
+            .unwrap_or(0);
 
         let (workspace_name, workspace_path_str) = {
             let ws_r = ws_clone.read(cx);
@@ -156,175 +173,82 @@ impl RenderOnce for ScopeSettingsModal {
             use_scope_auth_inputs(window, cx, &target, &current_auth, &ws_clone, &env_clone);
 
         ModalDialog::new("scope-settings-modal")
-            .title(title)
             .w(px(580.))
+            .h(px(320.))
+            .title(title)
+            .icon(IconName::Settings)
             .on_close({
                 let modal_c = modal_clone.clone();
                 move |_, cx| {
                     modal_c.update(cx, |m, cx| m.close_scope_settings(cx));
                 }
             })
+            // Tab Bar
+            .child({
+                let kinds: Vec<ScopeSettingsTab> =
+                    visible_tabs.iter().map(|(tab, _)| *tab).collect();
+                TabBar::new("scope-settings-tabs")
+                    .underline()
+                    .px(px(16.))
+                    .selected_index(selected_index)
+                    .on_click(move |&idx, window, cx| {
+                        if let Some(tab) = kinds.get(idx) {
+                            let tab = *tab;
+                            tab_state.update(cx, |state, _| *state = tab);
+                            window.refresh();
+                        }
+                    })
+                    .children(
+                        visible_tabs
+                            .iter()
+                            .map(|(_, label)| Tab::new().label(label.clone())),
+                    )
+            })
+            // Tab Body
             .child(
                 div()
-                    .w_full()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .gap(px(14.))
-                    // Tab Bar
-                    .child(
-                        div()
-                            .w_full()
-                            .min_w_0()
-                            .flex()
-                            .items_center()
-                            .gap(px(6.))
-                            .p(px(3.))
-                            .rounded(px(6.))
-                            .bg(t.bg_input)
-                            .border_1()
-                            .border_color(t.border)
-                            .when(!is_folder, |this| {
-                                let is_active = active_tab == ScopeSettingsTab::General;
-                                let tab = tab_state.clone();
-                                this.child(
-                                    div()
-                                        .id("tab-scope-general")
-                                        .flex_1()
-                                        .h(px(26.))
-                                        .rounded(px(4.))
-                                        .bg(if is_active { t.bg_card } else { t.transparent })
-                                        .text_color(if is_active {
-                                            t.text_primary
-                                        } else {
-                                            t.text_muted
-                                        })
-                                        .font_weight(if is_active {
-                                            gpui_kit::FontWeight::SEMIBOLD
-                                        } else {
-                                            gpui_kit::FontWeight::NORMAL
-                                        })
-                                        .cursor_pointer()
-                                        .flex()
-                                        .items_center()
-                                        .justify_center()
-                                        .text_xs()
-                                        .on_click(move |_, _, cx| {
-                                            tab.update(cx, |state, _| {
-                                                *state = ScopeSettingsTab::General
-                                            });
-                                        })
-                                        .child("General"),
-                                )
-                            })
-                            .child({
-                                let is_active = active_tab == ScopeSettingsTab::Headers;
-                                let tab = tab_state.clone();
-                                div()
-                                    .id("tab-scope-headers")
-                                    .flex_1()
-                                    .h(px(26.))
-                                    .rounded(px(4.))
-                                    .bg(if is_active { t.bg_card } else { t.transparent })
-                                    .text_color(if is_active {
-                                        t.text_primary
-                                    } else {
-                                        t.text_muted
-                                    })
-                                    .font_weight(if is_active {
-                                        gpui_kit::FontWeight::SEMIBOLD
-                                    } else {
-                                        gpui_kit::FontWeight::NORMAL
-                                    })
-                                    .cursor_pointer()
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .gap(px(4.))
-                                    .text_xs()
-                                    .on_click(move |_, _, cx| {
-                                        tab.update(cx, |state, _| {
-                                            *state = ScopeSettingsTab::Headers
-                                        });
-                                    })
-                                    .child(format!("Headers ({})", headers_count))
-                            })
-                            .child({
-                                let is_active = active_tab == ScopeSettingsTab::Auth;
-                                let tab = tab_state.clone();
-                                div()
-                                    .id("tab-scope-auth")
-                                    .flex_1()
-                                    .h(px(26.))
-                                    .rounded(px(4.))
-                                    .bg(if is_active { t.bg_card } else { t.transparent })
-                                    .text_color(if is_active {
-                                        t.text_primary
-                                    } else {
-                                        t.text_muted
-                                    })
-                                    .font_weight(if is_active {
-                                        gpui_kit::FontWeight::SEMIBOLD
-                                    } else {
-                                        gpui_kit::FontWeight::NORMAL
-                                    })
-                                    .cursor_pointer()
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .text_xs()
-                                    .on_click(move |_, _, cx| {
-                                        tab.update(cx, |state, _| *state = ScopeSettingsTab::Auth);
-                                    })
-                                    .child("Authentication")
-                            }),
-                    )
-                    // Tab Content
-                    .child(
-                        div()
-                            .w_full()
-                            .min_w_0()
-                            .h(px(320.))
-                            .overflow_y_scrollbar()
-                            .child(match active_tab {
-                                ScopeSettingsTab::General => render_general_tab(
-                                    &ws_clone,
-                                    &ws_name_input,
-                                    &workspace_name,
-                                    &workspace_path_str,
-                                    cx,
-                                )
-                                .into_any_element(),
-                                ScopeSettingsTab::Headers => render_headers_tab(
-                                    &ws_clone,
-                                    &self.env_state,
-                                    &modal_clone,
-                                    &target,
-                                    &current_headers,
-                                    is_folder,
-                                )
-                                .into_any_element(),
-                                ScopeSettingsTab::Auth => render_auth_tab(
-                                    AuthTabContext {
-                                        ws_state: &ws_clone,
-                                        env_state: &self.env_state,
-                                        modal_state: &modal_clone,
-                                        target: &target,
-                                        current_auth: &current_auth,
-                                        is_folder,
-                                        folder_id_opt: folder_id_opt.as_deref(),
-                                        bearer_input: &auth_inputs.bearer_input,
-                                        basic_user_input: &auth_inputs.basic_user_input,
-                                        basic_pass_input: &auth_inputs.basic_pass_input,
-                                        api_key_input: &auth_inputs.api_key_input,
-                                        api_val_input: &auth_inputs.api_val_input,
-                                    },
-                                    window,
-                                    cx,
-                                )
-                                .into_any_element(),
-                            }),
-                    ),
+                    .flex_1()
+                    .min_h(px(0.))
+                    .p(px(16.))
+                    .overflow_y_scrollbar()
+                    .child(match active_tab {
+                        ScopeSettingsTab::General => render_general_tab(
+                            &ws_clone,
+                            &ws_name_input,
+                            &workspace_name,
+                            &workspace_path_str,
+                            cx,
+                        )
+                        .into_any_element(),
+                        ScopeSettingsTab::Headers => render_headers_tab(
+                            &ws_clone,
+                            &self.env_state,
+                            &modal_clone,
+                            &target,
+                            &current_headers,
+                            is_folder,
+                        )
+                        .into_any_element(),
+                        ScopeSettingsTab::Auth => render_auth_tab(
+                            AuthTabContext {
+                                ws_state: &ws_clone,
+                                env_state: &self.env_state,
+                                modal_state: &modal_clone,
+                                target: &target,
+                                current_auth: &current_auth,
+                                is_folder,
+                                folder_id_opt: folder_id_opt.as_deref(),
+                                bearer_input: &auth_inputs.bearer_input,
+                                basic_user_input: &auth_inputs.basic_user_input,
+                                basic_pass_input: &auth_inputs.basic_pass_input,
+                                api_key_input: &auth_inputs.api_key_input,
+                                api_val_input: &auth_inputs.api_val_input,
+                            },
+                            window,
+                            cx,
+                        )
+                        .into_any_element(),
+                    }),
             )
             .into_any_element()
     }
