@@ -58,7 +58,7 @@ pub fn render_auth_tab(
     let is_apikey = matches!(auth, Auth::ApiKey { .. });
 
     div()
-        .w_full()
+        .size_full()
         .p(px(8.))
         .flex()
         .flex_col()
@@ -261,7 +261,7 @@ pub fn render_auth_tab(
                                 .text_color(t.text_secondary)
                                 .child("Token:"),
                         )
-                        .child(div().flex_1().max_w(px(400.)).child(render_env_input(
+                        .child(div().flex_1().child(render_env_input(
                             "auth-bearer-token-input",
                             inputs.bearer_token_input,
                             Some(env_state),
@@ -310,7 +310,7 @@ pub fn render_auth_tab(
                                         .text_color(t.text_secondary)
                                         .child("Username:"),
                                 )
-                                .child(div().flex_1().max_w(px(400.)).child(render_env_input(
+                                .child(div().flex_1().child(render_env_input(
                                     "auth-basic-user-input",
                                     inputs.basic_user_input,
                                     Some(env_state),
@@ -347,7 +347,7 @@ pub fn render_auth_tab(
                                         .text_color(t.text_secondary)
                                         .child("Password:"),
                                 )
-                                .child(div().flex_1().max_w(px(400.)).child(render_env_input(
+                                .child(div().flex_1().child(render_env_input(
                                     "auth-basic-pass-input",
                                     inputs.basic_pass_input,
                                     Some(env_state),
@@ -408,7 +408,7 @@ pub fn render_auth_tab(
                                         .text_color(t.text_secondary)
                                         .child("Key:"),
                                 )
-                                .child(div().flex_1().max_w(px(400.)).child(render_env_input(
+                                .child(div().flex_1().child(render_env_input(
                                     "auth-apikey-key-input",
                                     inputs.apikey_key_input,
                                     Some(env_state),
@@ -445,7 +445,7 @@ pub fn render_auth_tab(
                                         .text_color(t.text_secondary)
                                         .child("Value:"),
                                 )
-                                .child(div().flex_1().max_w(px(400.)).child(render_env_input(
+                                .child(div().flex_1().child(render_env_input(
                                     "auth-apikey-val-input",
                                     inputs.apikey_val_input,
                                     Some(env_state),
@@ -593,12 +593,7 @@ fn disabled_field(label: &str, value: &str, t: &AppTheme) -> Div {
                 .text_color(t.text_secondary)
                 .child(label.to_string()),
         )
-        .child(
-            div()
-                .flex_1()
-                .max_w(px(400.))
-                .child(render_disabled_input(value, t)),
-        )
+        .child(div().flex_1().child(render_disabled_input(value, t)))
 }
 
 /// Disabled mirror of the local auth forms, shown under the inherit description so the
