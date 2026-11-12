@@ -102,11 +102,11 @@ Sử dụng checklist dưới đây để theo dõi tiến độ. Mỗi mục ho
     - `body_tab.rs`: Render body (`Pretty`, `Raw`, `Preview`, search/copy/save) và Sent Request tab (< 450 LOC).
     - `tables_tab.rs`: Render Headers table, Cookies table, và Test Results tab (< 400 LOC).
     - `timing_popover.rs`: Render bảng phân tích thời gian mạng (DNS, TCP, TLS, TTFB, Download) (< 250 LOC).
-- [ ] **Step 2.4 (`TD-205` & Các Component 650–875 LOC khác)**:
-  - `components/body_editor/multipart.rs` (872 LOC): Tách khối unit tests sang `components/body_editor/multipart_tests.rs` (giúp `multipart.rs` còn ~520 LOC).
-  - `components/titlebar.rs` (761 LOC): Tách phần dropdown menus (Workspace menu & Environment menu) hoặc chuyển thành `components/titlebar/` (< 600 LOC/file).
-  - `components/import_modal.rs` (677 LOC): Tách phần preview/parser helper hoặc giữ dưới 650 LOC.
-  - `components/git/diff_view.rs` (673 LOC): Rút gọn hoặc chuyển helper sang `components/git/common.rs` để dưới 650 LOC.
+- [x] **Step 2.4 (`TD-205` & Các Component 650–875 LOC khác)**:
+  - `components/body_editor/multipart.rs` (870 LOC): Không có unit tests như dự kiến — thay vào đó tách thành thư mục `body_editor/multipart/` (`mod.rs` 81 LOC: frame + `MultipartContext`; `state.rs` 275 LOC: `MpTableState` + `RowMeta` lookup helpers thay 6 khối position/meta inline; `row.rs` 440 LOC: render từng row + `RowHandles` context tránh `too_many_arguments`).
+  - `components/titlebar.rs` (763 LOC): Tách thành `titlebar/` (`mod.rs` 376 LOC: frame, sidebar toggle, right toolbar, caption buttons; `menus.rs` 267 LOC: workspace & environment switcher dropdowns; `breadcrumb.rs` 155 LOC: center section + char-budget truncation).
+  - `components/import_modal.rs` (677 LOC): Tách helpers sang `import_modal/preview.rs` (272 LOC: file picker, preview card, badge, method pill, checkbox); `mod.rs` còn 415 LOC.
+  - `components/git/diff_view.rs` (670 LOC): Tách parser sang `git/diff_parser.rs` (237 LOC: `DiffViewMode`, `SideBySideRow`, `split_diff_into_file_slices`, `parse_side_by_side_diff` + tests); `diff_view.rs` còn 433 LOC (chỉ render); call sites (`commit_modal.rs`, `history_modal.rs`) cập nhật trực tiếp, không shim.
 
 ---
 
