@@ -467,7 +467,7 @@ impl RequestItem {
         let has_query = url.contains('?');
         let has_template = url.contains("{{");
         if has_query {
-            let (base, parsed_params) = crate::http::parse_query_from_url(url);
+            let (base, parsed_params) = crate::transport::parse_query_from_url(url);
             self.url = base;
             if !parsed_params.is_empty() {
                 let mut disabled: Vec<KeyValuePair> =

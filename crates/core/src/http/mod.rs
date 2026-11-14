@@ -1,9 +1,8 @@
-pub mod executor;
-pub mod hierarchy;
-pub mod resolved;
+//! HTTP transport: connection pooling and request execution over reqwest.
+//!
+//! Protocol-neutral machinery (request resolution, hierarchy merge, transport
+//! errors, frame log) lives in [`crate::transport`].
 
-pub use executor::{HttpExecutor, HttpProgress, RequestError, ReqwestExecutor};
-pub use hierarchy::{
-    resolve_hierarchical_headers_and_auth, resolve_inherited_headers, InheritedHeader,
-};
-pub use resolved::{build_url_with_query, parse_query_from_url, ResolvedRequest};
+pub mod executor;
+
+pub use executor::{HttpExecutor, HttpProgress, ReqwestExecutor};

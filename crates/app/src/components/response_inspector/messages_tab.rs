@@ -5,7 +5,8 @@ use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::spinner::Spinner;
 use gpui_kit::component::Sizable as _;
 use gpui_kit::{div, px, AnyElement, App, IntoElement, ParentElement, Styled};
-use zest_core::ws::{WebSocketStatus, WsDirection, WsMessage, WsMessageKind};
+use zest_core::transport::{FrameDirection, FrameKind, TransportFrame};
+use zest_core::ws::WebSocketStatus;
 
 /// Frame log for WebSocket/gRPC requests (Messages tab).
 pub(super) fn render_messages_tab(
@@ -72,22 +73,22 @@ fn render_messages_empty_state(status: &WebSocketStatus) -> AnyElement {
         .into_any_element()
 }
 
-fn render_message_card(msg: WsMessage) -> AnyElement {
+fn render_message_card(msg: TransportFrame) -> AnyElement {
     let t = theme();
-    let is_inbound = msg.direction == WsDirection::Inbound;
+    let is_inbound = msg.direction == FrameDirection::Inbound;
 
     let (direction_symbol, direction_color) = match (is_inbound, msg.kind) {
-        (true, WsMessageKind::Ping) | (true, WsMessageKind::Pong) => ("←", t.text_muted),
+        (true, FrameKind::Ping) | (true, FrameKind::Pong) => ("←", t.text_muted),
         (true, _) => ("←", t.status_2xx),
-        (false, WsMessageKind::Ping) | (false, WsMessageKind::Pong) => ("→", t.text_muted),
+        (false, FrameKind::Ping) | (false, FrameKind::Pong) => ("→", t.text_muted),
         (false, _) => ("→", t.method_websocket),
     };
     let kind_label = match msg.kind {
-        WsMessageKind::Text => "TEXT",
-        WsMessageKind::Binary => "BIN",
-        WsMessageKind::Ping => "PING",
-        WsMessageKind::Pong => "PONG",
-        WsMessageKind::Close => "CLOSE",
+        FrameKind::Text => "TEXT",
+        FrameKind::Binary => "BIN",
+        FrameKind::Ping => "PING",
+        FrameKind::Pong => "PONG",
+        FrameKind::Close => "CLOSE",
     };
 
     let time = chrono::DateTime::from_timestamp_millis(msg.timestamp_ms)
@@ -135,9 +136,9 @@ fn render_message_card(msg: WsMessage) -> AnyElement {
         .into_any_element()
 }
 
-fn render_payload(msg: &WsMessage) -> AnyElement {
+fn render_payload(msg: &TransportFrame) -> AnyElement {
     let t = theme();
-    if msg.kind == WsMessageKind::Binary {
+    if msg.kind == FrameKind::Binary {
         let hex: String = msg
             .payload
             .iter()

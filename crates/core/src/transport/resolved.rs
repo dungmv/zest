@@ -1,4 +1,4 @@
-use super::executor::RequestError;
+use super::error::RequestError;
 use crate::models::{
     Auth, Environment, HttpMethod, KeyValuePair, MultipartItem, RequestBody, RequestItem,
     RequestSentInfo, RequestSettings,

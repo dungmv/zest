@@ -4,19 +4,18 @@ use std::sync::Mutex;
 
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::sync::oneshot;
-use zest_core::http::ResolvedRequest;
 use zest_core::models::{ConsoleLogEntry, Environment, EnvironmentVariable, RequestItem};
 use zest_core::scripting::{
     resolve_fake_vars_in_request, PreRequestContext, PreRequestOutput, ScriptSandbox,
 };
-use zest_core::ws::{
-    WebSocketClient, WebSocketStatus, WsDirection, WsEvent, WsMessage, WsMessageKind, WsOutgoing,
-};
+use zest_core::transport::ResolvedRequest;
+use zest_core::transport::{FrameDirection, FrameKind, TransportFrame};
+use zest_core::ws::{WebSocketClient, WebSocketStatus, WsEvent, WsOutgoing};
 
 use super::global_tokio_runtime;
 
 /// `(status, frame log, handshake headers)` view of one session.
-pub type WsSnapshot = (WebSocketStatus, Vec<WsMessage>, Vec<(String, String)>);
+pub type WsSnapshot = (WebSocketStatus, Vec<TransportFrame>, Vec<(String, String)>);
 
 /// Maximum frames retained per session log (oldest dropped).
 const MAX_SESSION_MESSAGES: usize = 1000;
@@ -41,7 +40,7 @@ pub enum WsUiEvent {
     },
     Message {
         request_id: String,
-        message: WsMessage,
+        message: TransportFrame,
     },
     Closed {
         request_id: String,
@@ -61,13 +60,13 @@ pub struct WsSession {
     pub outgoing: UnboundedSender<WsOutgoing>,
     pub status: WebSocketStatus,
     /// Bounded frame log; survives request switches within the app session.
-    pub messages: Vec<WsMessage>,
+    pub messages: Vec<TransportFrame>,
     pub handshake_headers: Vec<(String, String)>,
     next_message_id: u64,
 }
 
 impl WsSession {
-    fn push_message(&mut self, mut message: WsMessage) {
+    fn push_message(&mut self, mut message: TransportFrame) {
         message.id = self.next_message_id;
         self.next_message_id = self.next_message_id.wrapping_add(1);
         self.messages.push(message);
@@ -227,14 +226,14 @@ impl WsService {
     }
 
     /// Appends an inbound frame to the session log (Runner pump).
-    pub fn append_inbound(&self, request_id: &str, message: WsMessage) {
+    pub fn append_inbound(&self, request_id: &str, message: TransportFrame) {
         if let Some(session) = self.lock_sessions().get_mut(request_id) {
             session.push_message(message);
         }
     }
 
     /// Queues a text frame and appends the outbound entry to the log.
-    pub fn send_text(&self, request_id: &str, text: String) -> Result<WsMessage, String> {
+    pub fn send_text(&self, request_id: &str, text: String) -> Result<TransportFrame, String> {
         let mut sessions = self.lock_sessions();
         let session = sessions
             .get_mut(request_id)
@@ -242,11 +241,11 @@ impl WsService {
         if session.status != WebSocketStatus::Connected {
             return Err("Not connected".to_string());
         }
-        let message = WsMessage {
+        let message = TransportFrame {
             id: 0, // assigned by push_message
             timestamp_ms: chrono::Utc::now().timestamp_millis(),
-            direction: WsDirection::Outbound,
-            kind: WsMessageKind::Text,
+            direction: FrameDirection::Outbound,
+            kind: FrameKind::Text,
             payload: text.clone().into_bytes(),
         };
         session

@@ -320,7 +320,7 @@ pub fn curl_to_request(workspace_id: &str, curl_str: &str) -> Result<RequestItem
         RequestBody::None
     };
 
-    let (clean_url, parsed_params) = crate::http::parse_query_from_url(&url);
+    let (clean_url, parsed_params) = crate::transport::parse_query_from_url(&url);
 
     let name = clean_url
         .trim_end_matches('/')
@@ -348,7 +348,7 @@ pub fn request_to_curl(item: &RequestItem, env: Option<&Environment>) -> String 
 
     // URL & Interpolator
     let interpolator = crate::interpolation::VariableInterpolator::new(env);
-    let full_url = crate::http::build_url_with_query(&item.url, &item.params);
+    let full_url = crate::transport::build_url_with_query(&item.url, &item.params);
     let url = interpolator.interpolate_cow(&full_url);
     parts.push(format!("'{}'", url.replace('\'', "'\\''")));
 

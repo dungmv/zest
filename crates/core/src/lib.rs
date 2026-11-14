@@ -8,5 +8,6 @@ pub mod interpolation;
 pub mod models;
 pub mod scripting;
 pub mod storage;
+pub mod transport;
 pub mod updater;
 pub mod ws;

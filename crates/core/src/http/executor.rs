@@ -1,5 +1,5 @@
-use super::resolved::ResolvedRequest;
 use crate::models::{HttpMethod, HttpResponseRecord, ParsedCookie, StoredCookie, TimingBreakdown};
+use crate::transport::{RequestError, ResolvedRequest};
 use chrono::Utc;
 use cookie_store::CookieStore;
 use futures_util::StreamExt;
@@ -9,27 +9,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
-use thiserror::Error;
 use tokio::sync::mpsc::UnboundedSender;
-
-/// Extracts base URL and query parameters from a URL string
-#[derive(Error, Debug)]
-pub enum RequestError {
-    #[error("Request cancelled")]
-    Cancelled,
-    #[error("Network error: {0}")]
-    Network(String),
-    #[error("Invalid URL: {0}")]
-    InvalidUrl(String),
-    #[error("Invalid Header: {0}")]
-    InvalidHeader(String),
-    #[error("Timeout after {0} seconds")]
-    Timeout(u64),
-    #[error("Pre-request script error: {0}")]
-    ScriptError(String),
-    #[error("Execution error: {0}")]
-    Other(String),
-}
 
 #[derive(Debug, Clone)]
 pub enum HttpProgress {

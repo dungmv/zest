@@ -10,7 +10,7 @@ use zest_core::models::{ConsoleLogEntry, Environment, EnvironmentVariable, Reque
 use zest_core::scripting::{
     resolve_fake_vars_in_request, PreRequestContext, PreRequestOutput, ScriptSandbox,
 };
-use zest_core::ws::{WsDirection, WsMessage, WsMessageKind};
+use zest_core::transport::{FrameDirection, FrameKind, TransportFrame};
 
 use super::global_tokio_runtime;
 
@@ -28,12 +28,12 @@ pub enum GrpcUiEvent {
     /// The authored request message, echoed into the frame log as outbound.
     RequestMessage {
         request_id: String,
-        message: WsMessage,
+        message: TransportFrame,
     },
     /// One inbound response message (single for unary, streamed otherwise).
     ResponseMessage {
         request_id: String,
-        message: WsMessage,
+        message: TransportFrame,
     },
     /// Unary call finished (either OK or a gRPC error status).
     CallCompleted {
@@ -135,7 +135,7 @@ impl GrpcEngine {
             let effective_env = merge_env_mutations(env, &pre_output.env_mutations);
 
             // 3. Resolve headers/auth; the URL keeps its grpc:// scheme
-            let resolved = match zest_core::http::ResolvedRequest::from_item(
+            let resolved = match zest_core::transport::ResolvedRequest::from_item(
                 &req_item,
                 effective_env.as_ref(),
             ) {
@@ -265,11 +265,11 @@ impl GrpcEngine {
             // 6. Echo the authored request into the frame log
             let _ = event_tx.send(GrpcUiEvent::RequestMessage {
                 request_id: request_id.clone(),
-                message: WsMessage {
+                message: TransportFrame {
                     id: 0,
                     timestamp_ms: chrono::Utc::now().timestamp_millis(),
-                    direction: WsDirection::Outbound,
-                    kind: WsMessageKind::Text,
+                    direction: FrameDirection::Outbound,
+                    kind: FrameKind::Text,
                     payload: payload.message_json.clone().into_bytes(),
                 },
             });
@@ -472,12 +472,12 @@ fn merge_env_mutations(
     Some(temp)
 }
 
-fn log_message(json: &str) -> WsMessage {
-    WsMessage {
+fn log_message(json: &str) -> TransportFrame {
+    TransportFrame {
         id: 0,
         timestamp_ms: chrono::Utc::now().timestamp_millis(),
-        direction: WsDirection::Inbound,
-        kind: WsMessageKind::Text,
+        direction: FrameDirection::Inbound,
+        kind: FrameKind::Text,
         payload: json.as_bytes().to_vec(),
     }
 }

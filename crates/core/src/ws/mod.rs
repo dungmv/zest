@@ -8,4 +8,4 @@ mod client;
 mod types;
 
 pub use client::WebSocketClient;
-pub use types::{WebSocketStatus, WsDirection, WsEvent, WsMessage, WsMessageKind, WsOutgoing};
+pub use types::{WebSocketStatus, WsEvent, WsOutgoing};

@@ -1,5 +1,5 @@
-use super::types::{WsDirection, WsEvent, WsMessage, WsMessageKind, WsOutgoing};
-use crate::http::{RequestError, ResolvedRequest};
+use super::types::{WsEvent, WsOutgoing};
+use crate::transport::{FrameDirection, FrameKind, RequestError, ResolvedRequest, TransportFrame};
 use futures_util::{SinkExt, StreamExt};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
@@ -162,13 +162,13 @@ impl WebSocketClient {
                 match source.next().await {
                     Some(Ok(msg)) => {
                         let (kind, payload, pong) = match msg {
-                            Message::Text(t) => (WsMessageKind::Text, t.into_bytes(), None),
-                            Message::Binary(b) => (WsMessageKind::Binary, b, None),
+                            Message::Text(t) => (FrameKind::Text, t.into_bytes(), None),
+                            Message::Binary(b) => (FrameKind::Binary, b, None),
                             Message::Ping(p) => {
                                 let pong = Message::Pong(p.clone());
-                                (WsMessageKind::Ping, p, Some(pong))
+                                (FrameKind::Ping, p, Some(pong))
                             }
-                            Message::Pong(p) => (WsMessageKind::Pong, p, None),
+                            Message::Pong(p) => (FrameKind::Pong, p, None),
                             Message::Close(frame) => {
                                 let (code, reason) = frame
                                     .map(|f| (Some(u16::from(f.code)), f.reason.to_string()))
@@ -185,10 +185,10 @@ impl WebSocketClient {
                             let _ = pong_tx.send(pong);
                         }
                         next_id = next_id.wrapping_add(1);
-                        let _ = events_tx.send(WsEvent::Message(WsMessage {
+                        let _ = events_tx.send(WsEvent::Message(TransportFrame {
                             id: next_id,
                             timestamp_ms: chrono::Utc::now().timestamp_millis(),
-                            direction: WsDirection::Inbound,
+                            direction: FrameDirection::Inbound,
                             kind,
                             payload,
                         }));

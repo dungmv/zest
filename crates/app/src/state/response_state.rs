@@ -5,7 +5,8 @@ use zest_core::cache::ResponseCache;
 use zest_core::grpc::GrpcCallSummary;
 use zest_core::models::Protocol;
 use zest_core::models::{ConsoleLogEntry, ConsoleLogLevel, HttpResponseRecord, TestResult};
-use zest_core::ws::{WebSocketStatus, WsMessage};
+use zest_core::transport::TransportFrame;
+use zest_core::ws::WebSocketStatus;
 
 /// View-side cap for the live WS frame log (service keeps its own copy).
 const MAX_WS_VIEW_MESSAGES: usize = 1000;
@@ -124,7 +125,7 @@ pub struct ResponseState {
     /// Live WebSocket connection status for the active request.
     pub ws_status: WebSocketStatus,
     /// Live frame log for the active request (mirrored from `WsService`).
-    pub ws_messages: Vec<WsMessage>,
+    pub ws_messages: Vec<TransportFrame>,
     /// Handshake response headers of the active WS session.
     pub ws_handshake_headers: Vec<(String, String)>,
     /// Summary of the most recent gRPC call (status, headers, duration).
@@ -458,7 +459,7 @@ impl ResponseState {
         cx.notify();
     }
 
-    pub fn push_ws_message(&mut self, message: WsMessage, cx: &mut Context<Self>) {
+    pub fn push_ws_message(&mut self, message: TransportFrame, cx: &mut Context<Self>) {
         self.ws_messages.push(message);
         if self.ws_messages.len() > MAX_WS_VIEW_MESSAGES {
             let overflow = self.ws_messages.len() - MAX_WS_VIEW_MESSAGES;
@@ -487,7 +488,7 @@ impl ResponseState {
     pub fn restore_ws_session(
         &mut self,
         status: WebSocketStatus,
-        messages: Vec<WsMessage>,
+        messages: Vec<TransportFrame>,
         handshake_headers: Vec<(String, String)>,
         cx: &mut Context<Self>,
     ) {

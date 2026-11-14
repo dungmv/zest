@@ -4,10 +4,11 @@ use gpui_kit::Context;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use zest_core::http::{resolve_inherited_headers, InheritedHeader, ReqwestExecutor};
+use zest_core::http::ReqwestExecutor;
 use zest_core::models::{Auth, Folder, KeyValuePair, RequestItem, StoredCookie, Workspace};
 use zest_core::storage::models::{FolderNode, WorkspaceMeta};
 use zest_core::storage::{FsWorkspaceStore, WorkspaceStore};
+use zest_core::transport::{resolve_inherited_headers, InheritedHeader};
 
 pub struct WorkspaceDataState {
     pub store: Arc<dyn WorkspaceStore>,
@@ -482,7 +483,7 @@ impl WorkspaceDataState {
             .map(|f| (f.headers.as_slice(), &f.auth))
             .collect();
 
-        zest_core::http::resolve_hierarchical_headers_and_auth(
+        zest_core::transport::resolve_hierarchical_headers_and_auth(
             ws_headers,
             ws_auth,
             &folder_chain,

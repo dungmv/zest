@@ -1,11 +1,12 @@
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
-use zest_core::http::{HttpExecutor, HttpProgress, RequestError, ReqwestExecutor, ResolvedRequest};
+use zest_core::http::{HttpExecutor, HttpProgress, ReqwestExecutor};
 use zest_core::models::{Environment, EnvironmentVariable, HttpResponseRecord, RequestItem};
 use zest_core::scripting::{
     resolve_fake_vars_in_request, PostResponseContext, PostResponseOutput, PreRequestContext,
     PreRequestOutput, ScriptSandbox,
 };
+use zest_core::transport::{RequestError, ResolvedRequest};
 
 #[derive(Debug)]
 pub enum ExecEvent {
