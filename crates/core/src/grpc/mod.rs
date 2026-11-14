@@ -16,3 +16,7 @@ pub use error::GrpcError;
 pub use prost_reflect::DescriptorPool;
 pub use schema::{list_methods, load_schema_from_proto_path, resolve_schema, SchemaEndpoint};
 pub use types::{GrpcCallSummary, GrpcMethodInfo, GrpcStreamEvent, GrpcUnaryResult};
+
+#[cfg(test)]
+#[path = "reflection_tests.rs"]
+mod reflection_tests;

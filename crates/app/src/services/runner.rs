@@ -415,6 +415,7 @@ impl Runner {
             .invoke(req_item, Some(cached_env), cancel_rx);
 
         let session_state = self.session_state.clone();
+        let workspace_state = self.workspace_state.clone();
         let response_state = self.response_state.clone();
         let env_state = self.env_state.clone();
         let toast_state = self.toast_state.clone();
@@ -463,6 +464,28 @@ impl Runner {
                         if active {
                             response_state.update(cx, |resp, cx| {
                                 resp.push_ws_message(message, cx);
+                            });
+                        }
+                    }
+                    GrpcUiEvent::SchemaReady {
+                        request_id,
+                        summary,
+                        auto_service,
+                        auto_method,
+                    } => {
+                        session_state.update(cx, |ed, cx| {
+                            ed.set_grpc_schema(Some(summary), cx);
+                        });
+                        if let (Some(svc), Some(mth)) = (auto_service, auto_method) {
+                            workspace_state.update(cx, |ws, _| {
+                                ws.update_active_request(&request_id, |r| {
+                                    let payload = r.grpc_mut();
+                                    payload.service = svc;
+                                    payload.method = mth;
+                                });
+                            });
+                            session_state.update(cx, |ed, cx| {
+                                ed.mark_dirty(cx);
                             });
                         }
                     }

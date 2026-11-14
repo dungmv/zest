@@ -45,6 +45,15 @@ pub enum GrpcUiEvent {
         request_id: String,
         summary: GrpcCallSummary,
     },
+    /// Schema resolved during an invocation with a missing service/method
+    /// selection. When the server exposes exactly one service+method the
+    /// engine continues with them and the UI should persist the selection.
+    SchemaReady {
+        request_id: String,
+        summary: GrpcSchemaSummary,
+        auto_service: Option<String>,
+        auto_method: Option<String>,
+    },
     /// Setup/schema/transport failure before any call completed.
     Failed { request_id: String, error: String },
 }
@@ -137,20 +146,9 @@ impl GrpcEngine {
                 }
             };
 
-            let Some(payload) = req_item.grpc.clone() else {
-                let _ = event_tx.send(GrpcUiEvent::Failed {
-                    request_id: request_id.clone(),
-                    error: "This request has no gRPC payload".to_string(),
-                });
-                return;
-            };
-            if payload.service.is_empty() || payload.method.is_empty() {
-                let _ = event_tx.send(GrpcUiEvent::Failed {
-                    request_id: request_id.clone(),
-                    error: "Pick a service and method in the Proto tab first".to_string(),
-                });
-                return;
-            }
+            // A brand-new gRPC request has no payload yet; reflection/`proto`
+            // defaults kick in so a bare URL + Send just works.
+            let mut payload = req_item.grpc.clone().unwrap_or_default();
 
             // 4. Client + schema (cached per endpoint+proto path)
             let client = match GrpcClient::connect(&resolved.url, resolved.settings.timeout_ms) {
@@ -196,7 +194,10 @@ impl GrpcEngine {
                         Err(e) => {
                             let _ = event_tx.send(GrpcUiEvent::Failed {
                                 request_id: request_id.clone(),
-                                error: e.to_string(),
+                                error: format!(
+                                    "{e} — tried {} (use grpcs:// if the server requires TLS)",
+                                    resolved.url
+                                ),
                             });
                             return;
                         }
@@ -204,7 +205,37 @@ impl GrpcEngine {
                 }
             };
 
-            // 5. Locate the method descriptors
+            // 5. Auto-resolve a missing service/method selection: publish the
+            // schema to the picker and, when the server exposes exactly one
+            // service with one method, proceed with it automatically.
+            if payload.service.is_empty() || payload.method.is_empty() {
+                let summary = summarize_pool(&pool);
+                let selection = auto_selection(&summary);
+                let _ = event_tx.send(GrpcUiEvent::SchemaReady {
+                    request_id: request_id.clone(),
+                    summary: summary.clone(),
+                    auto_service: selection.as_ref().map(|(svc, _)| svc.clone()),
+                    auto_method: selection.as_ref().map(|(_, mth)| mth.clone()),
+                });
+                match selection {
+                    Some((svc, mth)) => {
+                        payload.service = svc;
+                        payload.method = mth;
+                    }
+                    None => {
+                        let _ = event_tx.send(GrpcUiEvent::Failed {
+                            request_id: request_id.clone(),
+                            error: format!(
+                                "Schema loaded ({} services) — pick a service and method in the Proto tab, then send again",
+                                summary.services.len()
+                            ),
+                        });
+                        return;
+                    }
+                }
+            }
+
+            // 6. Locate the method descriptors
             let Some(service_desc) = pool.get_service_by_name(&payload.service) else {
                 let _ = event_tx.send(GrpcUiEvent::Failed {
                     request_id: request_id.clone(),
@@ -464,3 +495,20 @@ fn finish_unary(request_id: &str, result: GrpcUnaryResult, event_tx: UnboundedSe
 async fn cancelled(mut rx: tokio::sync::watch::Receiver<bool>) {
     let _ = rx.changed().await;
 }
+
+/// Picks the service/method automatically when the schema is unambiguous
+/// (exactly one non-reflection service exposing exactly one method).
+fn auto_selection(summary: &GrpcSchemaSummary) -> Option<(String, String)> {
+    if summary.services.len() != 1 {
+        return None;
+    }
+    let (service, methods) = &summary.services[0];
+    if methods.len() != 1 {
+        return None;
+    }
+    Some((service.clone(), methods[0].name.clone()))
+}
+
+#[cfg(test)]
+#[path = "grpc_engine_tests.rs"]
+mod tests;
