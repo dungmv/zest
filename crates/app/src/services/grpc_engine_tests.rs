@@ -1,8 +1,10 @@
 use super::*;
+use zest_core::grpc::DescriptorPool;
 
 #[test]
 fn test_auto_selection_single_service_single_method() {
     let summary = GrpcSchemaSummary {
+        pool: DescriptorPool::default(),
         services: vec![(
             "helloworld.Greeter".to_string(),
             vec![GrpcMethodInfo {
@@ -21,6 +23,7 @@ fn test_auto_selection_single_service_single_method() {
 #[test]
 fn test_auto_selection_rejects_ambiguous_schemas() {
     let two_methods = GrpcSchemaSummary {
+        pool: DescriptorPool::default(),
         services: vec![(
             "svc.S".to_string(),
             vec![
@@ -40,6 +43,7 @@ fn test_auto_selection_rejects_ambiguous_schemas() {
     assert_eq!(auto_selection(&two_methods), None);
 
     let two_services = GrpcSchemaSummary {
+        pool: DescriptorPool::default(),
         services: vec![
             (
                 "svc.A".to_string(),

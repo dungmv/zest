@@ -10131,6 +10131,8 @@ dependencies = [
  "gpui-kit",
  "lsp-types",
  "objc",
+ "prost",
+ "protox",
  "quick-xml",
  "rfd",
  "serde",

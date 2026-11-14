@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use std::time::Instant;
 
-use prost_reflect::{DeserializeOptions, DynamicMessage, MessageDescriptor};
+use prost_reflect::{DynamicMessage, MessageDescriptor};
 use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tonic::client::Grpc;
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
@@ -210,14 +210,11 @@ impl GrpcClient {
         let message: DynamicMessage = if json.is_empty() {
             DynamicMessage::new(input_desc.clone())
         } else {
+            // Strict by default: unknown fields are a typo 99% of the time,
+            // and the editor validates with the same rules before send.
             let mut deserializer = serde_json::Deserializer::from_str(json);
-            let options = DeserializeOptions::new().deny_unknown_fields(false);
-            let msg = DynamicMessage::deserialize_with_options(
-                input_desc.clone(),
-                &mut deserializer,
-                &options,
-            )
-            .map_err(|e| GrpcError::InvalidMessage(e.to_string()))?;
+            let msg = DynamicMessage::deserialize(input_desc.clone(), &mut deserializer)
+                .map_err(|e| GrpcError::InvalidMessage(e.to_string()))?;
             deserializer
                 .end()
                 .map_err(|e| GrpcError::InvalidMessage(e.to_string()))?;

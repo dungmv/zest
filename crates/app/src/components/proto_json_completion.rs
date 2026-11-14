@@ -1,0 +1,319 @@
+//! JSON field-name completion for the gRPC message editor, driven by the
+//! request's resolved protobuf schema. `{{env}}` completions keep working —
+//! they are delegated to [`EnvCompletionProvider`] when the cursor sits
+//! inside a `{{ … ` span.
+
+use std::rc::Rc;
+
+use gpui_kit::component::input::{CompletionProvider, Rope};
+use gpui_kit::component::RopeExt as _;
+use gpui_kit::{App, Entity, Task, Window};
+use lsp_types::{
+    CompletionContext, CompletionItem, CompletionItemKind, CompletionResponse, CompletionTextEdit,
+    Documentation, Range as LspRange, TextEdit,
+};
+use zest_core::grpc::{method_descriptors as core_method_descriptors, Kind, MessageDescriptor};
+
+use crate::components::env_autocomplete::EnvCompletionProvider;
+use crate::state::{RequestSessionState, WorkspaceDataState};
+
+pub struct ProtoJsonCompletionProvider {
+    env: EnvCompletionProvider,
+    editor_state: Rc<Entity<RequestSessionState>>,
+    workspace_state: Rc<Entity<WorkspaceDataState>>,
+}
+
+impl ProtoJsonCompletionProvider {
+    pub fn new(
+        env_state: Entity<crate::state::EnvironmentState>,
+        editor_state: Entity<RequestSessionState>,
+        workspace_state: Entity<WorkspaceDataState>,
+    ) -> Self {
+        Self {
+            env: EnvCompletionProvider::new(env_state),
+            editor_state: Rc::new(editor_state),
+            workspace_state: Rc::new(workspace_state),
+        }
+    }
+}
+
+impl CompletionProvider for ProtoJsonCompletionProvider {
+    fn completions(
+        &self,
+        rope: &Rope,
+        offset: usize,
+        trigger: CompletionContext,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Task<anyhow::Result<CompletionResponse>> {
+        let full_text = rope.to_string();
+        let safe_offset = offset.min(full_text.len());
+        let prefix = &full_text[..safe_offset];
+
+        // Inside a `{{ … ` span the env provider stays in charge.
+        if env_trigger_context(prefix).is_some() {
+            return self.env.completions(rope, offset, trigger, window, cx);
+        }
+
+        let Some(message) = self.current_message(cx) else {
+            return Task::ready(Ok(CompletionResponse::Array(vec![])));
+        };
+        let Some((replace_start, replace_end, candidates)) =
+            json_field_candidates(&message, prefix)
+        else {
+            return Task::ready(Ok(CompletionResponse::Array(vec![])));
+        };
+
+        let start_pos = rope.offset_to_position(replace_start);
+        let end_pos = rope.offset_to_position(replace_end);
+
+        let items: Vec<CompletionItem> = candidates
+            .into_iter()
+            .map(|suggestion| CompletionItem {
+                label: suggestion.name.clone(),
+                filter_text: Some(suggestion.name.clone()),
+                kind: Some(CompletionItemKind::FIELD),
+                detail: Some(suggestion.type_label.clone()),
+                documentation: Some(Documentation::String(format!(
+                    "{} — {}",
+                    suggestion.name, suggestion.type_label
+                ))),
+                text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                    range: LspRange {
+                        start: start_pos,
+                        end: end_pos,
+                    },
+                    new_text: suggestion.name.clone(),
+                })),
+                ..Default::default()
+            })
+            .collect();
+
+        Task::ready(Ok(CompletionResponse::Array(items)))
+    }
+
+    fn is_completion_trigger(&self, _offset: usize, new_text: &str, _cx: &mut App) -> bool {
+        new_text.contains('{')
+            || new_text.contains('"')
+            || new_text.chars().any(|c| c.is_alphanumeric() || c == '_')
+    }
+}
+
+impl ProtoJsonCompletionProvider {
+    /// Input message descriptor of the active gRPC request's selected
+    /// service/method, from the session's resolved schema pool.
+    fn current_message(&self, cx: &mut App) -> Option<MessageDescriptor> {
+        let schema = self.editor_state.read(cx).grpc_schema.clone()?;
+        let req_id = self.editor_state.read(cx).active_request_id().to_string();
+        let req = self.workspace_state.read(cx).find_request(&req_id)?;
+        let payload = req.grpc.as_ref()?;
+        let (input, _) = core_method_descriptors(&schema.pool, &payload.service, &payload.method)?;
+        Some(input)
+    }
+}
+
+/// Start of an unterminated `{{ … ` span, if the cursor is inside one.
+fn env_trigger_context(prefix: &str) -> Option<()> {
+    let brace_pos = prefix.rfind("{{")?;
+    let after = &prefix[brace_pos + 2..];
+    if after.contains("}}") || after.contains('\n') || after.contains('"') {
+        None
+    } else {
+        Some(())
+    }
+}
+
+/// One suggested JSON key (owned so suggestions survive the context walk).
+pub struct KeySuggestion {
+    pub name: String,
+    pub type_label: String,
+}
+
+/// Suggests the JSON keys available at the cursor position of a partially
+/// typed message, tracking nested objects through the typed JSON. Returns
+/// the span the completion replaces (the partially typed key, excluding any
+/// closing quote) plus the matching fields.
+fn json_field_candidates(
+    root: &MessageDescriptor,
+    prefix: &str,
+) -> Option<(usize, usize, Vec<KeySuggestion>)> {
+    let (current, replace_start) = locate_message_context(root, prefix)?;
+    // The query is the exact span the completion will replace: the trailing
+    // identifier characters (a closed string's quote stays untouched).
+    let ident: String = prefix[replace_start..]
+        .chars()
+        .take_while(|c| c.is_alphanumeric() || *c == '_')
+        .collect();
+    let replace_end = replace_start + ident.len();
+    let mut candidates: Vec<KeySuggestion> = current
+        .fields()
+        .map(|field| KeySuggestion {
+            name: field.name().to_string(),
+            type_label: type_label(&field),
+        })
+        .collect();
+    if !ident.is_empty() {
+        let lower = ident.to_lowercase();
+        candidates.retain(|s| s.name.to_lowercase().starts_with(&lower));
+    }
+    if candidates.is_empty() {
+        None
+    } else {
+        Some((replace_start, replace_end, candidates))
+    }
+}
+
+/// Walks the typed JSON prefix to find which message the cursor is inside.
+/// Returns that message and where the current (partial) key began.
+fn locate_message_context(
+    root: &MessageDescriptor,
+    prefix: &str,
+) -> Option<(MessageDescriptor, usize)> {
+    let bytes = prefix.as_bytes();
+    let mut stack: Vec<Option<MessageDescriptor>> = Vec::new();
+    // `None` = inside an object whose schema is unknown (e.g. a map literal).
+    let mut current: Option<MessageDescriptor> = Some(root.clone());
+    let mut last_key: Option<String> = None;
+    // True right after a key's `:` — the next string is a value, not a key.
+    let mut expecting_value = false;
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'"' => {
+                // Capture the string span, then decide if it is a key.
+                let start = i;
+                i += 1;
+                while i < bytes.len() {
+                    if bytes[i] == b'\\' {
+                        i += 2;
+                        continue;
+                    }
+                    if bytes[i] == b'"' {
+                        break;
+                    }
+                    i += 1;
+                }
+                if i >= bytes.len() {
+                    // Unterminated string at the cursor: the key being typed.
+                    let current = current?;
+                    return Some((current, start + 1));
+                }
+                let content = &prefix[start + 1..i];
+                i += 1;
+                let mut j = i;
+                while j < bytes.len() && (bytes[j] as char).is_whitespace() {
+                    j += 1;
+                }
+                if j < bytes.len() && bytes[j] == b':' {
+                    last_key = Some(content.to_string());
+                    expecting_value = true;
+                } else if i == bytes.len() && !expecting_value {
+                    // String closed exactly at the cursor (e.g. auto-paired
+                    // quotes) while a key is expected here.
+                    let current = current?;
+                    return Some((current, start + 1));
+                } else {
+                    expecting_value = false;
+                }
+                // The capture loop already positioned `i` past the closing
+                // quote; skip the loop's trailing increment.
+                continue;
+            }
+            b'{' => {
+                // A keyed `{` descends into that field's message (None for
+                // maps/scalars = unknown scope); an unkeyed `{` (the root
+                // object, or a bare object in an array) keeps the scope.
+                let new_current = match &last_key {
+                    Some(key) => current
+                        .as_ref()
+                        .and_then(|c| find_field(c, key))
+                        .and_then(|f| field_as_message(&f)),
+                    None => current.clone(),
+                };
+                stack.push(current.take());
+                current = new_current;
+                last_key = None;
+            }
+            b'}' => {
+                current = stack.pop().flatten();
+                last_key = None;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    let current = current?;
+    Some((current, partial_key_start(prefix)?))
+}
+
+/// Byte offset of the trailing identifier characters that make up the
+/// partially typed key (the text after its opening quote).
+fn partial_key_start(prefix: &str) -> Option<usize> {
+    let start = prefix.rfind('"')? + 1;
+    let tail = &prefix[start..];
+    if tail.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        Some(start)
+    } else {
+        None
+    }
+}
+
+fn find_field(desc: &MessageDescriptor, name: &str) -> Option<FieldRef> {
+    desc.fields().find(|f| f.name() == name)
+}
+
+type FieldRef = zest_core::grpc::FieldDescriptor;
+
+/// The message type a field points at, if any (map entries excluded —
+/// key/value suggestions inside a map literal are noise).
+fn field_as_message(field: &FieldRef) -> Option<MessageDescriptor> {
+    if field.is_map() {
+        return None;
+    }
+    match field.kind() {
+        Kind::Message(m) => Some(m),
+        _ => None,
+    }
+}
+
+/// Human-readable type of a field for the completion detail line.
+fn type_label(field: &FieldRef) -> String {
+    let cardinality = if field.is_list() {
+        "repeated "
+    } else if field.is_map() {
+        "map "
+    } else {
+        ""
+    };
+    let kind = match field.kind() {
+        Kind::Message(m) => m.full_name().to_string(),
+        Kind::Enum(e) => e.full_name().to_string(),
+        other => scalar_label(&other).to_string(),
+    };
+    format!("{cardinality}{kind}")
+}
+
+fn scalar_label(kind: &Kind) -> &'static str {
+    match kind {
+        Kind::Double => "double",
+        Kind::Float => "float",
+        Kind::Int32 => "int32",
+        Kind::Int64 => "int64",
+        Kind::Uint32 => "uint32",
+        Kind::Uint64 => "uint64",
+        Kind::Sint32 => "sint32",
+        Kind::Sint64 => "sint64",
+        Kind::Fixed32 => "fixed32",
+        Kind::Fixed64 => "fixed64",
+        Kind::Sfixed32 => "sfixed32",
+        Kind::Sfixed64 => "sfixed64",
+        Kind::Bool => "bool",
+        Kind::String => "string",
+        Kind::Bytes => "bytes",
+        Kind::Message(_) | Kind::Enum(_) => "",
+    }
+}
+
+#[cfg(test)]
+#[path = "proto_json_completion_tests.rs"]
+mod tests;

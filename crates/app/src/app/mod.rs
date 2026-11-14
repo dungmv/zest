@@ -62,8 +62,14 @@ impl AppView {
             _ => None,
         });
 
-        let mut composer_inputs =
-            ComposerInputs::new(window, state.env.clone(), highlighter_factory.clone(), cx);
+        let mut composer_inputs = ComposerInputs::new(
+            window,
+            state.env.clone(),
+            state.session.clone(),
+            state.workspace.clone(),
+            highlighter_factory.clone(),
+            cx,
+        );
         let mut inspector_displays = InspectorDisplays::new(window, highlighter_factory, cx);
         let env_var_table = {
             let env_ent = state.env.clone();

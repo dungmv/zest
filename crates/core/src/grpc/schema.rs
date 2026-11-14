@@ -143,6 +143,20 @@ fn collect_file_descriptors(
     }
 }
 
+/// Resolves the request/response message descriptors of one RPC method.
+pub fn method_descriptors(
+    pool: &DescriptorPool,
+    service: &str,
+    method: &str,
+) -> Option<(
+    prost_reflect::MessageDescriptor,
+    prost_reflect::MessageDescriptor,
+)> {
+    let svc = pool.get_service_by_name(service)?;
+    let m = svc.methods().find(|m| m.name() == method)?;
+    Some((m.input(), m.output()))
+}
+
 /// Enumerates the methods of a service from a resolved pool.
 pub fn list_methods(
     pool: &DescriptorPool,

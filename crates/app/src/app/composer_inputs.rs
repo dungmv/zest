@@ -1,5 +1,5 @@
 use crate::components::script_editor::{ScriptCompletionProvider, ScriptEditorKind};
-use crate::state::{ComposerSyncScope, EnvironmentState, WorkspaceDataState};
+use crate::state::{ComposerSyncScope, EnvironmentState, RequestSessionState, WorkspaceDataState};
 use gpui_kit::component::input::{EditorState as CodeEditorState, InputState, TextareaState};
 use gpui_kit::{App, AppContext as _, Entity, Window};
 use std::rc::Rc;
@@ -34,6 +34,8 @@ impl ComposerInputs {
     pub fn new(
         window: &mut Window,
         env_state: Entity<EnvironmentState>,
+        session_state: Entity<RequestSessionState>,
+        workspace_state: Entity<WorkspaceDataState>,
         highlighter_factory: HighlighterFactory,
         cx: &mut App,
     ) -> Self {
@@ -66,7 +68,11 @@ impl ComposerInputs {
             let mut state = CodeEditorState::new(window, cx);
             state.set_highlighter_factory(highlighter_factory.clone(), cx);
             state.lsp_mut().completion_provider = Some(Rc::new(
-                crate::components::env_autocomplete::EnvCompletionProvider::new(env_state.clone()),
+                crate::components::proto_json_completion::ProtoJsonCompletionProvider::new(
+                    env_state.clone(),
+                    session_state.clone(),
+                    workspace_state.clone(),
+                ),
             ));
             state.language("json").line_number(true).folding(true)
         });

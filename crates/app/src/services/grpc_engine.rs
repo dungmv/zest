@@ -58,11 +58,14 @@ pub enum GrpcUiEvent {
     Failed { request_id: String, error: String },
 }
 
-/// Schema summary delivered to the UI picker after a successful fetch.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+/// Schema summary delivered to the UI after a successful fetch. Carries the
+/// full descriptor pool so the editor can autocomplete and validate the JSON
+/// message against the actual schema.
+#[derive(Debug, Clone, Default)]
 pub struct GrpcSchemaSummary {
     /// (fully-qualified service name, methods)
     pub services: Vec<(String, Vec<GrpcMethodInfo>)>,
+    pub pool: zest_core::grpc::DescriptorPool,
 }
 
 /// Dynamic gRPC invocation engine. Schema pools are cached per
@@ -417,6 +420,7 @@ impl GrpcEngine {
 
 fn summarize_pool(pool: &zest_core::grpc::DescriptorPool) -> GrpcSchemaSummary {
     GrpcSchemaSummary {
+        pool: pool.clone(),
         services: pool
             .services()
             .map(|svc| {

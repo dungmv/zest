@@ -10,6 +10,7 @@ pub mod import_modal;
 pub mod inherited_headers;
 pub mod kv_table;
 pub mod modal_dialog;
+pub mod proto_json_completion;
 pub mod request_bar;
 pub mod response_inspector;
 pub mod scope_settings_modal;
