@@ -10,6 +10,7 @@ fn test_byte_identical_roundtrip_request() {
         url: "{{base_url}}/api/auth/login".to_string(),
         protocol: Protocol::Http,
         grpc: None,
+        ws_message_format: Default::default(),
         params: vec![RequestKvItem {
             key: "debug".to_string(),
             value: "1".to_string(),

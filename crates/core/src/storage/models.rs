@@ -1,7 +1,7 @@
 use crate::models::{
     Auth, Environment, EnvironmentVariable, GrpcPayload, HttpMethod, HttpResponseRecord,
     KeyValuePair, MultipartItem, Protocol, RequestBody, RequestItem, RequestSentInfo,
-    RequestSettings, ScriptConfig, TimingBreakdown,
+    RequestSettings, ScriptConfig, TimingBreakdown, WsMessageFormat,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -74,13 +74,14 @@ pub struct RequestExampleFile {
 /// 3. url
 /// 4. protocol (omitted for HTTP)
 /// 5. grpc (omitted unless protocol is gRPC)
-/// 6. params
-/// 7. headers
-/// 8. auth
-/// 9. body
-/// 10. settings
-/// 11. script
-/// 12. examples (ALWAYS last)
+/// 6. ws_message_format (omitted for Text)
+/// 7. params
+/// 8. headers
+/// 9. auth
+/// 10. body
+/// 11. settings
+/// 12. script
+/// 13. examples (ALWAYS last)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RequestFile {
@@ -91,6 +92,9 @@ pub struct RequestFile {
     pub protocol: Protocol,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grpc: Option<GrpcPayload>,
+    /// Outgoing WebSocket message format (omitted for Text).
+    #[serde(default, skip_serializing_if = "WsMessageFormat::is_text")]
+    pub ws_message_format: WsMessageFormat,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub params: Vec<RequestKvItem>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -115,6 +119,7 @@ impl Default for RequestFile {
             url: String::new(),
             protocol: Protocol::Http,
             grpc: None,
+            ws_message_format: WsMessageFormat::default(),
             params: Vec::new(),
             headers: Vec::new(),
             auth: RequestAuth::None,
@@ -140,6 +145,7 @@ impl RequestFile {
             url: item.url,
             protocol: item.protocol,
             grpc: item.grpc,
+            ws_message_format: item.ws_message_format,
             params: item.params,
             headers: item.headers,
             auth: item.auth,
@@ -165,6 +171,7 @@ impl RequestFile {
             url: self.url,
             protocol: self.protocol,
             grpc: self.grpc,
+            ws_message_format: self.ws_message_format,
             params: self.params,
             headers: self.headers,
             auth: self.auth,
@@ -192,6 +199,7 @@ impl RequestFile {
             url: self.url.clone(),
             protocol: self.protocol,
             grpc: self.grpc.clone(),
+            ws_message_format: self.ws_message_format,
             params: self.params.clone(),
             headers: self.headers.clone(),
             auth: self.auth.clone(),
@@ -210,6 +218,7 @@ impl RequestFile {
         self.url = item.url.clone();
         self.protocol = item.protocol;
         self.grpc = item.grpc.clone();
+        self.ws_message_format = item.ws_message_format;
         self.params = item.params.clone();
         self.headers = item.headers.clone();
         self.auth = item.auth.clone();

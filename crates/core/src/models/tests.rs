@@ -179,3 +179,33 @@ fn test_auth_apikey_yaml_serialization() {
     let deserialized_query: Auth = serde_yaml::from_str(&yaml_query_str).expect("deserialize yaml");
     assert_eq!(auth_query, deserialized_query);
 }
+
+#[test]
+fn test_ws_message_format_yaml_contract() {
+    use crate::storage::models::RequestFile;
+
+    // Text is the default and is omitted from the YAML.
+    let mut req = RequestItem::new("ws1", "Echo", HttpMethod::Get, "wss://example/ws");
+    assert_eq!(req.ws_message_format, WsMessageFormat::Text);
+
+    let file = RequestFile::from_item(&req);
+    let yaml = serde_yaml::to_string(&file).expect("serialize yaml");
+    assert!(!yaml.contains("ws_message_format"));
+
+    // Old request files without the key deserialize as Text.
+    let legacy: RequestFile =
+        serde_yaml::from_str("name: Echo\nmethod: GET\nurl: wss://example/ws")
+            .expect("deserialize legacy yaml");
+    assert_eq!(legacy.ws_message_format, WsMessageFormat::Text);
+
+    // JSON is persisted and round-trips.
+    req.set_ws_message_format(WsMessageFormat::Json);
+    assert!(req.ws_message_format.is_json());
+    let file = RequestFile::from_item(&req);
+    let yaml = serde_yaml::to_string(&file).expect("serialize yaml");
+    assert!(yaml.contains("ws_message_format: json"));
+    let round_tripped: RequestFile = serde_yaml::from_str(&yaml).expect("deserialize yaml");
+    assert_eq!(round_tripped.ws_message_format, WsMessageFormat::Json);
+    let item = round_tripped.into_item("req-1", "ws1", None);
+    assert_eq!(item.ws_message_format, WsMessageFormat::Json);
+}

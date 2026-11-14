@@ -75,6 +75,34 @@ impl Protocol {
     }
 }
 
+/// Composition format of the outgoing WebSocket message in the Message tab.
+/// `Text` sends the editor content verbatim; `Json` validates the content
+/// parses as JSON before sending.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum WsMessageFormat {
+    #[default]
+    Text,
+    Json,
+}
+
+impl WsMessageFormat {
+    pub fn is_text(&self) -> bool {
+        matches!(self, Self::Text)
+    }
+
+    pub fn is_json(&self) -> bool {
+        matches!(self, Self::Json)
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Text => "Text",
+            Self::Json => "JSON",
+        }
+    }
+}
+
 /// gRPC-specific request payload, present only when `protocol == Grpc`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
@@ -371,6 +399,9 @@ pub struct RequestItem {
     pub protocol: Protocol,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grpc: Option<GrpcPayload>,
+    /// Outgoing message format for WebSocket requests (omitted for Text).
+    #[serde(default, skip_serializing_if = "WsMessageFormat::is_text")]
+    pub ws_message_format: WsMessageFormat,
     #[serde(default)]
     pub params: Vec<KeyValuePair>,
     #[serde(default)]
@@ -417,6 +448,7 @@ impl RequestItem {
             url: url.into(),
             protocol,
             grpc: None,
+            ws_message_format: WsMessageFormat::default(),
             params: Vec::new(),
             headers: Vec::new(),
             auth: Auth::Inherit,
@@ -462,6 +494,11 @@ impl RequestItem {
     /// Mutable view of the gRPC payload, created on demand.
     pub fn grpc_mut(&mut self) -> &mut GrpcPayload {
         self.grpc.get_or_insert_with(GrpcPayload::default)
+    }
+
+    /// Sets the outgoing WebSocket message format (Text or JSON).
+    pub fn set_ws_message_format(&mut self, format: WsMessageFormat) {
+        self.ws_message_format = format;
     }
 
     /// Read-only view of the gRPC request message JSON (empty when absent).

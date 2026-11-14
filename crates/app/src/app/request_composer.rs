@@ -3,13 +3,15 @@ use super::AppView;
 use crate::components::*;
 use crate::state::*;
 use crate::theme::theme;
+use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Textarea;
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::tab::{Tab, TabBar};
-use gpui_kit::component::Sizable as _;
+use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{div, px, AnyElement, Context, IntoElement, ParentElement, Styled, Window};
-use zest_core::models::{Auth, Protocol};
+use zest_core::models::{Auth, Protocol, WsMessageFormat};
 
 impl AppView {
     pub(crate) fn render_request_composer(
@@ -280,35 +282,131 @@ impl AppView {
                             Protocol::WebSocket => {
                                 let view_send = app_view_entity.clone();
                                 let view_ping = app_view_entity.clone();
+                                let ws_menu = ws_entity.clone();
+                                let ed_menu = ed_entity.clone();
+                                let req_id_menu = req_id_str.clone();
+                                let msg_format =
+                                    active_req.map(|r| r.ws_message_format).unwrap_or_default();
                                 div()
                                     .size_full()
                                     .flex()
                                     .flex_col()
                                     .overflow_hidden()
-                                    .child(
-                                        div().flex_1().min_h(px(0.)).overflow_hidden().child(
-                                            Textarea::new(
-                                                &self.composer_inputs.ws_message_textarea,
-                                            )
-                                            .appearance(false)
-                                            .bordered(false)
-                                            .h(gpui_kit::relative(1.)),
-                                        ),
-                                    )
+                                    // Toolbar: [Format ▾] .................. [Ping] [Send]
                                     .child(
                                         div()
-                                            .h(px(36.))
+                                            .h(px(32.))
                                             .px(px(8.))
+                                            .border_b_1()
+                                            .border_color(t.border)
+                                            .bg(t.bg_editor)
                                             .flex()
                                             .items_center()
-                                            .justify_end()
                                             .gap(px(6.))
-                                            .border_t_1()
-                                            .border_color(t.border_subtle)
+                                            .child(
+                                                div()
+                                                    .flex()
+                                                    .items_center()
+                                                    .flex_1()
+                                                    .min_w(px(0.))
+                                                    .child(
+                                                        Button::new("btn-ws-format-dropdown")
+                                                            .secondary()
+                                                            .compact()
+                                                            .px(px(8.))
+                                                            .py(px(2.))
+                                                            .h(px(24.))
+                                                            .rounded(px(4.))
+                                                            .child(
+                                                                div()
+                                                                    .flex()
+                                                                    .items_center()
+                                                                    .gap(px(6.))
+                                                                    .child(
+                                                                        div()
+                                                                            .text_xs()
+                                                                            .font_weight(
+                                                                                gpui_kit::FontWeight::MEDIUM,
+                                                                            )
+                                                                            .text_color(
+                                                                                t.text_primary,
+                                                                            )
+                                                                            .child(
+                                                                                msg_format.as_str(),
+                                                                            ),
+                                                                    )
+                                                                    .child(
+                                                                        Icon::new(
+                                                                            IconName::ChevronDown,
+                                                                        )
+                                                                        .size(px(12.))
+                                                                        .text_color(t.text_muted),
+                                                                    ),
+                                                            )
+                                                            .dropdown_menu(
+                                                                move |menu, _window, _cx| {
+                                                                    let mut m = menu;
+                                                                    let ws_text = ws_menu.clone();
+                                                                    let ed_text = ed_menu.clone();
+                                                                    let id_text =
+                                                                        req_id_menu.clone();
+                                                                    m = m.item(
+                                                                        PopupMenuItem::new("Text")
+                                                                            .checked(msg_format.is_text())
+                                                                            .on_click(
+                                                                                move |_, _, cx| {
+                                                                                    ws_text.update(
+                                                                                        cx,
+                                                                                        |ws, _| {
+                                                                                            ws.update_active_request(&id_text, |r| {
+                                                                                                r.set_ws_message_format(WsMessageFormat::Text);
+                                                                                            });
+                                                                                        },
+                                                                                    );
+                                                                                    ed_text.update(
+                                                                                        cx,
+                                                                                        |ed, cx| {
+                                                                                            ed.mark_dirty(cx);
+                                                                                        },
+                                                                                    );
+                                                                                },
+                                                                            ),
+                                                                    );
+                                                                    let ws_json = ws_menu.clone();
+                                                                    let ed_json = ed_menu.clone();
+                                                                    let id_json =
+                                                                        req_id_menu.clone();
+                                                                    m = m.item(
+                                                                        PopupMenuItem::new("JSON")
+                                                                            .checked(msg_format.is_json())
+                                                                            .on_click(
+                                                                                move |_, _, cx| {
+                                                                                    ws_json.update(
+                                                                                        cx,
+                                                                                        |ws, _| {
+                                                                                            ws.update_active_request(&id_json, |r| {
+                                                                                                r.set_ws_message_format(WsMessageFormat::Json);
+                                                                                            });
+                                                                                        },
+                                                                                    );
+                                                                                    ed_json.update(
+                                                                                        cx,
+                                                                                        |ed, cx| {
+                                                                                            ed.mark_dirty(cx);
+                                                                                        },
+                                                                                    );
+                                                                                },
+                                                                            ),
+                                                                    );
+                                                                    m
+                                                                },
+                                                            ),
+                                                    ),
+                                            )
                                             .child(
                                                 Button::new("btn-ws-ping")
                                                     .ghost()
-                                                    .small()
+                                                    .xsmall()
                                                     .label("Ping")
                                                     .on_click(move |_, _, cx| {
                                                         view_ping.update(cx, |view, cx| {
@@ -319,7 +417,7 @@ impl AppView {
                                             .child(
                                                 Button::new("btn-ws-send")
                                                     .primary()
-                                                    .small()
+                                                    .xsmall()
                                                     .label("Send")
                                                     .on_click(move |_, window, cx| {
                                                         view_send.update(cx, |view, cx| {
@@ -327,6 +425,18 @@ impl AppView {
                                                         });
                                                     }),
                                             ),
+                                    )
+                                    // Outgoing message editor. Content is
+                                    // session-only, never persisted.
+                                    .child(
+                                        div().flex_1().min_h(px(0.)).overflow_hidden().child(
+                                            Textarea::new(
+                                                &self.composer_inputs.ws_message_textarea,
+                                            )
+                                            .appearance(false)
+                                            .bordered(false)
+                                            .h(gpui_kit::relative(1.)),
+                                        ),
                                     )
                             }
                             Protocol::Grpc => div().size_full().child({

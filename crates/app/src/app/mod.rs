@@ -197,7 +197,8 @@ impl AppView {
     }
 
     /// Sends the text currently in the WS message box over the active
-    /// connection and clears the box on success.
+    /// connection and clears the box on success. When the request's message
+    /// format is JSON, the content must parse as JSON before it goes out.
     pub fn send_ws_message(&self, window: &mut Window, cx: &mut App) {
         let text = self
             .composer_inputs
@@ -208,8 +209,23 @@ impl AppView {
         if text.trim().is_empty() {
             return;
         }
-        self.runner.send_ws_message(text, cx);
         let req_id = self.state.session.read(cx).active_request_id().to_string();
+        let wants_json = self
+            .state
+            .workspace
+            .read(cx)
+            .find_request(&req_id)
+            .map(|r| r.ws_message_format.is_json())
+            .unwrap_or(false);
+        if wants_json {
+            if let Err(e) = serde_json::from_str::<serde_json::Value>(&text) {
+                self.state.toast.update(cx, |toast, cx| {
+                    toast.push_error("Invalid JSON", e.to_string(), cx);
+                });
+                return;
+            }
+        }
+        self.runner.send_ws_message(text, cx);
         if self.runner.engines.ws.is_connected(&req_id) {
             self.composer_inputs
                 .ws_message_textarea
