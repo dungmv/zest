@@ -6,57 +6,12 @@ use tokio::sync::oneshot;
 use zest_core::grpc::{
     GrpcCallSummary, GrpcClient, GrpcMethodInfo, GrpcStreamEvent, GrpcUnaryResult,
 };
-use zest_core::models::{ConsoleLogEntry, Environment, EnvironmentVariable, RequestItem};
-use zest_core::scripting::{
-    resolve_fake_vars_in_request, PreRequestContext, PreRequestOutput, ScriptSandbox,
-};
-use zest_core::transport::{FrameDirection, FrameKind, TransportFrame};
+use zest_core::models::{Environment, RequestItem};
+use zest_core::transport::{FrameDirection, FrameKind, ResolvedRequest, TransportFrame};
 
 use super::global_tokio_runtime;
-
-/// UI-delivered events for one gRPC invocation, mirroring
-/// [`super::http_engine::ExecEvent`]. Consumed on the GPUI thread by the
-/// Runner pump.
-pub enum GrpcUiEvent {
-    /// Pre-request script finished; call about to start.
-    Started {
-        request_id: String,
-        initial_logs: Vec<ConsoleLogEntry>,
-        env_mutations: Vec<(String, Option<String>)>,
-        pre_script_error: Option<String>,
-    },
-    /// The authored request message, echoed into the frame log as outbound.
-    RequestMessage {
-        request_id: String,
-        message: TransportFrame,
-    },
-    /// One inbound response message (single for unary, streamed otherwise).
-    ResponseMessage {
-        request_id: String,
-        message: TransportFrame,
-    },
-    /// Unary call finished (either OK or a gRPC error status).
-    CallCompleted {
-        request_id: String,
-        summary: GrpcCallSummary,
-    },
-    /// Server-stream finished with a non-OK status mid-stream.
-    CallFailed {
-        request_id: String,
-        summary: GrpcCallSummary,
-    },
-    /// Schema resolved during an invocation with a missing service/method
-    /// selection. When the server exposes exactly one service+method the
-    /// engine continues with them and the UI should persist the selection.
-    SchemaReady {
-        request_id: String,
-        summary: GrpcSchemaSummary,
-        auto_service: Option<String>,
-        auto_method: Option<String>,
-    },
-    /// Setup/schema/transport failure before any call completed.
-    Failed { request_id: String, error: String },
-}
+use super::pipeline::{merge_env_mutations, run_pre_request_stage};
+use super::send_event::SendEvent;
 
 /// Schema summary delivered to the UI after a successful fetch. Carries the
 /// full descriptor pool so the editor can autocomplete and validate the JSON
@@ -104,27 +59,16 @@ impl GrpcEngine {
         mut req_item: RequestItem,
         env: Option<Arc<Environment>>,
         cancel_rx: oneshot::Receiver<()>,
-    ) -> UnboundedReceiver<GrpcUiEvent> {
+    ) -> UnboundedReceiver<SendEvent> {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
         let schema_cache = self.schema_cache.clone();
 
         self.tokio_rt.spawn(async move {
-            // 1. Fake vars + pre-request script (same preamble as HTTP/WS)
-            resolve_fake_vars_in_request(&mut req_item);
-            let pre_script_code = req_item
-                .script
-                .as_ref()
-                .and_then(|s| s.pre_request.clone());
-            let pre_output = match pre_script_code {
-                Some(code) => {
-                    let ctx = PreRequestContext::from_request_and_env(&req_item, env.as_deref());
-                    ScriptSandbox::run_pre_request(&code, ctx)
-                }
-                None => PreRequestOutput::default(),
-            };
+            // 1. Fake vars + pre-request script (shared first stage)
+            let pre_output = run_pre_request_stage(&mut req_item, env.as_deref());
             let request_id = req_item.id.clone();
 
-            let _ = event_tx.send(GrpcUiEvent::Started {
+            let _ = event_tx.send(SendEvent::Started {
                 request_id: request_id.clone(),
                 initial_logs: pre_output.console_entries.clone(),
                 env_mutations: pre_output.env_mutations.clone(),
@@ -132,16 +76,13 @@ impl GrpcEngine {
             });
 
             // 2. Merge pre-script env mutations
-            let effective_env = merge_env_mutations(env, &pre_output.env_mutations);
+            let effective_env = merge_env_mutations(&env, &pre_output.env_mutations);
 
             // 3. Resolve headers/auth; the URL keeps its grpc:// scheme
-            let resolved = match zest_core::transport::ResolvedRequest::from_item(
-                &req_item,
-                effective_env.as_ref(),
-            ) {
+            let resolved = match ResolvedRequest::from_item(&req_item, effective_env.as_deref()) {
                 Ok(r) => r,
                 Err(e) => {
-                    let _ = event_tx.send(GrpcUiEvent::Failed {
+                    let _ = event_tx.send(SendEvent::Failed {
                         request_id: request_id.clone(),
                         error: e.to_string(),
                     });
@@ -157,7 +98,7 @@ impl GrpcEngine {
             let client = match GrpcClient::connect(&resolved.url, resolved.settings.timeout_ms) {
                 Ok(c) => c,
                 Err(e) => {
-                    let _ = event_tx.send(GrpcUiEvent::Failed {
+                    let _ = event_tx.send(SendEvent::Failed {
                         request_id: request_id.clone(),
                         error: e.to_string(),
                     });
@@ -195,7 +136,7 @@ impl GrpcEngine {
                             pool
                         }
                         Err(e) => {
-                            let _ = event_tx.send(GrpcUiEvent::Failed {
+                            let _ = event_tx.send(SendEvent::Failed {
                                 request_id: request_id.clone(),
                                 error: format!(
                                     "{e} — tried {} (use grpcs:// if the server requires TLS)",
@@ -214,7 +155,7 @@ impl GrpcEngine {
             if payload.service.is_empty() || payload.method.is_empty() {
                 let summary = summarize_pool(&pool);
                 let selection = auto_selection(&summary);
-                let _ = event_tx.send(GrpcUiEvent::SchemaReady {
+                let _ = event_tx.send(SendEvent::SchemaReady {
                     request_id: request_id.clone(),
                     summary: summary.clone(),
                     auto_service: selection.as_ref().map(|(svc, _)| svc.clone()),
@@ -226,7 +167,7 @@ impl GrpcEngine {
                         payload.method = mth;
                     }
                     None => {
-                        let _ = event_tx.send(GrpcUiEvent::Failed {
+                        let _ = event_tx.send(SendEvent::Failed {
                             request_id: request_id.clone(),
                             error: format!(
                                 "Schema loaded ({} services) — pick a service and method in the Proto tab, then send again",
@@ -240,7 +181,7 @@ impl GrpcEngine {
 
             // 6. Locate the method descriptors
             let Some(service_desc) = pool.get_service_by_name(&payload.service) else {
-                let _ = event_tx.send(GrpcUiEvent::Failed {
+                let _ = event_tx.send(SendEvent::Failed {
                     request_id: request_id.clone(),
                     error: format!("Service '{}' not found in schema", payload.service),
                 });
@@ -250,7 +191,7 @@ impl GrpcEngine {
                 .methods()
                 .find(|m| m.name() == payload.method)
             else {
-                let _ = event_tx.send(GrpcUiEvent::Failed {
+                let _ = event_tx.send(SendEvent::Failed {
                     request_id: request_id.clone(),
                     error: format!(
                         "Method '{}' not found on service '{}'",
@@ -263,9 +204,9 @@ impl GrpcEngine {
             let output_desc = method_desc.output();
 
             // 6. Echo the authored request into the frame log
-            let _ = event_tx.send(GrpcUiEvent::RequestMessage {
+            let _ = event_tx.send(SendEvent::Frame {
                 request_id: request_id.clone(),
-                message: TransportFrame {
+                frame: TransportFrame {
                     id: 0,
                     timestamp_ms: chrono::Utc::now().timestamp_millis(),
                     direction: FrameDirection::Outbound,
@@ -304,13 +245,13 @@ impl GrpcEngine {
                                 _ = cancelled(cancel_flag_rx.clone()) => break,
                                 ev = stream_rx.recv() => match ev {
                                     Some(GrpcStreamEvent::Message { json, .. }) => {
-                                        let _ = event_tx.send(GrpcUiEvent::ResponseMessage {
+                                        let _ = event_tx.send(SendEvent::Frame {
                                             request_id: request_id.clone(),
-                                            message: log_message(&json),
+                                            frame: log_message(&json),
                                         });
                                     }
                                     Some(GrpcStreamEvent::Completed { duration_ms }) => {
-                                        let _ = event_tx.send(GrpcUiEvent::CallCompleted {
+                                        let _ = event_tx.send(SendEvent::CallCompleted {
                                             request_id: request_id.clone(),
                                             summary: GrpcCallSummary {
                                                 status_code: 0,
@@ -322,7 +263,7 @@ impl GrpcEngine {
                                         break;
                                     }
                                     Some(GrpcStreamEvent::Failed { code, message, duration_ms }) => {
-                                        let _ = event_tx.send(GrpcUiEvent::CallFailed {
+                                        let _ = event_tx.send(SendEvent::CallFailed {
                                             request_id: request_id.clone(),
                                             summary: GrpcCallSummary {
                                                 status_code: code,
@@ -334,7 +275,7 @@ impl GrpcEngine {
                                         break;
                                     }
                                     Some(GrpcStreamEvent::TransportError(err)) => {
-                                        let _ = event_tx.send(GrpcUiEvent::Failed {
+                                        let _ = event_tx.send(SendEvent::Failed {
                                             request_id: request_id.clone(),
                                             error: err,
                                         });
@@ -363,7 +304,7 @@ impl GrpcEngine {
                     }
                 } => {
                     if let Err(e) = res {
-                        let _ = event_tx.send(GrpcUiEvent::Failed {
+                        let _ = event_tx.send(SendEvent::Failed {
                             request_id: request_id.clone(),
                             error: e.to_string(),
                         });
@@ -442,36 +383,6 @@ fn summarize_pool(pool: &zest_core::grpc::DescriptorPool) -> GrpcSchemaSummary {
     }
 }
 
-fn merge_env_mutations(
-    env: Option<Arc<Environment>>,
-    mutations: &[(String, Option<String>)],
-) -> Option<Environment> {
-    if mutations.is_empty() {
-        return env.as_deref().cloned();
-    }
-    let mut temp = env
-        .as_ref()
-        .map(|e| (**e).clone())
-        .unwrap_or_else(|| Environment::new("temp", "Temp"));
-    for (k, v_opt) in mutations {
-        if let Some(val) = v_opt {
-            if let Some(v_item) = temp.variables.iter_mut().find(|v| v.key == *k) {
-                v_item.current_value = val.clone();
-            } else {
-                temp.variables.push(EnvironmentVariable {
-                    key: k.clone(),
-                    initial_value: String::new(),
-                    current_value: val.clone(),
-                    secret: false,
-                });
-            }
-        } else {
-            temp.variables.retain(|v| v.key != *k);
-        }
-    }
-    Some(temp)
-}
-
 fn log_message(json: &str) -> TransportFrame {
     TransportFrame {
         id: 0,
@@ -482,12 +393,12 @@ fn log_message(json: &str) -> TransportFrame {
     }
 }
 
-fn finish_unary(request_id: &str, result: GrpcUnaryResult, event_tx: UnboundedSender<GrpcUiEvent>) {
-    let _ = event_tx.send(GrpcUiEvent::ResponseMessage {
+fn finish_unary(request_id: &str, result: GrpcUnaryResult, event_tx: UnboundedSender<SendEvent>) {
+    let _ = event_tx.send(SendEvent::Frame {
         request_id: request_id.to_string(),
-        message: log_message(&result.response_json),
+        frame: log_message(&result.response_json),
     });
-    let _ = event_tx.send(GrpcUiEvent::CallCompleted {
+    let _ = event_tx.send(SendEvent::CallCompleted {
         request_id: request_id.to_string(),
         summary: GrpcCallSummary {
             status_code: 0,

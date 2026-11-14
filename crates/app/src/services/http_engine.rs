@@ -1,29 +1,12 @@
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 use zest_core::http::{HttpExecutor, HttpProgress, ReqwestExecutor};
-use zest_core::models::{Environment, EnvironmentVariable, HttpResponseRecord, RequestItem};
-use zest_core::scripting::{
-    resolve_fake_vars_in_request, PostResponseContext, PostResponseOutput, PreRequestContext,
-    PreRequestOutput, ScriptSandbox,
-};
+use zest_core::models::{Environment, RequestItem};
+use zest_core::scripting::{PostResponseContext, PostResponseOutput, ScriptSandbox};
 use zest_core::transport::{RequestError, ResolvedRequest};
 
-#[derive(Debug)]
-pub enum ExecEvent {
-    Started {
-        request_id: String,
-        initial_logs: Vec<zest_core::models::ConsoleLogEntry>,
-        pre_script_error: Option<String>,
-    },
-    Progress(String),
-    Success {
-        record: Arc<HttpResponseRecord>,
-        pre_output: Box<PreRequestOutput>,
-        post_output: Box<PostResponseOutput>,
-    },
-    Cancelled,
-    Error(String),
-}
+use super::pipeline::{merge_env_mutations, run_pre_request_stage};
+use super::send_event::SendEvent;
 
 pub struct HttpEngine {
     executor: Arc<ReqwestExecutor>,
@@ -35,73 +18,46 @@ impl HttpEngine {
         Self { executor, tokio_rt }
     }
 
+    /// Starts the HTTP pipeline on the tokio runtime and returns the event
+    /// receiver the Runner must pump. Cancel via the usual oneshot channel.
     pub fn execute(
         &self,
         mut req_item: RequestItem,
         env: Option<Arc<Environment>>,
         cancel_rx: oneshot::Receiver<()>,
-    ) -> mpsc::UnboundedReceiver<ExecEvent> {
+    ) -> mpsc::UnboundedReceiver<SendEvent> {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
         let executor = self.executor.clone();
         let send_event_tx = event_tx.clone();
 
         self.tokio_rt.spawn(async move {
-            // 1. Resolve Dynamic Fake Variables
-            resolve_fake_vars_in_request(&mut req_item);
+            // 1. Resolve dynamic fake variables + run the pre-request script
+            let pre_output = run_pre_request_stage(&mut req_item, env.as_deref());
+            let post_script_code = req_item
+                .script
+                .as_ref()
+                .and_then(|s| s.post_response.clone());
 
-            // 2. Pre-request Script execution
-            let pre_script_code = req_item.script.as_ref().and_then(|s| s.pre_request.clone());
-            let post_script_code = req_item.script.as_ref().and_then(|s| s.post_response.clone());
-
-            let pre_output = if let Some(code) = pre_script_code {
-                let pre_ctx = PreRequestContext::from_request_and_env(&req_item, env.as_deref());
-                ScriptSandbox::run_pre_request(&code, pre_ctx)
-            } else {
-                PreRequestOutput::default()
-            };
-
-            let initial_logs = pre_output.console_entries.clone();
-            let pre_script_error = pre_output.error.clone();
-            let _ = send_event_tx.send(ExecEvent::Started {
+            let _ = send_event_tx.send(SendEvent::Started {
                 request_id: req_item.id.clone(),
-                initial_logs,
-                pre_script_error,
+                initial_logs: pre_output.console_entries.clone(),
+                env_mutations: pre_output.env_mutations.clone(),
+                pre_script_error: pre_output.error.clone(),
             });
 
-            // 3. Merge pre-script env mutations into effective environment
-            let mut mutated_env = None;
-            let effective_env_ref = if !pre_output.env_mutations.is_empty() {
-                let mut temp_env = env
-                    .as_ref()
-                    .map(|e| (**e).clone())
-                    .unwrap_or_else(|| Environment::new("temp", "Temp"));
-                for (k, v_opt) in &pre_output.env_mutations {
-                    if let Some(val) = v_opt {
-                        if let Some(v_item) = temp_env.variables.iter_mut().find(|v| v.key == *k) {
-                            v_item.current_value = val.clone();
-                        } else {
-                            temp_env.variables.push(EnvironmentVariable {
-                                key: k.clone(),
-                                initial_value: "".to_string(),
-                                current_value: val.clone(),
-                                secret: false,
-                            });
-                        }
-                    } else {
-                        temp_env.variables.retain(|v| v.key != *k);
-                    }
-                }
-                mutated_env = Some(temp_env);
-                mutated_env.as_ref()
-            } else {
-                env.as_deref()
-            };
+            // 2. Merge pre-script env mutations into the effective environment
+            let effective_env = merge_env_mutations(&env, &pre_output.env_mutations);
 
-            // 4. Resolve Request with effective environment & apply pre-script mutations
-            let mut resolved = match ResolvedRequest::from_item(&req_item, effective_env_ref) {
+            // 3. Resolve the wire request with the effective environment and
+            //    apply pre-script header/body mutations
+            let mut resolved = match ResolvedRequest::from_item(&req_item, effective_env.as_deref())
+            {
                 Ok(r) => r,
                 Err(e) => {
-                    let _ = send_event_tx.send(ExecEvent::Error(e.to_string()));
+                    let _ = send_event_tx.send(SendEvent::Failed {
+                        request_id: req_item.id.clone(),
+                        error: e.to_string(),
+                    });
                     return;
                 }
             };
@@ -127,21 +83,21 @@ impl HttpEngine {
                             }
                         }
                     };
-                    let _ = progress_event_tx.send(ExecEvent::Progress(text));
+                    let _ = progress_event_tx.send(SendEvent::Progress(text));
                 }
             });
 
-            let eff_env_for_post = mutated_env.map(Arc::new).or(env);
+            let eff_env_for_post = effective_env.or(env);
             let pre_console_entries = pre_output.console_entries.clone();
 
             tokio::select! {
                 _ = cancel_rx => {
-                    let _ = send_event_tx.send(ExecEvent::Cancelled);
+                    let _ = send_event_tx.send(SendEvent::Cancelled);
                 }
                 res = executor.send(resolved, Some(progress_tx)) => {
                     match res {
                         Ok(mut record) => {
-                            // 5. Post-response / Test Script
+                            // 4. Post-response / Test Script
                             let post_output = if let Some(code) = post_script_code {
                                 let post_ctx = PostResponseContext::from_response_and_env(&record, eff_env_for_post.as_deref());
                                 ScriptSandbox::run_post_response(&code, post_ctx)
@@ -154,17 +110,19 @@ impl HttpEngine {
                             combined_console_logs.extend(post_output.console_entries.clone());
                             record.console_logs = combined_console_logs;
 
-                            let _ = send_event_tx.send(ExecEvent::Success {
+                            let _ = send_event_tx.send(SendEvent::HttpSuccess {
                                 record: Arc::new(record),
-                                pre_output: Box::new(pre_output),
                                 post_output: Box::new(post_output),
                             });
                         }
                         Err(RequestError::Cancelled) => {
-                            let _ = send_event_tx.send(ExecEvent::Cancelled);
+                            let _ = send_event_tx.send(SendEvent::Cancelled);
                         }
                         Err(e) => {
-                            let _ = send_event_tx.send(ExecEvent::Error(e.to_string()));
+                            let _ = send_event_tx.send(SendEvent::Failed {
+                                request_id: req_item.id.clone(),
+                                error: e.to_string(),
+                            });
                         }
                     }
                 }
@@ -178,7 +136,7 @@ impl HttpEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use zest_core::models::HttpMethod;
+    use zest_core::models::{Environment, HttpMethod};
 
     #[test]
     fn test_http_engine_invalid_url_error() {
@@ -192,8 +150,8 @@ mod tests {
 
         let got_error = rt.block_on(async {
             while let Some(event) = rx.recv().await {
-                if let ExecEvent::Error(err) = event {
-                    assert!(!err.is_empty());
+                if let SendEvent::Failed { error, .. } = event {
+                    assert!(!error.is_empty());
                     return true;
                 }
             }
@@ -221,12 +179,61 @@ mod tests {
 
         let got_cancelled = rt.block_on(async {
             while let Some(event) = rx.recv().await {
-                if let ExecEvent::Cancelled = event {
+                if let SendEvent::Cancelled = event {
                     return true;
                 }
             }
             false
         });
         assert!(got_cancelled);
+    }
+
+    #[test]
+    fn test_http_engine_started_carries_env_mutations() {
+        // Regression guard for the unified pipeline: the pre-script env
+        // mutations must arrive on Started (like WS/gRPC), not on Success.
+        let rt = Arc::new(tokio::runtime::Runtime::new().unwrap());
+        let executor = Arc::new(ReqwestExecutor::new());
+        let engine = HttpEngine::new(executor, rt.clone());
+
+        let mut req = RequestItem::new(
+            "test-script",
+            "Script Test",
+            HttpMethod::Get,
+            "http://127.0.0.1:1/unreachable",
+        );
+        req.script = Some(zest_core::models::ScriptConfig {
+            pre_request: Some("z.environment.set('chained', 'yes')".to_string()),
+            post_response: None,
+        });
+        let (_cancel_tx, cancel_rx) = oneshot::channel();
+        let mut rx = engine.execute(
+            req,
+            Some(Arc::new(Environment::new("dev", "Dev"))),
+            cancel_rx,
+        );
+
+        let got_started_with_mutation = rt.block_on(async {
+            while let Some(event) = rx.recv().await {
+                if let SendEvent::Started {
+                    env_mutations,
+                    pre_script_error,
+                    ..
+                } = event
+                {
+                    assert!(
+                        pre_script_error.is_none(),
+                        "script error: {pre_script_error:?}"
+                    );
+                    assert_eq!(
+                        env_mutations,
+                        vec![("chained".to_string(), Some("yes".to_string()))]
+                    );
+                    return true;
+                }
+            }
+            false
+        });
+        assert!(got_started_with_mutation);
     }
 }

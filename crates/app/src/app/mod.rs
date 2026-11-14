@@ -23,7 +23,6 @@ use gpui_kit::component::input::ShowCompletions;
 use gpui_kit::component::resizable::{h_resizable, resizable_panel, v_resizable};
 use gpui_kit::*;
 use std::sync::Arc;
-use zest_core::models::Protocol;
 
 pub struct AppView {
     pub(crate) state: AppState,
@@ -173,23 +172,11 @@ impl AppView {
         }
     }
 
-    /// Primary send action, routed by transport protocol: HTTP sends,
-    /// WebSocket connects, gRPC invokes. Keeps Ctrl+Enter and the URL-bar
-    /// Enter consistent with the RequestBar button.
+    /// Primary send action; the Runner routes by transport protocol (HTTP
+    /// sends, WebSocket connects, gRPC invokes). Keeps Ctrl+Enter and the
+    /// URL-bar Enter consistent with the RequestBar button.
     pub fn send_current_request(&self, cx: &mut App) {
-        let req_id = self.state.session.read(cx).active_request_id().to_string();
-        let protocol = self
-            .state
-            .workspace
-            .read(cx)
-            .find_request(&req_id)
-            .map(|r| r.protocol)
-            .unwrap_or(Protocol::Http);
-        match protocol {
-            Protocol::Http => self.runner.send_current_request(cx),
-            Protocol::WebSocket => self.runner.connect_websocket(cx),
-            Protocol::Grpc => self.runner.invoke_grpc(cx),
-        }
+        self.runner.send_current_request(cx);
     }
 
     pub fn disconnect_websocket(&self, cx: &mut App) {

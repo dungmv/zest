@@ -1,14 +1,15 @@
-use super::grpc_engine::{GrpcEngine, GrpcUiEvent};
-use super::http_engine::{ExecEvent, HttpEngine};
-use super::ws_service::{WsService, WsUiEvent};
+use super::grpc_engine::GrpcEngine;
+use super::http_engine::HttpEngine;
+use super::send_event::SendEvent;
+use super::ws_service::WsService;
 use crate::state::{
     EnvironmentState, ModalState, RequestSessionState, ResponseState, ToastState,
     WorkspaceDataState,
 };
 use gpui_kit::{App, Entity};
 use std::sync::Arc;
-use tokio::sync::oneshot;
-use zest_core::models::{EnvironmentVariable, Protocol};
+use tokio::sync::{mpsc, oneshot};
+use zest_core::models::{Environment, EnvironmentVariable, Protocol, RequestItem};
 use zest_core::storage::models::LocFile;
 use zest_core::ws::WebSocketStatus;
 
@@ -32,6 +33,20 @@ pub struct Runner {
     pub engines: Engines,
 }
 
+/// Fully prepared send context gathered on the GPUI thread before any engine
+/// starts.
+struct SendContext {
+    req_id: String,
+    req_item: RequestItem,
+    env: Option<Arc<Environment>>,
+}
+
+/// The begun send: context plus the cancel receiver handed to the engine.
+struct PreparedSend {
+    ctx: SendContext,
+    cancel_rx: oneshot::Receiver<()>,
+}
+
 impl Runner {
     pub fn new(
         session_state: Entity<RequestSessionState>,
@@ -53,18 +68,53 @@ impl Runner {
         }
     }
 
+    /// Primary send action for the active request, whatever its protocol:
+    /// HTTP executes a request/response exchange, WebSocket opens a realtime
+    /// connection, gRPC invokes a unary or server-streaming call. All three
+    /// share one preamble ([`Runner::gather_send_context`] + [`Runner::begin_send`])
+    /// and one event pump ([`Runner::spawn_send_pump`]).
     pub fn send_current_request(&self, cx: &mut App) {
-        let ed = self.session_state.read(cx);
-        let req_id = ed.active_request_id();
-        let Some(mut req_item) = self.workspace_state.read(cx).find_request(req_id).cloned() else {
+        let Some(ctx) = self.gather_send_context(cx) else {
             return;
         };
-
-        if ed.is_sending {
+        let protocol = ctx.req_item.protocol;
+        if protocol == Protocol::WebSocket && self.engines.ws.is_connected(&ctx.req_id) {
             return;
         }
 
-        // Resolve Hierarchical Headers & Auth
+        let PreparedSend { ctx, cancel_rx } = self.begin_send(cx, ctx);
+        if protocol == Protocol::WebSocket {
+            self.response_state.update(cx, |resp, cx| {
+                resp.set_ws_status(WebSocketStatus::Connecting, cx);
+            });
+        }
+
+        let SendContext { req_item, env, .. } = ctx;
+        let event_rx = match protocol {
+            Protocol::Http => self.engines.http.execute(req_item, env, cancel_rx),
+            Protocol::WebSocket => self.engines.ws.connect(req_item, env, cancel_rx),
+            Protocol::Grpc => self.engines.grpc.invoke(req_item, env, cancel_rx),
+        };
+        self.spawn_send_pump(cx, protocol, event_rx);
+    }
+
+    /// Shared preamble for every send path: fetch the active request, guard
+    /// against re-entrant sends, merge hierarchy headers/auth, apply global
+    /// network settings and snapshot the effective environment. Pure reads —
+    /// no state is mutated until [`Runner::begin_send`].
+    fn gather_send_context(&self, cx: &App) -> Option<SendContext> {
+        let ed = self.session_state.read(cx);
+        if ed.is_sending {
+            return None;
+        }
+        let req_id = ed.active_request_id().to_string();
+        let mut req_item = self
+            .workspace_state
+            .read(cx)
+            .find_request(&req_id)
+            .cloned()?;
+
+        // Resolve hierarchical headers & auth (Workspace -> Folders -> Request)
         {
             let ws = self.workspace_state.read(cx);
             let (resolved_headers, resolved_auth) = ws.resolve_request_hierarchy(&req_item);
@@ -72,7 +122,7 @@ impl Runner {
             req_item.auth = resolved_auth;
         }
 
-        // Apply Global Network & Execution settings
+        // Apply global network & execution settings
         {
             let modal = self.modal_state.read(cx);
             req_item.set_timeout_secs(modal.network.request_timeout_secs);
@@ -80,176 +130,47 @@ impl Runner {
             req_item.set_validate_tls(modal.network.validate_tls);
         }
 
-        let cached_env = self.env_state.read(cx).effective_environment();
+        let env = Some(self.env_state.read(cx).effective_environment());
+        Some(SendContext {
+            req_id,
+            req_item,
+            env,
+        })
+    }
+
+    /// Flips the session into the sending state and creates the cancel
+    /// channel. Split from [`Runner::gather_send_context`] so protocol-specific
+    /// guards (e.g. an already-open WebSocket) can run between the two steps
+    /// without flashing a sending state.
+    fn begin_send(&self, cx: &mut App, ctx: SendContext) -> PreparedSend {
         let (cancel_tx, cancel_rx) = oneshot::channel();
-
+        let req_id = ctx.req_id.clone();
         self.session_state.update(cx, |state, cx| {
-            state.start_sending(Some(req_item.id.clone()), cancel_tx, cx);
+            state.start_sending(Some(req_id), cancel_tx, cx);
         });
+        PreparedSend { ctx, cancel_rx }
+    }
 
-        let mut event_rx = self
-            .engines
-            .http
-            .execute(req_item, Some(cached_env), cancel_rx);
-
+    /// Pumps one unified send-event stream to completion on the GPUI thread.
+    /// The pump lives as long as the invocation: until the HTTP exchange
+    /// settles, the WebSocket closes, or the gRPC call completes.
+    fn spawn_send_pump(
+        &self,
+        cx: &mut App,
+        protocol: Protocol,
+        mut event_rx: mpsc::UnboundedReceiver<SendEvent>,
+    ) {
         let session_state = self.session_state.clone();
         let workspace_state = self.workspace_state.clone();
         let env_state = self.env_state.clone();
         let response_state = self.response_state.clone();
-        let toast_state = self.toast_state.clone();
-
-        cx.spawn(async move |cx| {
-            while let Some(event) = event_rx.recv().await {
-                cx.update(|cx| {
-                    match event {
-                        ExecEvent::Started {
-                            request_id,
-                            initial_logs,
-                            pre_script_error,
-                        } => {
-                            if let Some(err) = pre_script_error {
-                                session_state.update(cx, |ed, cx| {
-                                    ed.set_script_error(Some(err), cx);
-                                });
-                            } else {
-                                session_state.update(cx, |ed, cx| {
-                                    ed.set_script_error(None, cx);
-                                });
-                            }
-                            response_state.update(cx, |resp, cx| {
-                                resp.start_sending(Some(&request_id), cx);
-                                resp.set_pre_request_logs(initial_logs, cx);
-                            });
-                        }
-                        ExecEvent::Progress(text) => {
-                            session_state.update(cx, |ed, cx| {
-                                ed.update_progress(text, cx);
-                            });
-                        }
-                        ExecEvent::Success {
-                            record,
-                            pre_output,
-                            post_output,
-                        } => {
-                            let status = record.status_code;
-                            let req_id = record.request_id.clone();
-
-                            // Update workspace environment with mutations (Request chaining)
-                            let all_mutations: Vec<_> = pre_output
-                                .env_mutations
-                                .iter()
-                                .chain(post_output.env_mutations.iter())
-                                .cloned()
-                                .collect();
-                            apply_env_mutations(&env_state, &all_mutations, cx);
-
-                            if let Some(err) = &post_output.error {
-                                session_state.update(cx, |ed, cx| {
-                                    ed.set_script_error(Some(err.clone()), cx);
-                                });
-                            }
-
-                            let loc_file = LocFile::from_record(&record);
-                            workspace_state.update(cx, |ws, cx| {
-                                if let Some(r) = ws.find_request_mut(&req_id) {
-                                    r.last_status_code = Some(status);
-                                }
-                                ws.bump_tree_version();
-                                let _ = ws.store.save_response_cache(&req_id, &loc_file);
-                                ws.sync_cookies_from_executor();
-                                cx.notify();
-                            });
-
-                            response_state.update(cx, |resp, cx| {
-                                resp.set_test_results(
-                                    post_output.test_results,
-                                    record.console_logs.clone(),
-                                    cx,
-                                );
-                                resp.set_response_for_request(req_id.clone(), record, cx);
-                            });
-
-                            session_state.update(cx, |ed, cx| {
-                                ed.stop_sending(cx);
-                            });
-                        }
-                        ExecEvent::Cancelled => {
-                            session_state.update(cx, |ed, cx| {
-                                ed.stop_sending(cx);
-                            });
-                        }
-                        ExecEvent::Error(err_msg) => {
-                            session_state.update(cx, |ed, cx| {
-                                ed.stop_sending(cx);
-                            });
-                            toast_state.update(cx, |ts, cx| {
-                                ts.push_error("Send Failed", err_msg, cx);
-                            });
-                        }
-                    }
-                });
-            }
-        })
-        .detach();
-    }
-
-    /// Starts the WebSocket handshake for the active request.
-    pub fn connect_websocket(&self, cx: &mut App) {
-        let req_id = self.session_state.read(cx).active_request_id().to_string();
-        let Some(mut req_item) = self.workspace_state.read(cx).find_request(&req_id).cloned()
-        else {
-            return;
-        };
-        {
-            let ed = self.session_state.read(cx);
-            if ed.is_sending || req_item.protocol != Protocol::WebSocket {
-                return;
-            }
-        }
-
-        if self.engines.ws.is_connected(&req_id) {
-            return;
-        }
-
-        // Resolve hierarchical headers & auth, apply global settings — same
-        // preamble as the HTTP send path.
-        {
-            let ws = self.workspace_state.read(cx);
-            let (resolved_headers, resolved_auth) = ws.resolve_request_hierarchy(&req_item);
-            req_item.headers = resolved_headers;
-            req_item.auth = resolved_auth;
-        }
-        {
-            let modal = self.modal_state.read(cx);
-            req_item.set_timeout_secs(modal.network.request_timeout_secs);
-            req_item.set_validate_tls(modal.network.validate_tls);
-        }
-
-        let cached_env = self.env_state.read(cx).effective_environment();
-        let (cancel_tx, cancel_rx) = oneshot::channel();
-
-        self.session_state.update(cx, |state, cx| {
-            state.start_sending(Some(req_id.clone()), cancel_tx, cx);
-        });
-        self.response_state.update(cx, |resp, cx| {
-            resp.set_ws_status(WebSocketStatus::Connecting, cx);
-        });
-
-        let mut event_rx = self
-            .engines
-            .ws
-            .connect(req_item, Some(cached_env), cancel_rx);
-
-        let session_state = self.session_state.clone();
-        let response_state = self.response_state.clone();
-        let env_state = self.env_state.clone();
         let toast_state = self.toast_state.clone();
         let ws_service = self.engines.ws.clone();
 
         cx.spawn(async move |cx| {
             while let Some(event) = event_rx.recv().await {
                 cx.update(|cx| match event {
-                    WsUiEvent::Started {
+                    SendEvent::Started {
                         request_id,
                         initial_logs,
                         env_mutations,
@@ -266,11 +187,79 @@ impl Runner {
                         }
                         apply_env_mutations(&env_state, &env_mutations, cx);
                         response_state.update(cx, |resp, cx| {
+                            resp.start_sending(Some(&request_id), cx);
                             resp.set_pre_request_logs(initial_logs, cx);
                         });
-                        let _ = request_id;
                     }
-                    WsUiEvent::Connected {
+                    SendEvent::Progress(text) => {
+                        session_state.update(cx, |ed, cx| {
+                            ed.update_progress(text, cx);
+                        });
+                    }
+                    SendEvent::Frame { request_id, frame } => match protocol {
+                        Protocol::WebSocket => {
+                            ws_service.append_inbound(&request_id, frame.clone());
+                            let active =
+                                session_state.read(cx).active_request_id() == request_id.as_str();
+                            if active {
+                                response_state.update(cx, |resp, cx| {
+                                    resp.push_ws_message(frame, cx);
+                                });
+                            }
+                        }
+                        Protocol::Grpc => {
+                            let active =
+                                session_state.read(cx).active_request_id() == request_id.as_str();
+                            if active {
+                                response_state.update(cx, |resp, cx| {
+                                    resp.push_ws_message(frame, cx);
+                                });
+                            }
+                        }
+                        Protocol::Http => {}
+                    },
+                    SendEvent::HttpSuccess {
+                        record,
+                        post_output,
+                    } => {
+                        let status = record.status_code;
+                        let req_id = record.request_id.clone();
+
+                        // Update workspace environment with post-script
+                        // mutations (pre-script ones arrived on Started)
+                        apply_env_mutations(&env_state, &post_output.env_mutations, cx);
+
+                        if let Some(err) = &post_output.error {
+                            session_state.update(cx, |ed, cx| {
+                                ed.set_script_error(Some(err.clone()), cx);
+                            });
+                        }
+
+                        let loc_file = LocFile::from_record(&record);
+                        workspace_state.update(cx, |ws, cx| {
+                            if let Some(r) = ws.find_request_mut(&req_id) {
+                                r.last_status_code = Some(status);
+                            }
+                            ws.bump_tree_version();
+                            let _ = ws.store.save_response_cache(&req_id, &loc_file);
+                            ws.sync_cookies_from_executor();
+                            cx.notify();
+                        });
+
+                        response_state.update(cx, |resp, cx| {
+                            resp.set_test_results(
+                                post_output.test_results,
+                                record.console_logs.clone(),
+                                cx,
+                            );
+                            resp.set_response_for_request(req_id.clone(), record, cx);
+                        });
+
+                        session_state.update(cx, |ed, cx| {
+                            ed.stop_sending(cx);
+                        });
+                    }
+                    SendEvent::HandshakeConnected {
                         request_id,
                         outgoing,
                         response_headers,
@@ -289,20 +278,7 @@ impl Runner {
                             resp.set_ws_status(WebSocketStatus::Connected, cx);
                         });
                     }
-                    WsUiEvent::Message {
-                        request_id,
-                        message,
-                    } => {
-                        ws_service.append_inbound(&request_id, message.clone());
-                        let active =
-                            session_state.read(cx).active_request_id() == request_id.as_str();
-                        if active {
-                            response_state.update(cx, |resp, cx| {
-                                resp.push_ws_message(message, cx);
-                            });
-                        }
-                    }
-                    WsUiEvent::Closed {
+                    SendEvent::HandshakeClosed {
                         request_id,
                         code: _,
                         reason: _,
@@ -316,21 +292,85 @@ impl Runner {
                             });
                         }
                     }
-                    WsUiEvent::Failed { request_id, error } => {
-                        ws_service.mark_failed(&request_id, &error);
+                    SendEvent::CallCompleted { summary, .. } => {
+                        response_state.update(cx, |resp, cx| {
+                            resp.set_grpc_last_call(Some(summary), cx);
+                        });
                         session_state.update(cx, |ed, cx| {
                             ed.stop_sending(cx);
                         });
-                        let active =
-                            session_state.read(cx).active_request_id() == request_id.as_str();
-                        if active {
-                            response_state.update(cx, |resp, cx| {
-                                resp.set_ws_status(WebSocketStatus::Failed(error.clone()), cx);
+                    }
+                    SendEvent::CallFailed { summary, .. } => {
+                        let status_message = summary.status_message.clone().unwrap_or_default();
+                        response_state.update(cx, |resp, cx| {
+                            resp.set_grpc_last_call(Some(summary), cx);
+                        });
+                        session_state.update(cx, |ed, cx| {
+                            ed.stop_sending(cx);
+                        });
+                        toast_state.update(cx, |ts, cx| {
+                            ts.push_error("gRPC Error", status_message, cx);
+                        });
+                    }
+                    SendEvent::SchemaReady {
+                        request_id,
+                        summary,
+                        auto_service,
+                        auto_method,
+                    } => {
+                        session_state.update(cx, |ed, cx| {
+                            ed.set_grpc_schema(Some(summary), cx);
+                        });
+                        if let (Some(svc), Some(mth)) = (auto_service, auto_method) {
+                            workspace_state.update(cx, |ws, _| {
+                                ws.update_active_request(&request_id, |r| {
+                                    let payload = r.grpc_mut();
+                                    payload.service = svc;
+                                    payload.method = mth;
+                                });
+                            });
+                            session_state.update(cx, |ed, cx| {
+                                ed.mark_dirty(cx);
                             });
                         }
-                        toast_state.update(cx, |ts, cx| {
-                            ts.push_error("WebSocket Failed", error, cx);
+                    }
+                    SendEvent::Cancelled => {
+                        session_state.update(cx, |ed, cx| {
+                            ed.stop_sending(cx);
                         });
+                    }
+                    SendEvent::Failed { request_id, error } => {
+                        session_state.update(cx, |ed, cx| {
+                            ed.stop_sending(cx);
+                        });
+                        match protocol {
+                            Protocol::WebSocket => {
+                                ws_service.mark_failed(&request_id, &error);
+                                let active = session_state.read(cx).active_request_id()
+                                    == request_id.as_str();
+                                if active {
+                                    response_state.update(cx, |resp, cx| {
+                                        resp.set_ws_status(
+                                            WebSocketStatus::Failed(error.clone()),
+                                            cx,
+                                        );
+                                    });
+                                }
+                                toast_state.update(cx, |ts, cx| {
+                                    ts.push_error("WebSocket Failed", error, cx);
+                                });
+                            }
+                            Protocol::Grpc => {
+                                toast_state.update(cx, |ts, cx| {
+                                    ts.push_error("gRPC Failed", error, cx);
+                                });
+                            }
+                            Protocol::Http => {
+                                toast_state.update(cx, |ts, cx| {
+                                    ts.push_error("Send Failed", error, cx);
+                                });
+                            }
+                        }
                     }
                 });
             }
@@ -372,164 +412,6 @@ impl Runner {
         self.response_state.update(cx, |resp, cx| {
             resp.set_ws_status(WebSocketStatus::Disconnected, cx);
         });
-    }
-
-    /// Invokes the active gRPC request (unary or server-streaming).
-    pub fn invoke_grpc(&self, cx: &mut App) {
-        let req_id = self.session_state.read(cx).active_request_id().to_string();
-        let Some(mut req_item) = self.workspace_state.read(cx).find_request(&req_id).cloned()
-        else {
-            return;
-        };
-        {
-            let ed = self.session_state.read(cx);
-            if ed.is_sending || req_item.protocol != Protocol::Grpc {
-                return;
-            }
-        }
-
-        // Resolve hierarchical headers & auth, apply global settings — same
-        // preamble as the HTTP send path.
-        {
-            let ws = self.workspace_state.read(cx);
-            let (resolved_headers, resolved_auth) = ws.resolve_request_hierarchy(&req_item);
-            req_item.headers = resolved_headers;
-            req_item.auth = resolved_auth;
-        }
-        {
-            let modal = self.modal_state.read(cx);
-            req_item.set_timeout_secs(modal.network.request_timeout_secs);
-            req_item.set_validate_tls(modal.network.validate_tls);
-        }
-
-        let cached_env = self.env_state.read(cx).effective_environment();
-        let (cancel_tx, cancel_rx) = oneshot::channel();
-
-        self.session_state.update(cx, |state, cx| {
-            state.start_sending(Some(req_id.clone()), cancel_tx, cx);
-        });
-
-        let mut event_rx = self
-            .engines
-            .grpc
-            .invoke(req_item, Some(cached_env), cancel_rx);
-
-        let session_state = self.session_state.clone();
-        let workspace_state = self.workspace_state.clone();
-        let response_state = self.response_state.clone();
-        let env_state = self.env_state.clone();
-        let toast_state = self.toast_state.clone();
-
-        cx.spawn(async move |cx| {
-            while let Some(event) = event_rx.recv().await {
-                cx.update(|cx| match event {
-                    GrpcUiEvent::Started {
-                        request_id: _,
-                        initial_logs,
-                        env_mutations,
-                        pre_script_error,
-                    } => {
-                        if let Some(err) = pre_script_error {
-                            session_state.update(cx, |ed, cx| {
-                                ed.set_script_error(Some(err), cx);
-                            });
-                        } else {
-                            session_state.update(cx, |ed, cx| {
-                                ed.set_script_error(None, cx);
-                            });
-                        }
-                        apply_env_mutations(&env_state, &env_mutations, cx);
-                        response_state.update(cx, |resp, cx| {
-                            resp.set_pre_request_logs(initial_logs, cx);
-                        });
-                    }
-                    GrpcUiEvent::RequestMessage {
-                        request_id,
-                        message,
-                    } => {
-                        let active =
-                            session_state.read(cx).active_request_id() == request_id.as_str();
-                        if active {
-                            response_state.update(cx, |resp, cx| {
-                                resp.push_ws_message(message, cx);
-                            });
-                        }
-                    }
-                    GrpcUiEvent::ResponseMessage {
-                        request_id,
-                        message,
-                    } => {
-                        let active =
-                            session_state.read(cx).active_request_id() == request_id.as_str();
-                        if active {
-                            response_state.update(cx, |resp, cx| {
-                                resp.push_ws_message(message, cx);
-                            });
-                        }
-                    }
-                    GrpcUiEvent::SchemaReady {
-                        request_id,
-                        summary,
-                        auto_service,
-                        auto_method,
-                    } => {
-                        session_state.update(cx, |ed, cx| {
-                            ed.set_grpc_schema(Some(summary), cx);
-                        });
-                        if let (Some(svc), Some(mth)) = (auto_service, auto_method) {
-                            workspace_state.update(cx, |ws, _| {
-                                ws.update_active_request(&request_id, |r| {
-                                    let payload = r.grpc_mut();
-                                    payload.service = svc;
-                                    payload.method = mth;
-                                });
-                            });
-                            session_state.update(cx, |ed, cx| {
-                                ed.mark_dirty(cx);
-                            });
-                        }
-                    }
-                    GrpcUiEvent::CallCompleted {
-                        request_id: _,
-                        summary,
-                    } => {
-                        response_state.update(cx, |resp, cx| {
-                            resp.set_grpc_last_call(Some(summary), cx);
-                        });
-                        session_state.update(cx, |ed, cx| {
-                            ed.stop_sending(cx);
-                        });
-                    }
-                    GrpcUiEvent::CallFailed {
-                        request_id: _,
-                        summary,
-                    } => {
-                        let status_message = summary.status_message.clone().unwrap_or_default();
-                        response_state.update(cx, |resp, cx| {
-                            resp.set_grpc_last_call(Some(summary), cx);
-                        });
-                        session_state.update(cx, |ed, cx| {
-                            ed.stop_sending(cx);
-                        });
-                        toast_state.update(cx, |ts, cx| {
-                            ts.push_error("gRPC Error", status_message, cx);
-                        });
-                    }
-                    GrpcUiEvent::Failed {
-                        request_id: _,
-                        error,
-                    } => {
-                        session_state.update(cx, |ed, cx| {
-                            ed.stop_sending(cx);
-                        });
-                        toast_state.update(cx, |ts, cx| {
-                            ts.push_error("gRPC Failed", error, cx);
-                        });
-                    }
-                });
-            }
-        })
-        .detach();
     }
 
     /// Resolves the gRPC schema (reflection or .proto) for the picker UI.
@@ -575,8 +457,8 @@ impl Runner {
 }
 
 /// Applies `(key, Some(value))` / `(key, None)` environment mutations to the
-/// active environment (or globals when none is active). Shared by the HTTP
-/// send path and the WebSocket connect path.
+/// active environment (or globals when none is active). Used by the send
+/// pump for every protocol's pre/post script mutations.
 pub(crate) fn apply_env_mutations(
     env_state: &Entity<EnvironmentState>,
     mutations: &[(String, Option<String>)],

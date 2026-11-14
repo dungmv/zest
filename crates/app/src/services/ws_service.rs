@@ -1,57 +1,21 @@
 use std::collections::HashMap;
-use std::sync::Arc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::sync::oneshot;
-use zest_core::models::{ConsoleLogEntry, Environment, EnvironmentVariable, RequestItem};
-use zest_core::scripting::{
-    resolve_fake_vars_in_request, PreRequestContext, PreRequestOutput, ScriptSandbox,
-};
-use zest_core::transport::ResolvedRequest;
-use zest_core::transport::{FrameDirection, FrameKind, TransportFrame};
+use zest_core::models::{Environment, RequestItem};
+use zest_core::transport::{FrameDirection, FrameKind, ResolvedRequest, TransportFrame};
 use zest_core::ws::{WebSocketClient, WebSocketStatus, WsEvent, WsOutgoing};
 
 use super::global_tokio_runtime;
+use super::pipeline::{merge_env_mutations, run_pre_request_stage};
+use super::send_event::SendEvent;
 
 /// `(status, frame log, handshake headers)` view of one session.
 pub type WsSnapshot = (WebSocketStatus, Vec<TransportFrame>, Vec<(String, String)>);
 
 /// Maximum frames retained per session log (oldest dropped).
 const MAX_SESSION_MESSAGES: usize = 1000;
-
-/// UI-delivered lifecycle events for a WebSocket connection, mirroring the
-/// shape of [`super::http_engine::ExecEvent`]. Consumed exclusively on the
-/// GPUI thread by the Runner pump.
-pub enum WsUiEvent {
-    /// Pre-request script finished; handshake about to start.
-    Started {
-        request_id: String,
-        initial_logs: Vec<ConsoleLogEntry>,
-        env_mutations: Vec<(String, Option<String>)>,
-        pre_script_error: Option<String>,
-    },
-    /// Handshake succeeded. Carries the writer handle the service registers.
-    Connected {
-        request_id: String,
-        outgoing: UnboundedSender<WsOutgoing>,
-        response_headers: Vec<(String, String)>,
-        duration_ms: u64,
-    },
-    Message {
-        request_id: String,
-        message: TransportFrame,
-    },
-    Closed {
-        request_id: String,
-        code: Option<u16>,
-        reason: String,
-    },
-    Failed {
-        request_id: String,
-        error: String,
-    },
-}
 
 /// Authoritative per-request connection record. The Runner pump and UI
 /// actions all run on the GPUI thread; the `Mutex` only exists so the
@@ -112,22 +76,14 @@ impl WsService {
         mut req_item: RequestItem,
         env: Option<Arc<Environment>>,
         cancel_rx: oneshot::Receiver<()>,
-    ) -> UnboundedReceiver<WsUiEvent> {
+    ) -> UnboundedReceiver<SendEvent> {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
 
         self.tokio_rt.spawn(async move {
             // 1. Resolve dynamic fake variables + run the pre-request script
-            resolve_fake_vars_in_request(&mut req_item);
-            let pre_script_code = req_item.script.as_ref().and_then(|s| s.pre_request.clone());
-            let pre_output = match pre_script_code {
-                Some(code) => {
-                    let ctx = PreRequestContext::from_request_and_env(&req_item, env.as_deref());
-                    ScriptSandbox::run_pre_request(&code, ctx)
-                }
-                None => PreRequestOutput::default(),
-            };
+            let pre_output = run_pre_request_stage(&mut req_item, env.as_deref());
 
-            let _ = event_tx.send(WsUiEvent::Started {
+            let _ = event_tx.send(SendEvent::Started {
                 request_id: req_item.id.clone(),
                 initial_logs: pre_output.console_entries.clone(),
                 env_mutations: pre_output.env_mutations.clone(),
@@ -135,13 +91,13 @@ impl WsService {
             });
 
             // 2. Merge pre-script env mutations into the effective environment
-            let effective_env = merge_env_mutations(env, &pre_output.env_mutations);
+            let effective_env = merge_env_mutations(&env, &pre_output.env_mutations);
 
             // 3. Resolve the wire request (URL, headers, auth expansion)
-            let resolved = match ResolvedRequest::from_item(&req_item, effective_env.as_ref()) {
+            let resolved = match ResolvedRequest::from_item(&req_item, effective_env.as_deref()) {
                 Ok(r) => r,
                 Err(e) => {
-                    let _ = event_tx.send(WsUiEvent::Failed {
+                    let _ = event_tx.send(SendEvent::Failed {
                         request_id: req_item.id.clone(),
                         error: e.to_string(),
                     });
@@ -157,7 +113,7 @@ impl WsService {
                         pump_connection(&req_item.id, handle.events, handle.outgoing, event_tx);
                     }
                     Err(e) => {
-                        let _ = event_tx.send(WsUiEvent::Failed {
+                        let _ = event_tx.send(SendEvent::Failed {
                             request_id: req_item.id.clone(),
                             error: e.to_string(),
                         });
@@ -288,42 +244,12 @@ impl WsService {
     }
 }
 
-fn merge_env_mutations(
-    env: Option<Arc<Environment>>,
-    mutations: &[(String, Option<String>)],
-) -> Option<Environment> {
-    if mutations.is_empty() {
-        return env.as_deref().cloned();
-    }
-    let mut temp = env
-        .as_ref()
-        .map(|e| (**e).clone())
-        .unwrap_or_else(|| Environment::new("temp", "Temp"));
-    for (k, v_opt) in mutations {
-        if let Some(val) = v_opt {
-            if let Some(v_item) = temp.variables.iter_mut().find(|v| v.key == *k) {
-                v_item.current_value = val.clone();
-            } else {
-                temp.variables.push(EnvironmentVariable {
-                    key: k.clone(),
-                    initial_value: String::new(),
-                    current_value: val.clone(),
-                    secret: false,
-                });
-            }
-        } else {
-            temp.variables.retain(|v| v.key != *k);
-        }
-    }
-    Some(temp)
-}
-
 /// Forwards connection events to the UI channel until the connection ends.
 fn pump_connection(
     request_id: &str,
     mut events: UnboundedReceiver<WsEvent>,
     outgoing: UnboundedSender<WsOutgoing>,
-    ui_tx: UnboundedSender<WsUiEvent>,
+    ui_tx: UnboundedSender<SendEvent>,
 ) {
     let request_id = request_id.to_string();
     tokio::spawn(async move {
@@ -332,22 +258,22 @@ fn pump_connection(
                 WsEvent::Connected {
                     response_headers,
                     duration_ms,
-                } => WsUiEvent::Connected {
+                } => SendEvent::HandshakeConnected {
                     request_id: request_id.clone(),
                     outgoing: outgoing.clone(),
                     response_headers,
                     duration_ms,
                 },
-                WsEvent::Message(message) => WsUiEvent::Message {
+                WsEvent::Message(frame) => SendEvent::Frame {
                     request_id: request_id.clone(),
-                    message,
+                    frame,
                 },
-                WsEvent::Closed { code, reason } => WsUiEvent::Closed {
+                WsEvent::Closed { code, reason } => SendEvent::HandshakeClosed {
                     request_id: request_id.clone(),
                     code,
                     reason,
                 },
-                WsEvent::Error(error) => WsUiEvent::Failed {
+                WsEvent::Error(error) => SendEvent::Failed {
                     request_id: request_id.clone(),
                     error,
                 },
