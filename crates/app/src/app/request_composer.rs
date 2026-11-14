@@ -3,15 +3,12 @@ use super::AppView;
 use crate::components::*;
 use crate::state::*;
 use crate::theme::theme;
-use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::input::Textarea;
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::tab::{Tab, TabBar};
-use gpui_kit::component::{Icon, Sizable as _};
+use gpui_kit::component::Sizable as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{div, px, AnyElement, Context, IntoElement, ParentElement, Styled, Window};
-use zest_core::models::{Auth, Protocol, WsMessageFormat};
+use zest_core::models::{Auth, Protocol};
 
 impl AppView {
     pub(crate) fn render_request_composer(
@@ -282,162 +279,31 @@ impl AppView {
                             Protocol::WebSocket => {
                                 let view_send = app_view_entity.clone();
                                 let view_ping = app_view_entity.clone();
-                                let ws_menu = ws_entity.clone();
-                                let ed_menu = ed_entity.clone();
-                                let req_id_menu = req_id_str.clone();
                                 let msg_format =
                                     active_req.map(|r| r.ws_message_format).unwrap_or_default();
-                                div()
-                                    .size_full()
-                                    .flex()
-                                    .flex_col()
-                                    .overflow_hidden()
-                                    // Toolbar: [Format ▾] .................. [Ping] [Send]
-                                    .child(
-                                        div()
-                                            .h(px(32.))
-                                            .px(px(8.))
-                                            .border_b_1()
-                                            .border_color(t.border)
-                                            .bg(t.bg_editor)
-                                            .flex()
-                                            .items_center()
-                                            .gap(px(6.))
-                                            .child(
-                                                div()
-                                                    .flex()
-                                                    .items_center()
-                                                    .flex_1()
-                                                    .min_w(px(0.))
-                                                    .child(
-                                                        Button::new("btn-ws-format-dropdown")
-                                                            .secondary()
-                                                            .compact()
-                                                            .px(px(8.))
-                                                            .py(px(2.))
-                                                            .h(px(24.))
-                                                            .rounded(px(4.))
-                                                            .child(
-                                                                div()
-                                                                    .flex()
-                                                                    .items_center()
-                                                                    .gap(px(6.))
-                                                                    .child(
-                                                                        div()
-                                                                            .text_xs()
-                                                                            .font_weight(
-                                                                                gpui_kit::FontWeight::MEDIUM,
-                                                                            )
-                                                                            .text_color(
-                                                                                t.text_primary,
-                                                                            )
-                                                                            .child(
-                                                                                msg_format.as_str(),
-                                                                            ),
-                                                                    )
-                                                                    .child(
-                                                                        Icon::new(
-                                                                            IconName::ChevronDown,
-                                                                        )
-                                                                        .size(px(12.))
-                                                                        .text_color(t.text_muted),
-                                                                    ),
-                                                            )
-                                                            .dropdown_menu(
-                                                                move |menu, _window, _cx| {
-                                                                    let mut m = menu;
-                                                                    let ws_text = ws_menu.clone();
-                                                                    let ed_text = ed_menu.clone();
-                                                                    let id_text =
-                                                                        req_id_menu.clone();
-                                                                    m = m.item(
-                                                                        PopupMenuItem::new("Text")
-                                                                            .checked(msg_format.is_text())
-                                                                            .on_click(
-                                                                                move |_, _, cx| {
-                                                                                    ws_text.update(
-                                                                                        cx,
-                                                                                        |ws, _| {
-                                                                                            ws.update_active_request(&id_text, |r| {
-                                                                                                r.set_ws_message_format(WsMessageFormat::Text);
-                                                                                            });
-                                                                                        },
-                                                                                    );
-                                                                                    ed_text.update(
-                                                                                        cx,
-                                                                                        |ed, cx| {
-                                                                                            ed.mark_dirty(cx);
-                                                                                        },
-                                                                                    );
-                                                                                },
-                                                                            ),
-                                                                    );
-                                                                    let ws_json = ws_menu.clone();
-                                                                    let ed_json = ed_menu.clone();
-                                                                    let id_json =
-                                                                        req_id_menu.clone();
-                                                                    m = m.item(
-                                                                        PopupMenuItem::new("JSON")
-                                                                            .checked(msg_format.is_json())
-                                                                            .on_click(
-                                                                                move |_, _, cx| {
-                                                                                    ws_json.update(
-                                                                                        cx,
-                                                                                        |ws, _| {
-                                                                                            ws.update_active_request(&id_json, |r| {
-                                                                                                r.set_ws_message_format(WsMessageFormat::Json);
-                                                                                            });
-                                                                                        },
-                                                                                    );
-                                                                                    ed_json.update(
-                                                                                        cx,
-                                                                                        |ed, cx| {
-                                                                                            ed.mark_dirty(cx);
-                                                                                        },
-                                                                                    );
-                                                                                },
-                                                                            ),
-                                                                    );
-                                                                    m
-                                                                },
-                                                            ),
-                                                    ),
-                                            )
-                                            .child(
-                                                Button::new("btn-ws-ping")
-                                                    .ghost()
-                                                    .xsmall()
-                                                    .label("Ping")
-                                                    .on_click(move |_, _, cx| {
-                                                        view_ping.update(cx, |view, cx| {
-                                                            view.send_ws_ping(cx);
-                                                        });
-                                                    }),
-                                            )
-                                            .child(
-                                                Button::new("btn-ws-send")
-                                                    .primary()
-                                                    .xsmall()
-                                                    .label("Send")
-                                                    .on_click(move |_, window, cx| {
-                                                        view_send.update(cx, |view, cx| {
-                                                            view.send_ws_message(window, cx);
-                                                        });
-                                                    }),
-                                            ),
-                                    )
-                                    // Outgoing message editor. Content is
-                                    // session-only, never persisted.
-                                    .child(
-                                        div().flex_1().min_h(px(0.)).overflow_hidden().child(
-                                            Textarea::new(
-                                                &self.composer_inputs.ws_message_textarea,
-                                            )
-                                            .appearance(false)
-                                            .bordered(false)
-                                            .h(gpui_kit::relative(1.)),
-                                        ),
-                                    )
+                                div().size_full().child(
+                                    super::ws_message_tab::render_ws_message_tab(
+                                        msg_format,
+                                        super::ws_message_tab::WsMessageTabContext {
+                                            workspace_state: &self.state.workspace,
+                                            editor_state: &self.state.session,
+                                            message_textarea: &self
+                                                .composer_inputs
+                                                .ws_message_textarea,
+                                            on_send_message: std::rc::Rc::new(move |window, cx| {
+                                                view_send.update(cx, |view, cx| {
+                                                    view.send_ws_message(window, cx);
+                                                });
+                                            }),
+                                            on_ping: std::rc::Rc::new(move |cx| {
+                                                view_ping.update(cx, |view, cx| {
+                                                    view.send_ws_ping(cx);
+                                                });
+                                            }),
+                                        },
+                                        cx,
+                                    ),
+                                )
                             }
                             Protocol::Grpc => div().size_full().child({
                                 let payload =
@@ -448,11 +314,12 @@ impl AppView {
                                         workspace_state: &self.state.workspace,
                                         editor_state: &self.state.session,
                                         toast_state: &self.state.toast,
-                                        message_editor: &self.composer_inputs.grpc_message_editor,
-                                        error_marks: &self.composer_inputs.grpc_error_marks,
+                                        message_editor: &self.composer_inputs.grpc.message_editor,
+                                        error_marks: &self.composer_inputs.grpc.error_marks,
                                         diagnostics_hover: &self
                                             .composer_inputs
-                                            .grpc_diagnostics_hover,
+                                            .grpc
+                                            .diagnostics_hover,
                                     },
                                     window,
                                     cx,
@@ -472,7 +339,7 @@ impl AppView {
                                 on_fetch_schema: std::rc::Rc::new(move |cx| {
                                     view_fetch.update(cx, |view, cx| view.fetch_grpc_schema(cx));
                                 }),
-                                proto_path_input: &self.composer_inputs.grpc_proto_path_input,
+                                proto_path_input: &self.composer_inputs.grpc.proto_path_input,
                             },
                             window,
                             cx,
@@ -497,33 +364,18 @@ impl AppView {
                                 format!("params-kv-{}", req_id_str),
                                 params,
                                 move |idx, k, v, enabled, _, cx| {
-                                    ws_up.update(cx, |ws, _| {
-                                        ws.update_active_request(&req_id_k, |r| {
-                                            r.update_param(idx, k, v, enabled);
-                                        });
-                                    });
-                                    ed_up.update(cx, |state, cx| {
-                                        state.mark_dirty(cx);
+                                    edit_active_request(&ws_up, &ed_up, &req_id_k, cx, |r| {
+                                        r.update_param(idx, k, v, enabled);
                                     });
                                 },
                                 move |_, cx| {
-                                    ws_add.update(cx, |ws, _| {
-                                        ws.update_active_request(&req_id_a, |r| {
-                                            r.add_param();
-                                        });
-                                    });
-                                    ed_add.update(cx, |state, cx| {
-                                        state.mark_dirty(cx);
+                                    edit_active_request(&ws_add, &ed_add, &req_id_a, cx, |r| {
+                                        r.add_param();
                                     });
                                 },
                                 move |idx, _, cx| {
-                                    ws_del.update(cx, |ws, _| {
-                                        ws.update_active_request(&req_id_d, |r| {
-                                            r.remove_param(idx);
-                                        });
-                                    });
-                                    ed_del.update(cx, |state, cx| {
-                                        state.mark_dirty(cx);
+                                    edit_active_request(&ws_del, &ed_del, &req_id_d, cx, |r| {
+                                        r.remove_param(idx);
                                     });
                                 },
                             )
@@ -552,33 +404,18 @@ impl AppView {
                                     format!("headers-kv-{}", req_id_str),
                                     headers,
                                     move |idx, k, v, enabled, _, cx| {
-                                        ws_up.update(cx, |ws, _| {
-                                            ws.update_active_request(&req_id_k, |r| {
-                                                r.update_header(idx, k, v, enabled);
-                                            });
-                                        });
-                                        ed_up.update(cx, |state, cx| {
-                                            state.mark_dirty(cx);
+                                        edit_active_request(&ws_up, &ed_up, &req_id_k, cx, |r| {
+                                            r.update_header(idx, k, v, enabled);
                                         });
                                     },
                                     move |_, cx| {
-                                        ws_add.update(cx, |ws, _| {
-                                            ws.update_active_request(&req_id_a, |r| {
-                                                r.add_header();
-                                            });
-                                        });
-                                        ed_add.update(cx, |state, cx| {
-                                            state.mark_dirty(cx);
+                                        edit_active_request(&ws_add, &ed_add, &req_id_a, cx, |r| {
+                                            r.add_header();
                                         });
                                     },
                                     move |idx, _, cx| {
-                                        ws_del.update(cx, |ws, _| {
-                                            ws.update_active_request(&req_id_d, |r| {
-                                                r.remove_header(idx);
-                                            });
-                                        });
-                                        ed_del.update(cx, |state, cx| {
-                                            state.mark_dirty(cx);
+                                        edit_active_request(&ws_del, &ed_del, &req_id_d, cx, |r| {
+                                            r.remove_header(idx);
                                         });
                                     },
                                 )

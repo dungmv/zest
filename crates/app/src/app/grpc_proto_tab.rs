@@ -1,4 +1,4 @@
-use crate::state::{RequestSessionState, WorkspaceDataState};
+use crate::state::{edit_active_request, RequestSessionState, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Input, InputState};
@@ -69,12 +69,9 @@ pub fn render_grpc_proto_tab(
                         .small()
                         .label("Reflection")
                         .on_click(move |_, _, cx| {
-                            ws_reflect.update(cx, |ws, _| {
-                                ws.update_active_request(&req_reflect, |r| {
-                                    r.grpc_mut().use_reflection = true;
-                                });
+                            edit_active_request(&ws_reflect, &ed_reflect, &req_reflect, cx, |r| {
+                                r.grpc_mut().use_reflection = true;
                             });
-                            ed_reflect.update(cx, |ed, cx| ed.mark_dirty(cx));
                         }),
                 )
                 .child(
@@ -84,12 +81,9 @@ pub fn render_grpc_proto_tab(
                         .small()
                         .label(".proto file")
                         .on_click(move |_, _, cx| {
-                            ws_fetch.update(cx, |ws, _| {
-                                ws.update_active_request(&req_fetch, |r| {
-                                    r.grpc_mut().use_reflection = false;
-                                });
+                            edit_active_request(&ws_fetch, &ed_fetch, &req_fetch, cx, |r| {
+                                r.grpc_mut().use_reflection = false;
                             });
-                            ed_fetch.update(cx, |ed, cx| ed.mark_dirty(cx));
                         }),
                 )
                 .child(div().flex_1())

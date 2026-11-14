@@ -1,6 +1,7 @@
 pub mod about_modal;
 pub mod body_editor;
 pub mod command_palette;
+pub mod common;
 pub mod completion;
 pub mod console_panel;
 pub mod env_input;
@@ -24,6 +25,7 @@ pub mod toast;
 pub use about_modal::*;
 pub use body_editor::*;
 pub use command_palette::*;
+pub use common::*;
 pub use console_panel::*;
 pub use env_modal::*;
 pub use git::*;

@@ -7,40 +7,43 @@ description: >-
 
 # HTTP Pipeline & Execution Engine Guide
 
-This skill governs the networking pipeline in `zest-core::http` and the application execution services in `crates/app/src/services/`.
+This skill governs the networking pipeline in `zest-core::http`, the protocol-neutral machinery in `zest-core::transport`, and the application execution services in `crates/app/src/services/`.
 
 ---
 
-## 1. Architectural Separation: `HttpEngine` vs `Runner`
+## 1. Architectural Separation: Unified Send Pipeline (`Runner` + engines)
 
-The HTTP execution flow is decoupled from the GPUI main thread into two layers:
+All three transports (HTTP, WebSocket, gRPC) share ONE send pipeline. Protocol dispatch lives in `Runner::send_current_request` (never in the View layer); the shared preamble is split into `gather_send_context` (pure reads) and `begin_send` (flips the sending state) so protocol-specific guards can run between the two; every engine emits the same `SendEvent` enum (`services/send_event.rs`) consumed by one pump (`Runner::spawn_send_pump`). Tokio-side shared stages live in `services/pipeline.rs` (`run_pre_request_stage`, `merge_env_mutations`).
 
 ```
-UI Interaction (AppView / RequestComposer / URL Enter)
+UI Interaction (AppView::send_current_request delegates to the Runner)
       │
       ▼
 Runner::send_current_request(cx)  [crates/app/src/services/runner.rs]
-      │  ├── 1. Resolve hierarchical headers & auth (ws.resolve_request_hierarchy)
-      │  ├── 2. Apply global network settings (timeout, redirects, validate_tls)
-      │  └── 3. Snapshot cached effective_environment()
+      │  ├── gather_send_context: resolve hierarchy headers/auth, apply global
+      │  │   network settings, snapshot effective_environment
+      │  ├── protocol guard (WS: reject if already connected)
+      │  └── begin_send: cancel oneshot + start_sending
       │
-      ▼ (Spawns onto Tokio runtime via HttpEngine::execute)
-HttpEngine::execute(req_item, env, cancel_rx) [crates/app/src/services/http_engine.rs]
+      ▼ (Dispatch by protocol onto the shared tokio runtime)
+HttpEngine::execute / WsService::connect / GrpcEngine::invoke
       │
-      ├── 1. Resolve dynamic fake variables in-place (resolve_fake_vars_in_request)
-      ├── 2. Run Pre-request Script (ScriptSandbox::run_pre_request) & emit ExecEvent::Started
-      ├── 3. Merge pre-script env mutations & build ResolvedRequest + apply_pre_script_mutations
-      ├── 4. Send over network via ReqwestExecutor with HttpProgress streaming & cancel_rx select
-      ├── 5. Run Post-response / Test Script (ScriptSandbox::run_post_response)
-      └── 6. Emit ExecEvent::Success { Arc<HttpResponseRecord>, Box<PreRequestOutput>, Box<PostResponseOutput> }
+      ├── 1. pipeline::run_pre_request_stage (fake vars + pre-request script)
+      ├── 2. pipeline::merge_env_mutations & ResolvedRequest::from_item (zest-core transport)
+      ├── 3. Transport-specific work (ReqwestExecutor / WebSocketClient / GrpcClient)
+      └── 4. Emit SendEvent (Started { env_mutations, .. } / Progress / Frame /
+             HttpSuccess / HandshakeConnected / CallCompleted / Failed / Cancelled)
       │
       ▼ (Unbounded mpsc channel consumed by GPUI async task)
-Runner updates RequestSessionState, EnvironmentState, ResponseState, and saves .loc cache
+Runner::spawn_send_pump updates RequestSessionState, EnvironmentState,
+ResponseState, and saves the .loc cache (HTTP only)
 ```
 
 ### Key Rules:
-1. **`HttpEngine` is 100% UI-independent**: It depends only on `zest-core` and `tokio`, never on GPUI or `Window`.
-2. **Zero-Copy Payload Transfer (SL-006, TD-009)**: Wrap `HttpResponseRecord` in `Arc<HttpResponseRecord>` and box `PreRequestOutput` / `PostResponseOutput` inside `ExecEvent::Success` to keep channel messages small and avoid deep-copying body buffers.
+1. **Engines are 100% UI-independent**: They depend only on `zest-core` and `tokio`, never on GPUI or `Window`.
+2. **Zero-Copy Payload Transfer (SL-006, TD-009)**: Wrap `HttpResponseRecord` in `Arc<HttpResponseRecord>` and box `PostResponseOutput` inside `SendEvent::HttpSuccess` to keep channel messages small and avoid deep-copying body buffers.
+3. **One Event Vocabulary**: Never reintroduce per-protocol event enums (`ExecEvent` / `WsUiEvent` / `GrpcUiEvent` are gone); extend `SendEvent` instead.
+4. **Protocol-neutral machinery lives in `zest-core::transport`** (ResolvedRequest, hierarchy merge, RequestError, TransportFrame frame log) — WS/gRPC must not import from `zest_core::http` or borrow `WsMessage`-typed logs.
 3. **Cached Formatted Body (PERF-007)**: `ResponseState` caches `CachedResponseFormat` (pretty and raw text + line slices) keyed by the `Arc<HttpResponseRecord>` pointer so toggling `Pretty` / `Raw` in the inspector is $O(1)$ without re-parsing JSON/XML.
 
 ---
@@ -59,7 +62,7 @@ In `crates/core/src/http/executor.rs`, `ReqwestExecutor` manages persistent HTTP
 
 ## 3. Hierarchy & Variable Resolution
 
-### 3.1 Shared Header & Auth Inheritance (`crates/core/src/http/hierarchy.rs`)
+### 3.1 Shared Header & Auth Inheritance (`crates/core/src/transport/hierarchy.rs`)
 Both send-time resolution (`resolve_hierarchical_headers_and_auth`) and the read-only composer projection (`resolve_inherited_headers` -> `Vec<InheritedHeader>`) use the same `HeaderMerger`:
 - **Precedence Chain**: `Workspace` -> `Parent Folder Chain` (outermost to innermost) -> `Request`.
 - **Headers**: Case-insensitive key matching where child overrides ancestor while preserving first-seen order. In the UI (`components/inherited_headers.rs`), ancestor headers overridden by the request are flagged `overridden_by_request: true`.

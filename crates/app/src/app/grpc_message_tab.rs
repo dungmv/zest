@@ -1,4 +1,6 @@
-use crate::state::{RequestSessionState, ToastState, WorkspaceDataState};
+use crate::components::format_json_editor;
+use crate::components::message_toolbar;
+use crate::state::{edit_active_request, RequestSessionState, ToastState, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -65,14 +67,7 @@ pub fn render_grpc_message_tab(
         .overflow_hidden()
         // Toolbar: [Service/Method ▾] ................. [Format JSON]
         .child(
-            div()
-                .h(px(32.))
-                .px(px(8.))
-                .border_b_1()
-                .border_color(t.border)
-                .bg(t.bg_editor)
-                .flex()
-                .items_center()
+            message_toolbar()
                 .child(
                     div()
                         .flex()
@@ -130,16 +125,18 @@ pub fn render_grpc_message_tab(
                                                 PopupMenuItem::new(info.label())
                                                     .checked(selected)
                                                     .on_click(move |_, _, cx| {
-                                                        ws_set.update(cx, |ws, _| {
-                                                            ws.update_active_request(&id, |r| {
+                                                        edit_active_request(
+                                                            &ws_set,
+                                                            &ed_set,
+                                                            &id,
+                                                            cx,
+                                                            |r| {
                                                                 let payload = r.grpc_mut();
                                                                 payload.service = svc_name.clone();
                                                                 payload.method =
                                                                     method_name.clone();
-                                                            });
-                                                        });
-                                                        ed_set
-                                                            .update(cx, |ed, cx| ed.mark_dirty(cx));
+                                                            },
+                                                        );
                                                     }),
                                             );
                                         }
@@ -154,22 +151,13 @@ pub fn render_grpc_message_tab(
                         .xsmall()
                         .label("Format JSON")
                         .on_click(move |_, window, cx: &mut App| {
-                            let raw = message_editor.read(cx).value().to_string();
-                            match serde_json::from_str::<serde_json::Value>(&raw) {
-                                Ok(val) => {
-                                    if let Ok(pretty) = serde_json::to_string_pretty(&val) {
-                                        message_editor.update(cx, |txt, cx| {
-                                            txt.set_value(pretty, window, cx);
-                                        });
-                                        ed_format.update(cx, |ed, cx| ed.mark_dirty(cx));
-                                    }
-                                }
-                                Err(e) => {
-                                    toast_state.update(cx, |toast, cx| {
-                                        toast.push_error("Invalid JSON", e.to_string(), cx);
-                                    });
-                                }
-                            }
+                            format_json_editor(
+                                &message_editor,
+                                &ed_format,
+                                Some(&toast_state),
+                                window,
+                                cx,
+                            );
                         }),
                 ),
         )

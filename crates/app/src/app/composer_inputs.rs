@@ -10,6 +10,20 @@ use zest_core::models::{Auth, Protocol, RequestBody};
 type HighlighterFactory =
     Rc<dyn Fn(&str) -> Option<Box<dyn gpui_kit::component::input::InputHighlighter>>>;
 
+/// gRPC composer inputs: the message editor plus everything that decorates
+/// it (proto path, validation gutter marks, hover gate).
+pub struct GrpcComposerFields {
+    /// gRPC request message JSON editor (persisted into `GrpcPayload`).
+    pub message_editor: Entity<CodeEditorState>,
+    /// `.proto` file path input for gRPC requests (persisted).
+    pub proto_path_input: Entity<InputState>,
+    /// Red gutter marks for gRPC message validation errors.
+    pub error_marks: GutterDecorationCollection,
+    /// Whether the pointer currently hovers the gRPC message editor —
+    /// gates the in-editor diagnostic tooltip (hover-only by design).
+    pub diagnostics_hover: Rc<std::cell::Cell<bool>>,
+}
+
 pub struct ComposerInputs {
     pub url_input: Entity<InputState>,
     pub json_editor: Entity<CodeEditorState>,
@@ -22,17 +36,9 @@ pub struct ComposerInputs {
     pub basic_pass_input: Entity<InputState>,
     pub apikey_key_input: Entity<InputState>,
     pub apikey_val_input: Entity<InputState>,
-    /// gRPC request message JSON editor (persisted into `GrpcPayload`).
-    pub grpc_message_editor: Entity<CodeEditorState>,
+    pub grpc: GrpcComposerFields,
     /// WebSocket outgoing message box (session-only, never persisted).
     pub ws_message_textarea: Entity<TextareaState>,
-    /// `.proto` file path input for gRPC requests (persisted).
-    pub grpc_proto_path_input: Entity<InputState>,
-    /// Red gutter marks for gRPC message validation errors.
-    pub grpc_error_marks: GutterDecorationCollection,
-    /// Whether the pointer currently hovers the gRPC message editor —
-    /// gates the in-editor diagnostic tooltip (hover-only by design).
-    pub grpc_diagnostics_hover: std::rc::Rc<std::cell::Cell<bool>>,
     /// Request that currently owns `ws_message_textarea` content.
     ws_message_owner: Option<String>,
 }
@@ -137,11 +143,13 @@ impl ComposerInputs {
             basic_pass_input,
             apikey_key_input,
             apikey_val_input,
-            grpc_message_editor,
+            grpc: GrpcComposerFields {
+                message_editor: grpc_message_editor,
+                proto_path_input: grpc_proto_path_input,
+                error_marks: grpc_error_marks,
+                diagnostics_hover: grpc_diagnostics_hover,
+            },
             ws_message_textarea,
-            grpc_proto_path_input,
-            grpc_error_marks,
-            grpc_diagnostics_hover,
             ws_message_owner: None,
         }
     }
@@ -313,7 +321,7 @@ impl ComposerInputs {
         }
         if req.protocol == Protocol::Grpc {
             let message_json = req.grpc_message_json().to_string();
-            self.grpc_message_editor.update(cx, |txt, cx| {
+            self.grpc.message_editor.update(cx, |txt, cx| {
                 txt.set_value(message_json, window, cx);
             });
             let proto_path = req
@@ -321,11 +329,11 @@ impl ComposerInputs {
                 .as_ref()
                 .and_then(|g| g.proto_path.clone())
                 .unwrap_or_default();
-            self.grpc_proto_path_input.update(cx, |inp, cx| {
+            self.grpc.proto_path_input.update(cx, |inp, cx| {
                 inp.set_value(proto_path, window, cx);
             });
         } else {
-            self.grpc_message_editor.update(cx, |txt, cx| {
+            self.grpc.message_editor.update(cx, |txt, cx| {
                 txt.set_value(String::new(), window, cx);
             });
         }

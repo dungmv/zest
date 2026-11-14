@@ -5,7 +5,7 @@ use crate::components::completion::env_autocomplete::{
     CANDIDATE_LIST_WIDTH,
 };
 use crate::components::status_badge::{MethodBadge, ProtocolBadge};
-use crate::state::{EnvironmentState, ModalState, RequestSessionState};
+use crate::state::{edit_active_request, EnvironmentState, ModalState, RequestSessionState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -511,13 +511,8 @@ fn render_http_method_dropdown(
                     })
                     .checked(mth == method)
                     .on_click(move |_, _, cx| {
-                        ws_set.update(cx, |ws, _| {
-                            ws.update_active_request(&req_id, |r| {
-                                r.set_method(mth);
-                            });
-                        });
-                        ed_set.update(cx, |ed, cx| {
-                            ed.mark_dirty(cx);
+                        edit_active_request(&ws_set, &ed_set, &req_id, cx, |r| {
+                            r.set_method(mth);
                         });
                     }),
                 )

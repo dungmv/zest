@@ -30,5 +30,6 @@ pub use request_session_state::*;
 pub use response_state::*;
 pub use sidebar_state::*;
 pub use toast_state::*;
+pub use workspace_crud::*;
 pub use workspace_data_state::*;
 pub use workspace_events::*;

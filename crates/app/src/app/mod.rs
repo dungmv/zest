@@ -8,6 +8,7 @@ pub mod modals;
 pub mod request_composer;
 pub mod subscriptions;
 pub mod workspace_event_handler;
+pub mod ws_message_tab;
 
 pub use actions::*;
 pub use composer_inputs::*;
@@ -251,14 +252,15 @@ impl AppView {
             .unwrap_or_default();
         let text = self
             .composer_inputs
-            .grpc_message_editor
+            .grpc
+            .message_editor
             .read(cx)
             .value()
             .to_string();
         crate::components::completion::validation::refresh_grpc_validation(
-            &self.composer_inputs.grpc_message_editor,
-            &self.composer_inputs.grpc_error_marks,
-            self.composer_inputs.grpc_diagnostics_hover.get(),
+            &self.composer_inputs.grpc.message_editor,
+            &self.composer_inputs.grpc.error_marks,
+            self.composer_inputs.grpc.diagnostics_hover.get(),
             &schema.pool,
             &payload.service,
             &payload.method,

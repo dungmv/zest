@@ -41,8 +41,8 @@ pub fn setup_app_subscriptions(
     let json_editor = &targets.composer_inputs.json_editor;
     let xml_editor = &targets.composer_inputs.xml_editor;
     let raw_textarea = &targets.composer_inputs.raw_textarea;
-    let grpc_message_editor = &targets.composer_inputs.grpc_message_editor;
-    let grpc_proto_path_input = &targets.composer_inputs.grpc_proto_path_input;
+    let grpc_message_editor = &targets.composer_inputs.grpc.message_editor;
+    let grpc_proto_path_input = &targets.composer_inputs.grpc.proto_path_input;
     let bearer_token_input = &targets.composer_inputs.bearer_token_input;
     let basic_user_input = &targets.composer_inputs.basic_user_input;
     let basic_pass_input = &targets.composer_inputs.basic_pass_input;
@@ -195,8 +195,8 @@ pub fn setup_app_subscriptions(
     // 2c. Subscribe to gRPC message editor change (persisted into GrpcPayload)
     let ed_grpc = editor_state.clone();
     let ws_grpc = workspace_state.clone();
-    let grpc_marks = targets.composer_inputs.grpc_error_marks.clone();
-    let grpc_hover = targets.composer_inputs.grpc_diagnostics_hover.clone();
+    let grpc_marks = targets.composer_inputs.grpc.error_marks.clone();
+    let grpc_hover = targets.composer_inputs.grpc.diagnostics_hover.clone();
     subscriptions.push(cx.subscribe(grpc_message_editor, move |_, txt, event, cx| {
         if let InputEvent::Change = event {
             let val = txt.read(cx).value().to_string();

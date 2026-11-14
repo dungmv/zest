@@ -10,8 +10,11 @@ pub use json::*;
 pub use multipart::*;
 pub use xml::*;
 
+use crate::components::format_json_editor;
+use crate::components::message_toolbar;
 use crate::state::{
-    EnvironmentState, ModalState, RequestSessionState, ToastState, WorkspaceDataState,
+    edit_active_request, EnvironmentState, ModalState, RequestSessionState, ToastState,
+    WorkspaceDataState,
 };
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -152,14 +155,7 @@ impl RenderOnce for BodyEditor {
             .flex_col()
             // Top format selector bar: Dropdown [Body Type ▾] (left) and Format Button (right)
             .child(
-                div()
-                    .h(px(32.))
-                    .px(px(8.))
-                    .border_b_1()
-                    .border_color(t.border)
-                    .bg(t.bg_editor)
-                    .flex()
-                    .items_center()
+                message_toolbar()
                     .justify_between()
                     .child({
                         let ed_menu = ed_entity.clone();
@@ -202,16 +198,11 @@ impl RenderOnce for BodyEditor {
                                         .checked(is_none)
                                         .on_click(move |_, _, cx| {
                                             if let Some(ws) = &ws_none {
-                                                ws.update(cx, |ws, _| {
-                                                    ws.update_active_request(&id_none, |r| {
-                                                        r.set_body_type(RequestBody::None);
-                                                        r.update_content_type_header(None);
-                                                    });
+                                                edit_active_request(ws, &ed_none, &id_none, cx, |r| {
+                                                    r.set_body_type(RequestBody::None);
+                                                    r.update_content_type_header(None);
                                                 });
                                             }
-                                            ed_none.update(cx, |state, cx| {
-                                                state.mark_dirty(cx);
-                                            });
                                         }),
                                 );
 
@@ -440,36 +431,13 @@ impl RenderOnce for BodyEditor {
                                 .xsmall()
                                 .label("Format JSON")
                                 .on_click(move |_, window, cx: &mut App| {
-                                    let raw = j_text.read(cx).value().to_string();
-                                    match serde_json::from_str::<serde_json::Value>(&raw) {
-                                        Ok(val) => {
-                                            if let Ok(pretty) =
-                                                serde_json::to_string_pretty(&val)
-                                            {
-                                                j_text.update(cx, |txt, cx| {
-                                                    txt.set_value(
-                                                        pretty.clone(),
-                                                        window,
-                                                        cx,
-                                                    );
-                                                });
-                                                ed_c.update(cx, |state, cx| {
-                                                    state.mark_dirty(cx);
-                                                });
-                                            }
-                                        }
-                                        Err(e) => {
-                                            if let Some(ts) = &toast_opt {
-                                                ts.update(cx, |toast, cx| {
-                                                    toast.push_error(
-                                                        "JSON Format Error",
-                                                        e.to_string(),
-                                                        cx,
-                                                    );
-                                                });
-                                            }
-                                        }
-                                    }
+                                    format_json_editor(
+                                        &j_text,
+                                        &ed_c,
+                                        toast_opt.as_ref(),
+                                        window,
+                                        cx,
+                                    );
                                 })
                                 .into_any_element()
                         } else if is_xml {

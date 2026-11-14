@@ -7,6 +7,7 @@ mod messages_tab;
 mod request_sent_tab;
 mod timing_popover;
 
+use crate::components::status_pill;
 use crate::components::tabs_with_badge::render_tab_badge;
 use crate::state::{RequestSessionState, ResponseState, ResponseTabKind, WorkspaceDataState};
 use crate::theme::theme;
@@ -141,28 +142,10 @@ impl RenderOnce for ResponseInspector {
                                 .flex()
                                 .items_center()
                                 .gap(px(8.))
-                                .child(
-                                    div()
-                                        .px(px(6.))
-                                        .py(px(2.))
-                                        .rounded(px(4.))
-                                        .bg(gpui_kit::Hsla {
-                                            a: 0.12,
-                                            ..status_color
-                                        })
-                                        .border_1()
-                                        .border_color(gpui_kit::Hsla {
-                                            a: 0.3,
-                                            ..status_color
-                                        })
-                                        .text_xs()
-                                        .font_weight(gpui_kit::FontWeight::NORMAL)
-                                        .text_color(status_color)
-                                        .child(format!(
-                                            "● {} {}",
-                                            resp.status_code, resp.status_text
-                                        )),
-                                )
+                                .child(status_pill(
+                                    format!("● {} {}", resp.status_code, resp.status_text),
+                                    status_color,
+                                ))
                                 .child({
                                     // Duration with timing popover hover/click
                                     div()
@@ -366,18 +349,7 @@ impl ResponseInspector {
             ),
             None => ("\u{25cf} Not called".to_string(), t.text_muted),
         };
-        div()
-            .px(px(6.))
-            .py(px(2.))
-            .rounded(px(4.))
-            .bg(gpui_kit::Hsla { a: 0.12, ..color })
-            .border_1()
-            .border_color(gpui_kit::Hsla { a: 0.3, ..color })
-            .text_xs()
-            .font_weight(gpui_kit::FontWeight::NORMAL)
-            .text_color(color)
-            .child(label)
-            .into_any_element()
+        status_pill(label, color)
     }
 
     /// Connection status pill for WebSocket requests (non-sending states).
@@ -395,17 +367,6 @@ impl ResponseInspector {
             WebSocketStatus::Failed(err) => format!("{label}: {err}"),
             _ => label.to_string(),
         };
-        div()
-            .px(px(6.))
-            .py(px(2.))
-            .rounded(px(4.))
-            .bg(gpui_kit::Hsla { a: 0.12, ..color })
-            .border_1()
-            .border_color(gpui_kit::Hsla { a: 0.3, ..color })
-            .text_xs()
-            .font_weight(gpui_kit::FontWeight::NORMAL)
-            .text_color(color)
-            .child(title)
-            .into_any_element()
+        status_pill(title, color)
     }
 }

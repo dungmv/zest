@@ -1,9 +1,27 @@
-use super::{WorkspaceDataState, WorkspaceEvent};
+use super::{RequestSessionState, WorkspaceDataState, WorkspaceEvent};
 use crate::settings::AppSettings;
-use gpui_kit::Context;
+use gpui_kit::{App, Context, Entity};
 use std::path::PathBuf;
 use zest_core::models::{HttpMethod, Protocol, RequestItem};
 use zest_core::storage::models::RequestFile;
+
+/// Pairs `update_active_request` with a `mark_dirty` on the session state —
+/// the standard "edit the active request and flag it for persistence"
+/// boilerplate shared by every composer control.
+pub fn edit_active_request(
+    workspace_state: &Entity<WorkspaceDataState>,
+    session_state: &Entity<RequestSessionState>,
+    req_id: &str,
+    cx: &mut App,
+    edit: impl FnOnce(&mut RequestItem),
+) {
+    workspace_state.update(cx, |ws, _| {
+        ws.update_active_request(req_id, edit);
+    });
+    session_state.update(cx, |ed, cx| {
+        ed.mark_dirty(cx);
+    });
+}
 
 impl WorkspaceDataState {
     /// Conventional HTTP verb persisted for a request of the given protocol.
