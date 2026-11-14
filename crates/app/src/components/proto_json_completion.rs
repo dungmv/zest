@@ -65,34 +65,41 @@ impl CompletionProvider for ProtoJsonCompletionProvider {
         let Some(message) = self.current_message(cx) else {
             return Task::ready(Ok(CompletionResponse::Array(vec![])));
         };
-        let Some((replace_start, replace_end, candidates)) =
-            json_field_candidates(&message, prefix)
-        else {
+        let Some((span, candidates)) = json_field_candidates(&message, prefix) else {
             return Task::ready(Ok(CompletionResponse::Array(vec![])));
         };
 
-        let start_pos = rope.offset_to_position(replace_start);
-        let end_pos = rope.offset_to_position(replace_end);
+        let start_pos = rope.offset_to_position(span.replace_start);
+        let end_pos = rope.offset_to_position(span.replace_end);
 
         let items: Vec<CompletionItem> = candidates
             .into_iter()
-            .map(|suggestion| CompletionItem {
-                label: suggestion.name.clone(),
-                filter_text: Some(suggestion.name.clone()),
-                kind: Some(CompletionItemKind::FIELD),
-                detail: Some(suggestion.type_label.clone()),
-                documentation: Some(Documentation::String(format!(
-                    "{} — {}",
-                    suggestion.name, suggestion.type_label
-                ))),
-                text_edit: Some(CompletionTextEdit::Edit(TextEdit {
-                    range: LspRange {
-                        start: start_pos,
-                        end: end_pos,
-                    },
-                    new_text: suggestion.name.clone(),
-                })),
-                ..Default::default()
+            .map(|suggestion| {
+                // Without a typed opening quote the inserted name must carry
+                // its own quotes to keep the JSON valid.
+                let new_text = if span.needs_quote {
+                    format!("\"{}\"", suggestion.name)
+                } else {
+                    suggestion.name.clone()
+                };
+                CompletionItem {
+                    label: suggestion.name.clone(),
+                    filter_text: Some(suggestion.name.clone()),
+                    kind: Some(CompletionItemKind::FIELD),
+                    detail: Some(suggestion.type_label.clone()),
+                    documentation: Some(Documentation::String(format!(
+                        "{} — {}",
+                        suggestion.name, suggestion.type_label
+                    ))),
+                    text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                        range: LspRange {
+                            start: start_pos,
+                            end: end_pos,
+                        },
+                        new_text,
+                    })),
+                    ..Default::default()
+                }
             })
             .collect();
 
@@ -136,22 +143,28 @@ pub struct KeySuggestion {
     pub type_label: String,
 }
 
+/// Where a key completion applies and how the inserted text must look.
+pub struct KeyCompletionSpan {
+    pub replace_start: usize,
+    pub replace_end: usize,
+    /// True when no opening quote was typed: accepting a suggestion inserts
+    /// the name wrapped in quotes.
+    pub needs_quote: bool,
+}
+
 /// Suggests the JSON keys available at the cursor position of a partially
 /// typed message, tracking nested objects through the typed JSON. Returns
-/// the span the completion replaces (the partially typed key, excluding any
-/// closing quote) plus the matching fields.
+/// the span the completion replaces (the partially typed key — with or
+/// without its opening quote) plus the matching fields.
 fn json_field_candidates(
     root: &MessageDescriptor,
     prefix: &str,
-) -> Option<(usize, usize, Vec<KeySuggestion>)> {
-    let (current, replace_start) = locate_message_context(root, prefix)?;
-    // The query is the exact span the completion will replace: the trailing
-    // identifier characters (a closed string's quote stays untouched).
-    let ident: String = prefix[replace_start..]
+) -> Option<(KeyCompletionSpan, Vec<KeySuggestion>)> {
+    let (current, span) = locate_message_context(root, prefix)?;
+    let query: String = prefix[span.replace_start..span.replace_end]
         .chars()
         .take_while(|c| c.is_alphanumeric() || *c == '_')
         .collect();
-    let replace_end = replace_start + ident.len();
     let mut candidates: Vec<KeySuggestion> = current
         .fields()
         .map(|field| KeySuggestion {
@@ -159,23 +172,23 @@ fn json_field_candidates(
             type_label: type_label(&field),
         })
         .collect();
-    if !ident.is_empty() {
-        let lower = ident.to_lowercase();
+    if !query.is_empty() {
+        let lower = query.to_lowercase();
         candidates.retain(|s| s.name.to_lowercase().starts_with(&lower));
     }
     if candidates.is_empty() {
         None
     } else {
-        Some((replace_start, replace_end, candidates))
+        Some((span, candidates))
     }
 }
 
-/// Walks the typed JSON prefix to find which message the cursor is inside.
-/// Returns that message and where the current (partial) key began.
+/// Walks the typed JSON prefix to find which message the cursor is inside
+/// and where the current (partial) key begins.
 fn locate_message_context(
     root: &MessageDescriptor,
     prefix: &str,
-) -> Option<(MessageDescriptor, usize)> {
+) -> Option<(MessageDescriptor, KeyCompletionSpan)> {
     let bytes = prefix.as_bytes();
     let mut stack: Vec<Option<MessageDescriptor>> = Vec::new();
     // `None` = inside an object whose schema is unknown (e.g. a map literal).
@@ -207,7 +220,14 @@ fn locate_message_context(
                         return None;
                     }
                     let current = current?;
-                    return Some((current, start + 1));
+                    return Some((
+                        current,
+                        KeyCompletionSpan {
+                            replace_start: start + 1,
+                            replace_end: prefix.len(),
+                            needs_quote: false,
+                        },
+                    ));
                 }
                 let content = &prefix[start + 1..i];
                 i += 1;
@@ -222,7 +242,14 @@ fn locate_message_context(
                     // String closed exactly at the cursor (e.g. auto-paired
                     // quotes) while a key is expected here.
                     let current = current?;
-                    return Some((current, start + 1));
+                    return Some((
+                        current,
+                        KeyCompletionSpan {
+                            replace_start: start + 1,
+                            replace_end: i,
+                            needs_quote: false,
+                        },
+                    ));
                 } else {
                     expecting_value = false;
                 }
@@ -256,15 +283,33 @@ fn locate_message_context(
         i += 1;
     }
     let current = current?;
-    // No trailing quote under the cursor: suggestions still apply when the
-    // cursor sits where a key may start (right after `{` or `,`), inserted
-    // directly at the caret. Value positions (right after `":` or a
-    // completed value) yield nothing.
-    let last_significant = prefix.bytes().rev().find(|b| !b.is_ascii_whitespace());
-    match last_significant {
-        Some(b'{') | Some(b',') => Some((current, prefix.len())),
-        _ => None,
+    // No string under the cursor: suggestions still apply while an
+    // identifier is being typed (or the cursor sits where a key may start)
+    // right after `{` or `,` — the inserted name is then wrapped in quotes.
+    // Value positions (right after `":` or a completed value) yield nothing.
+    let ident_len: usize = prefix
+        .chars()
+        .rev()
+        .take_while(|c| c.is_alphanumeric() || *c == '_')
+        .map(char::len_utf8)
+        .sum();
+    let before_ident = &prefix[..prefix.len() - ident_len];
+    let opener = before_ident
+        .bytes()
+        .rev()
+        .find(|b| !b.is_ascii_whitespace());
+    let key_position = matches!(opener, Some(b'{') | Some(b','));
+    if !key_position {
+        return None;
     }
+    Some((
+        current,
+        KeyCompletionSpan {
+            replace_start: prefix.len() - ident_len,
+            replace_end: prefix.len(),
+            needs_quote: true,
+        },
+    ))
 }
 
 fn find_field(desc: &MessageDescriptor, name: &str) -> Option<FieldRef> {
@@ -401,12 +446,24 @@ pub fn update_grpc_diagnostics(
         if let Some(set) = state.diagnostics_mut() {
             set.clear();
             if let Err(e) = result {
-                let position = Position {
+                // Span the diagnostic from the error column to the end of
+                // the line: a zero-width range paints no decoration and its
+                // hover hit-test would only match one pixel column.
+                let line_chars = text
+                    .split('\n')
+                    .nth(e.line)
+                    .map(|line| line.chars().count() as u32)
+                    .unwrap_or(e.column as u32);
+                let start = Position {
                     line: e.line as u32,
-                    character: e.column as u32,
+                    character: (e.column as u32).min(line_chars),
+                };
+                let end = Position {
+                    line: e.line as u32,
+                    character: line_chars,
                 };
                 set.push(Diagnostic {
-                    range: position..position,
+                    range: start..end,
                     severity: DiagnosticSeverity::Error,
                     message: e.message.clone().into(),
                     source: Some("zest-grpc".into()),

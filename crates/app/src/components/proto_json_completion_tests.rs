@@ -34,14 +34,15 @@ fn order_message() -> MessageDescriptor {
 
 fn names(prefix: &str) -> Vec<String> {
     match json_field_candidates(&order_message(), prefix) {
-        Some((_, _, candidates)) => candidates.into_iter().map(|c| c.name).collect(),
+        Some((_, candidates)) => candidates.into_iter().map(|c| c.name).collect(),
         None => Vec::new(),
     }
 }
 
 #[test]
 fn test_top_level_candidates_and_replace_offset() {
-    let (start, _end, candidates) = json_field_candidates(&order_message(), "{\"").unwrap();
+    let (span, candidates) = json_field_candidates(&order_message(), "{\"").unwrap();
+    assert!(!span.needs_quote);
     let mut names: Vec<String> = candidates.into_iter().map(|c| c.name).collect();
     names.sort();
     assert_eq!(
@@ -54,8 +55,8 @@ fn test_top_level_candidates_and_replace_offset() {
             "tags".to_string()
         ]
     );
-    // Suggestions insert at the cursor (right after the opening quote).
-    assert_eq!(start, 2);
+    // Suggestions replace the partially typed key after the quote.
+    assert_eq!((span.replace_start, span.replace_end), (2, 2));
 }
 
 #[test]
@@ -87,19 +88,36 @@ fn test_map_literal_has_no_candidates() {
 fn test_manual_trigger_positions() {
     // Ctrl+Space right after `{` (no quote typed): all fields inserted at
     // the caret.
-    let (start, end, candidates) = json_field_candidates(&order_message(), "{").unwrap();
-    assert_eq!((start, end), (1, 1), "insert at caret, nothing replaced");
+    let (span, candidates) = json_field_candidates(&order_message(), "{").unwrap();
+    assert!(
+        span.needs_quote,
+        "no opening quote: insertion must carry quotes"
+    );
+    assert_eq!((span.replace_start, span.replace_end), (1, 1));
     assert_eq!(candidates.len(), 5);
 
-    // After a comma separating members: insertion at the caret.
+    // After a comma separating members: insertion at the caret, quoted.
     let prefix = "{\"id\": \"a\", ";
-    let (start, end, candidates) = json_field_candidates(&order_message(), prefix).unwrap();
-    assert_eq!((start, end), (prefix.len(), prefix.len()));
+    let (span, candidates) = json_field_candidates(&order_message(), prefix).unwrap();
+    assert!(span.needs_quote);
+    assert_eq!(
+        (span.replace_start, span.replace_end),
+        (prefix.len(), prefix.len())
+    );
     assert_eq!(candidates.len(), 5);
+
+    // Typing an identifier without a quote still suggests, and the
+    // completion span covers the partial identifier (quoted on insert).
+    let prefix = "{\"id\": \"a\", qu";
+    let (span, candidates) = json_field_candidates(&order_message(), prefix).unwrap();
+    assert!(span.needs_quote);
+    assert_eq!((span.replace_start, span.replace_end), (12, 14));
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].name, "quantity");
 
     // Nested: right after the inner `{`.
     let nested = json_field_candidates(&order_message(), "{\"customer\": {").unwrap();
-    assert_eq!(nested.2.len(), 2);
+    assert_eq!(nested.1.len(), 2);
 
     // Value positions yield nothing.
     assert!(json_field_candidates(&order_message(), "{\"id\": ").is_none());
@@ -123,10 +141,11 @@ fn test_repeated_message_element_suggests_element_fields() {
     let cart = pool.get_message_by_name("shop2.Cart").unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 
-    let (start, _end, candidates) = json_field_candidates(&cart, "{\"items\":[{\"").unwrap();
+    let (span, candidates) = json_field_candidates(&cart, "{\"items\":[{\"").unwrap();
+    assert!(!span.needs_quote);
     let names: Vec<String> = candidates.into_iter().map(|c| c.name).collect();
     assert_eq!(names, vec!["sku".to_string()]);
-    assert!(start > 0);
+    assert!(span.replace_start > 0);
 }
 
 mod validation {
