@@ -12,6 +12,7 @@ pub mod version;
 
 use app::*;
 use gpui_kit::assets::AllAssets;
+use gpui_kit::component::input::ShowCompletions;
 use gpui_kit::*;
 use platform::default_window_options;
 
@@ -86,6 +87,18 @@ fn main() {
         cx.bind_keys([
             KeyBinding::new("ctrl-enter", SendRequest, None),
             KeyBinding::new("cmd-enter", SendRequest, None),
+            // Manual completion popup in text editors (context-scoped so the
+            // combo stays free outside editors).
+            KeyBinding::new(
+                "ctrl-space",
+                ShowCompletions,
+                Some("Input && mode == editor"),
+            ),
+            KeyBinding::new(
+                "cmd-space",
+                ShowCompletions,
+                Some("Input && mode == editor"),
+            ),
             KeyBinding::new("ctrl-k", ToggleCommandPalette, None),
             KeyBinding::new("cmd-k", ToggleCommandPalette, None),
             KeyBinding::new("ctrl-b", ToggleSidebar, None),
