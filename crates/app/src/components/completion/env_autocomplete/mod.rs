@@ -109,6 +109,22 @@ pub fn detect_unclosed_env_var_at(
     matches.pop()
 }
 
+/// Byte offset of an unclosed `{{` span (start of the braces plus the query
+/// typed so far) under JSON-editor semantics: the span terminates only at
+/// `}}`, a newline, or a quote. This is the hand-over point used by editor
+/// completion providers to delegate to [`EnvCompletionProvider`] —
+/// deliberately narrower than [`detect_unclosed_env_var_at`], whose extra
+/// stop characters are meant for URL/text inputs.
+pub fn unclosed_env_span(prefix: &str) -> Option<(usize, &str)> {
+    let brace_pos = prefix.rfind("{{")?;
+    let after = &prefix[brace_pos + 2..];
+    if after.contains("}}") || after.contains('\n') || after.contains('"') {
+        None
+    } else {
+        Some((brace_pos, after))
+    }
+}
+
 /// Returns all available environment variables matching `query` (case-insensitive)
 pub fn get_env_completions(env: &EnvironmentState, query: &str) -> Vec<EnvVarCandidate> {
     let q = query.to_lowercase();
@@ -347,45 +363,42 @@ impl CompletionProvider for EnvCompletionProvider {
         let safe_offset = offset.min(full_text.len());
         let slice = &full_text[..safe_offset];
 
-        if let Some(brace_pos) = slice.rfind("{{") {
-            let after = &slice[brace_pos + 2..];
-            if !after.contains("}}") && !after.contains('\n') && !after.contains('"') {
-                let env = self.env_state.read(cx);
-                let candidates = get_env_completions(env, after);
+        if let Some((brace_pos, query)) = unclosed_env_span(slice) {
+            let env = self.env_state.read(cx);
+            let candidates = get_env_completions(env, query);
 
-                let start_pos = rope.offset_to_position(brace_pos);
-                let end_pos = rope.offset_to_position(safe_offset);
+            let start_pos = rope.offset_to_position(brace_pos);
+            let end_pos = rope.offset_to_position(safe_offset);
 
-                let items: Vec<CompletionItem> = candidates
-                    .into_iter()
-                    .map(|c| {
-                        let label = format!("{{{{{}}}}}", c.name);
-                        let insert_text = format!("{{{{{}}}}}", c.name);
-                        CompletionItem {
-                            label: label.clone(),
-                            filter_text: Some(c.name.clone()),
-                            kind: Some(CompletionItemKind::VARIABLE),
-                            detail: Some(format!("{} • {}", c.detail_text(), c.scope)),
-                            documentation: Some(Documentation::String(format!(
-                                "Environment Variable: {}\nValue: {}\nScope: {}",
-                                c.name,
-                                c.detail_text(),
-                                c.scope
-                            ))),
-                            text_edit: Some(CompletionTextEdit::Edit(TextEdit {
-                                range: LspRange {
-                                    start: start_pos,
-                                    end: end_pos,
-                                },
-                                new_text: insert_text,
-                            })),
-                            ..Default::default()
-                        }
-                    })
-                    .collect();
+            let items: Vec<CompletionItem> = candidates
+                .into_iter()
+                .map(|c| {
+                    let label = format!("{{{{{}}}}}", c.name);
+                    let insert_text = format!("{{{{{}}}}}", c.name);
+                    CompletionItem {
+                        label: label.clone(),
+                        filter_text: Some(c.name.clone()),
+                        kind: Some(CompletionItemKind::VARIABLE),
+                        detail: Some(format!("{} • {}", c.detail_text(), c.scope)),
+                        documentation: Some(Documentation::String(format!(
+                            "Environment Variable: {}\nValue: {}\nScope: {}",
+                            c.name,
+                            c.detail_text(),
+                            c.scope
+                        ))),
+                        text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                            range: LspRange {
+                                start: start_pos,
+                                end: end_pos,
+                            },
+                            new_text: insert_text,
+                        })),
+                        ..Default::default()
+                    }
+                })
+                .collect();
 
-                return Task::ready(Ok(CompletionResponse::Array(items)));
-            }
+            return Task::ready(Ok(CompletionResponse::Array(items)));
         }
 
         Task::ready(Ok(CompletionResponse::Array(vec![])))
@@ -530,6 +543,21 @@ mod tests {
         let mut replaced = text.to_string();
         replaced.replace_range(start..end, "{{base_url}}");
         assert_eq!(replaced, "https://api.com/{{base_url}}/users");
+    }
+
+    #[test]
+    fn test_unclosed_env_span() {
+        // Unclosed span: brace offset plus the query typed so far.
+        assert_eq!(unclosed_env_span("{"), None);
+        assert_eq!(unclosed_env_span("{{a"), Some((0, "a")));
+        assert_eq!(unclosed_env_span("x{{b"), Some((1, "b")));
+        // A closed span never matches, even with text after it.
+        assert_eq!(unclosed_env_span("{{a}}"), None);
+        assert_eq!(unclosed_env_span("{{a}}b"), None);
+        // A quote or newline after the braces terminates the span.
+        assert_eq!(unclosed_env_span("{{a\""), None);
+        assert_eq!(unclosed_env_span("{{a\nb"), None);
+        assert_eq!(unclosed_env_span("no braces"), None);
     }
 
     #[test]

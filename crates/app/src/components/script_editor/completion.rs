@@ -1,5 +1,7 @@
 use super::ScriptEditorKind;
-use crate::components::env_autocomplete::{detect_unclosed_env_var, get_env_completions};
+use crate::components::completion::env_autocomplete::{
+    detect_unclosed_env_var, get_env_completions,
+};
 use crate::state::EnvironmentState;
 use anyhow::Result;
 use gpui_kit::component::input::{CompletionProvider, Rope};

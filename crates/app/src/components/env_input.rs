@@ -1,4 +1,4 @@
-use crate::components::env_autocomplete::{
+use crate::components::completion::env_autocomplete::{
     build_tokenized_content, detect_unclosed_env_var, get_env_completions, get_variable_details,
     get_variable_kind_and_color, handle_autocomplete_keydown, render_candidate_detail_card,
     render_candidate_row, variable_value_tooltip, AutocompleteNavState, CANDIDATE_DETAIL_GAP,

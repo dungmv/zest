@@ -1,8 +1,8 @@
 pub mod about_modal;
 pub mod body_editor;
 pub mod command_palette;
+pub mod completion;
 pub mod console_panel;
-pub mod env_autocomplete;
 pub mod env_input;
 pub mod env_modal;
 pub mod git;
@@ -10,7 +10,6 @@ pub mod import_modal;
 pub mod inherited_headers;
 pub mod kv_table;
 pub mod modal_dialog;
-pub mod proto_json_completion;
 pub mod request_bar;
 pub mod response_inspector;
 pub mod scope_settings_modal;

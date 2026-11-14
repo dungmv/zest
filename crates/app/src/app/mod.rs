@@ -252,7 +252,7 @@ impl AppView {
             .read(cx)
             .value()
             .to_string();
-        crate::components::proto_json_completion::refresh_grpc_validation(
+        crate::components::completion::validation::refresh_grpc_validation(
             &self.composer_inputs.grpc_message_editor,
             &self.composer_inputs.grpc_error_marks,
             self.composer_inputs.grpc_diagnostics_hover.get(),

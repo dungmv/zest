@@ -55,7 +55,9 @@ impl ComposerInputs {
             let mut state = CodeEditorState::new(window, cx);
             state.set_highlighter_factory(highlighter_factory.clone(), cx);
             state.lsp_mut().completion_provider = Some(Rc::new(
-                crate::components::env_autocomplete::EnvCompletionProvider::new(env_state.clone()),
+                crate::components::completion::env_autocomplete::EnvCompletionProvider::new(
+                    env_state.clone(),
+                ),
             ));
             state.language("json").line_number(true).folding(true)
         });
@@ -64,7 +66,9 @@ impl ComposerInputs {
             let mut state = CodeEditorState::new(window, cx);
             state.set_highlighter_factory(highlighter_factory.clone(), cx);
             state.lsp_mut().completion_provider = Some(Rc::new(
-                crate::components::env_autocomplete::EnvCompletionProvider::new(env_state.clone()),
+                crate::components::completion::env_autocomplete::EnvCompletionProvider::new(
+                    env_state.clone(),
+                ),
             ));
             state.language("xml").line_number(true).folding(true)
         });
@@ -75,7 +79,7 @@ impl ComposerInputs {
             let mut state = CodeEditorState::new(window, cx);
             state.set_highlighter_factory(highlighter_factory.clone(), cx);
             state.lsp_mut().completion_provider = Some(Rc::new(
-                crate::components::proto_json_completion::ProtoJsonCompletionProvider::new(
+                crate::components::completion::proto_json::ProtoJsonCompletionProvider::new(
                     env_state.clone(),
                     session_state.clone(),
                     workspace_state.clone(),
@@ -158,7 +162,9 @@ impl ComposerInputs {
         if matches!(scope, ComposerSyncScope::All) {
             let tokenized_url = {
                 let env = env_state.read(cx);
-                crate::components::env_autocomplete::build_tokenized_content(&req.url, env)
+                crate::components::completion::env_autocomplete::build_tokenized_content(
+                    &req.url, env,
+                )
             };
             self.url_input.update(cx, |inp, cx| {
                 inp.set_value(tokenized_url, window, cx);
@@ -171,7 +177,7 @@ impl ComposerInputs {
                     self.bearer_token_input.update(cx, |inp, cx| {
                         let env = env_m.read(cx);
                         inp.set_value(
-                            crate::components::env_autocomplete::build_tokenized_content(
+                            crate::components::completion::env_autocomplete::build_tokenized_content(
                                 token, env,
                             ),
                             window,
@@ -185,7 +191,7 @@ impl ComposerInputs {
                     self.basic_user_input.update(cx, |inp, cx| {
                         let env = env_u.read(cx);
                         inp.set_value(
-                            crate::components::env_autocomplete::build_tokenized_content(
+                            crate::components::completion::env_autocomplete::build_tokenized_content(
                                 username, env,
                             ),
                             window,
@@ -195,7 +201,7 @@ impl ComposerInputs {
                     self.basic_pass_input.update(cx, |inp, cx| {
                         let env = env_p.read(cx);
                         inp.set_value(
-                            crate::components::env_autocomplete::build_tokenized_content(
+                            crate::components::completion::env_autocomplete::build_tokenized_content(
                                 password, env,
                             ),
                             window,
@@ -209,7 +215,7 @@ impl ComposerInputs {
                     self.apikey_key_input.update(cx, |inp, cx| {
                         let env = env_k.read(cx);
                         inp.set_value(
-                            crate::components::env_autocomplete::build_tokenized_content(key, env),
+                            crate::components::completion::env_autocomplete::build_tokenized_content(key, env),
                             window,
                             cx,
                         );
@@ -217,7 +223,7 @@ impl ComposerInputs {
                     self.apikey_val_input.update(cx, |inp, cx| {
                         let env = env_v.read(cx);
                         inp.set_value(
-                            crate::components::env_autocomplete::build_tokenized_content(
+                            crate::components::completion::env_autocomplete::build_tokenized_content(
                                 value, env,
                             ),
                             window,

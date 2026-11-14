@@ -3,7 +3,7 @@ use super::workspace_event_handler::{
     handle_environment_event, handle_response_event, handle_session_event, handle_workspace_event,
 };
 use super::AppView;
-use crate::components::env_autocomplete::{attach_missing_var_tokens, RetokenizeGuard};
+use crate::components::completion::env_autocomplete::{attach_missing_var_tokens, RetokenizeGuard};
 use crate::state::{
     EnvironmentEvent, EnvironmentState, GitState, ModalState, PersistenceState,
     RequestSessionState, ResponseEvent, ResponseState, SessionEvent, SidebarState, ToastState,
@@ -212,7 +212,7 @@ pub fn setup_app_subscriptions(
                 .find_request(&active_id)
                 .and_then(|r| r.grpc.clone())
                 .unwrap_or_default();
-            crate::components::proto_json_completion::refresh_grpc_validation(
+            crate::components::completion::validation::refresh_grpc_validation(
                 &txt,
                 &grpc_marks,
                 grpc_hover.get(),

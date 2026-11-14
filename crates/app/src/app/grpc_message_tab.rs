@@ -198,7 +198,7 @@ pub fn render_grpc_message_tab(
                             .unwrap_or_default();
                         let schema = ed_hover.read(cx).grpc_schema.clone().unwrap_or_default();
                         let text = editor_hover.read(cx).value().to_string();
-                        crate::components::proto_json_completion::refresh_grpc_validation(
+                        crate::components::completion::validation::refresh_grpc_validation(
                             &editor_hover,
                             &marks_hover,
                             hovered,
