@@ -116,7 +116,9 @@ pub async fn list_services_via_reflection(channel: Channel) -> Result<Vec<String
                 .service
                 .into_iter()
                 .map(|s| s.name)
-                .filter(|name| !name.starts_with("grpc."))
+                // Hide only the reflection services themselves; standard
+                // grpc.* services like grpc.health.v1.Health stay callable.
+                .filter(|name| !name.starts_with("grpc.reflection."))
                 .collect());
         }
     }

@@ -431,7 +431,9 @@ fn summarize_pool(pool: &zest_core::grpc::DescriptorPool) -> GrpcSchemaSummary {
                         .collect(),
                 )
             })
-            .filter(|(name, _)| !name.starts_with("grpc."))
+            // Hide only the reflection services themselves; standard
+            // grpc.* services like grpc.health.v1.Health stay callable.
+            .filter(|(name, _)| !name.starts_with("grpc.reflection."))
             .collect(),
     }
 }
