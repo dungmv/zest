@@ -1,5 +1,5 @@
 use super::fs_store::FsWorkspaceStore;
-use crate::models::HttpMethod;
+use crate::models::{HttpMethod, Protocol};
 use crate::storage::fingerprints::DiskFingerprints;
 use crate::storage::fs_ops::{
     create_group, create_request, delete_group, delete_request, move_group, move_request,
@@ -270,17 +270,20 @@ impl WorkspaceStore for FsWorkspaceStore {
         Ok(())
     }
 
-    fn create_request(
+    fn create_request_typed(
         &self,
         folder_rel: Option<&str>,
         name: &str,
         method: HttpMethod,
         url: &str,
+        protocol: Protocol,
     ) -> Result<(String, String)> {
         let req = RequestFile {
             name: name.to_string(),
             method,
             url: url.to_string(),
+            protocol,
+            grpc: None,
             ..Default::default()
         };
         let (slug, path) =

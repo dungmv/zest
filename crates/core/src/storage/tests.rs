@@ -1,6 +1,6 @@
 use super::slug::unique_slug;
 use super::*;
-use crate::models::HttpMethod;
+use crate::models::{GrpcPayload, HttpMethod, Protocol};
 use crate::storage::serialize::to_yaml_string;
 #[test]
 fn test_byte_identical_roundtrip_request() {
@@ -8,6 +8,8 @@ fn test_byte_identical_roundtrip_request() {
         name: "Login".to_string(),
         method: HttpMethod::Post,
         url: "{{base_url}}/api/auth/login".to_string(),
+        protocol: Protocol::Http,
+        grpc: None,
         params: vec![RequestKvItem {
             key: "debug".to_string(),
             value: "1".to_string(),
@@ -78,8 +80,7 @@ fn test_byte_identical_roundtrip_request() {
 }
 
 #[test]
-fn test_deny_unknown_fields_on_storage_models() {
-    let invalid_req = "name: Test\nmethod: GET\nurl: http://localhost\nunknown_field: 123\n";
+fn test_deny_unknown_fields_on_storage_models() {    let invalid_req = "name: Test\nmethod: GET\nurl: http://localhost\nunknown_field: 123\n";
     let res_req = serde_yaml::from_str::<RequestFile>(invalid_req);
     assert!(res_req.is_err(), "RequestFile must reject unknown fields");
 
@@ -104,6 +105,52 @@ fn test_deny_unknown_fields_on_storage_models() {
         res_env.is_err(),
         "EnvironmentFile must reject unknown fields"
     );
+}
+
+#[test]
+fn test_protocol_defaults_and_roundtrip() {
+    // Legacy YAML without a protocol key must load as HTTP and serialize
+    // byte-identically without introducing the key.
+    let legacy = "name: Old\nmethod: GET\nurl: https://api.com\n";
+    let req: RequestFile = serde_yaml::from_str(legacy).unwrap();
+    assert_eq!(req.protocol, Protocol::Http);
+    assert!(req.grpc.is_none());
+    let yaml = to_yaml_string(&req).unwrap();
+    assert!(!yaml.contains("protocol:"), "HTTP must omit protocol key");
+
+    // WebSocket round-trip
+    let ws_yaml = "name: Echo\nmethod: GET\nurl: wss://echo.example\nprotocol: websocket\n";
+    let ws_req: RequestFile = serde_yaml::from_str(ws_yaml).unwrap();
+    assert_eq!(ws_req.protocol, Protocol::WebSocket);
+    let ws_out = to_yaml_string(&ws_req).unwrap();
+    assert!(ws_out.contains("protocol: websocket"));
+
+    // gRPC round-trip with payload
+    let grpc_yaml = concat!(
+        "name: Greet\nmethod: POST\nurl: grpc://localhost:50051\nprotocol: grpc\n",
+        "grpc:\n",
+        "  use_reflection: true\n",
+        "  service: helloworld.Greeter\n",
+        "  method: SayHello\n",
+        "  message_json: '{\"name\": \"Zest\"}'\n",
+    );
+    let grpc_req: RequestFile = serde_yaml::from_str(grpc_yaml).unwrap();
+    assert_eq!(grpc_req.protocol, Protocol::Grpc);
+    let payload = grpc_req.grpc.as_ref().expect("grpc payload must parse");
+    assert_eq!(payload.service, "helloworld.Greeter");
+    assert_eq!(payload.method, "SayHello");
+    assert_eq!(payload.use_reflection, true);
+    assert!(payload.proto_path.is_none());
+    let grpc_out = to_yaml_string(&grpc_req).unwrap();
+    assert!(grpc_out.contains("protocol: grpc"));
+    assert!(grpc_out.contains("service: helloworld.Greeter"));
+
+    // gRPC rejects unknown payload fields
+    let bad = concat!(
+        "name: Greet\nmethod: POST\nurl: grpc://localhost\nprotocol: grpc\n",
+        "grpc:\n  unknown: 1\n",
+    );
+    assert!(serde_yaml::from_str::<RequestFile>(bad).is_err());
 }
 
 #[test]

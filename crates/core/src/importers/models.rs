@@ -1,5 +1,5 @@
 use crate::models::{
-    Auth, EnvironmentVariable, HttpMethod, KeyValuePair, RequestBody, ScriptConfig,
+    Auth, EnvironmentVariable, HttpMethod, KeyValuePair, Protocol, RequestBody, ScriptConfig,
 };
 use crate::storage::models::RequestExampleFile;
 use serde::{Deserialize, Serialize};
@@ -24,6 +24,7 @@ pub struct ImportedRequest {
     pub name: String,
     pub method: HttpMethod,
     pub url: String,
+    pub protocol: Protocol,
     pub params: Vec<KeyValuePair>,
     pub headers: Vec<KeyValuePair>,
     pub auth: Auth,

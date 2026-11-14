@@ -3,7 +3,7 @@ use super::models::{
 };
 use super::{push_folder_chain, split_folder_segments};
 use crate::models::{
-    ApiKeyLocation, Auth, EnvironmentVariable, HttpMethod, KeyValuePair, MultipartItem,
+    ApiKeyLocation, Auth, EnvironmentVariable, HttpMethod, KeyValuePair, MultipartItem, Protocol,
     RequestBody, ScriptConfig,
 };
 use crate::storage::models::{RequestExampleFile, RequestKvItem};
@@ -152,6 +152,21 @@ fn parse_items(
     }
 }
 
+/// Detects the transport protocol of a Postman request item. WebSocket items
+/// use method `WS`/`WSS` or a `ws://`/`wss://` URL; gRPC items use method
+/// `gRPC`/`GRPCCALL`. Everything else is plain HTTP.
+fn detect_protocol(method_str: &str, url: &str) -> Protocol {
+    let upper = method_str.to_uppercase();
+    let lower_url = url.to_lowercase();
+    if upper == "WS" || upper == "WSS" || lower_url.starts_with("ws://") || lower_url.starts_with("wss://") {
+        Protocol::WebSocket
+    } else if upper == "GRPC" || upper == "GRPCCALL" {
+        Protocol::Grpc
+    } else {
+        Protocol::Http
+    }
+}
+
 fn parse_single_request(
     name: &str,
     req_val: &Value,
@@ -165,6 +180,7 @@ fn parse_single_request(
             name: name.to_string(),
             method: HttpMethod::Get,
             url: url_str.to_string(),
+            protocol: detect_protocol("GET", url_str),
             params: Vec::new(),
             headers: Vec::new(),
             auth: Auth::None,
@@ -256,10 +272,13 @@ fn parse_single_request(
         .and_then(|d| d.as_str())
         .map(String::from);
 
+    let protocol = detect_protocol(method_str, &url);
+
     Ok(ImportedRequest {
         name: name.to_string(),
         method,
         url,
+        protocol,
         params: query_params,
         headers,
         auth,

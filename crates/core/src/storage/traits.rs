@@ -1,4 +1,4 @@
-use crate::models::HttpMethod;
+use crate::models::{HttpMethod, Protocol};
 use crate::storage::fingerprints::DiskFingerprints;
 use crate::storage::models::{
     EnvironmentFile, FolderFile, LocFile, LocalState, RequestFile, WorkspaceMeta, WorkspaceTree,
@@ -40,6 +40,18 @@ pub trait WorkspaceStore: Send + Sync {
         name: &str,
         method: HttpMethod,
         url: &str,
+    ) -> Result<(String, String)> {
+        self.create_request_typed(folder_rel, name, method, url, Protocol::Http)
+    }
+
+    /// Creates a request file with an explicit transport protocol.
+    fn create_request_typed(
+        &self,
+        folder_rel: Option<&str>,
+        name: &str,
+        method: HttpMethod,
+        url: &str,
+        protocol: Protocol,
     ) -> Result<(String, String)>; // (slug, rel_path)
     fn delete_request(&self, rel_path: &str) -> Result<()>;
     fn rename_request(&self, rel_path: &str, new_name: &str) -> Result<String>; // new rel_path

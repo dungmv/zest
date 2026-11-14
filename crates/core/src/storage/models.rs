@@ -1,7 +1,7 @@
 use crate::models::{
-    Auth, Environment, EnvironmentVariable, HttpMethod, HttpRequestItem, HttpResponseRecord,
-    KeyValuePair, MultipartItem, RequestBody, RequestSentInfo, RequestSettings, ScriptConfig,
-    TimingBreakdown,
+    Auth, Environment, EnvironmentVariable, GrpcPayload, HttpMethod, HttpRequestItem,
+    HttpResponseRecord, KeyValuePair, MultipartItem, Protocol, RequestBody, RequestSentInfo,
+    RequestSettings, ScriptConfig, TimingBreakdown,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -72,19 +72,25 @@ pub struct RequestExampleFile {
 /// 1. name
 /// 2. method
 /// 3. url
-/// 4. params
-/// 5. headers
-/// 6. auth
-/// 7. body
-/// 8. settings
-/// 9. script
-/// 10. examples (ALWAYS last)
+/// 4. protocol (omitted for HTTP)
+/// 5. grpc (omitted unless protocol is gRPC)
+/// 6. params
+/// 7. headers
+/// 8. auth
+/// 9. body
+/// 10. settings
+/// 11. script
+/// 12. examples (ALWAYS last)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RequestFile {
     pub name: String,
     pub method: HttpMethod,
     pub url: String,
+    #[serde(default, skip_serializing_if = "Protocol::is_http")]
+    pub protocol: Protocol,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grpc: Option<GrpcPayload>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub params: Vec<RequestKvItem>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -107,6 +113,8 @@ impl Default for RequestFile {
             name: "New Request".to_string(),
             method: HttpMethod::Get,
             url: String::new(),
+            protocol: Protocol::Http,
+            grpc: None,
             params: Vec::new(),
             headers: Vec::new(),
             auth: RequestAuth::None,
@@ -130,6 +138,8 @@ impl RequestFile {
             name: item.name,
             method: item.method,
             url: item.url,
+            protocol: item.protocol,
+            grpc: item.grpc,
             params: item.params,
             headers: item.headers,
             auth: item.auth,
@@ -153,6 +163,8 @@ impl RequestFile {
             name: self.name,
             method: self.method,
             url: self.url,
+            protocol: self.protocol,
+            grpc: self.grpc,
             params: self.params,
             headers: self.headers,
             auth: self.auth,
@@ -178,6 +190,8 @@ impl RequestFile {
             name: self.name.clone(),
             method: self.method,
             url: self.url.clone(),
+            protocol: self.protocol,
+            grpc: self.grpc.clone(),
             params: self.params.clone(),
             headers: self.headers.clone(),
             auth: self.auth.clone(),
@@ -194,6 +208,8 @@ impl RequestFile {
         self.name = item.name.clone();
         self.method = item.method;
         self.url = item.url.clone();
+        self.protocol = item.protocol;
+        self.grpc = item.grpc.clone();
         self.params = item.params.clone();
         self.headers = item.headers.clone();
         self.auth = item.auth.clone();

@@ -250,6 +250,7 @@ pub fn parse_openapi(content: &str) -> Result<ImportResult> {
                 name: req_name,
                 method: http_method,
                 url: full_url,
+                protocol: crate::models::Protocol::Http,
                 params: query_params,
                 headers: header_params,
                 auth,

@@ -50,6 +50,53 @@ impl std::str::FromStr for HttpMethod {
     }
 }
 
+/// Transport protocol of a request. HTTP is the implicit default so existing
+/// YAML files (which have no `protocol` key) deserialize unchanged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Protocol {
+    #[default]
+    Http,
+    WebSocket,
+    Grpc,
+}
+
+impl Protocol {
+    pub fn is_http(&self) -> bool {
+        matches!(self, Self::Http)
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Http => "HTTP",
+            Self::WebSocket => "WS",
+            Self::Grpc => "gRPC",
+        }
+    }
+}
+
+/// gRPC-specific request payload, present only when `protocol == Grpc`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct GrpcPayload {
+    /// Optional path to a `.proto` file. When `None` and `use_reflection` is
+    /// true, the schema is fetched via gRPC Server Reflection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proto_path: Option<String>,
+    #[serde(default = "default_true")]
+    pub use_reflection: bool,
+    /// Fully-qualified service name, e.g. `helloworld.Greeter`.
+    #[serde(default)]
+    pub service: String,
+    /// Method name within `service`, e.g. `SayHello`.
+    #[serde(default)]
+    pub method: String,
+    /// Request message(s) as raw JSON. Unary/server-streaming hold a single
+    /// JSON object; the editor content is verbatim (not parsed at rest).
+    #[serde(default)]
+    pub message_json: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct KeyValuePair {
@@ -320,6 +367,10 @@ pub struct HttpRequestItem {
     pub name: String,
     pub method: HttpMethod,
     pub url: String,
+    #[serde(default, skip_serializing_if = "Protocol::is_http")]
+    pub protocol: Protocol,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grpc: Option<GrpcPayload>,
     #[serde(default)]
     pub params: Vec<KeyValuePair>,
     #[serde(default)]
@@ -347,6 +398,16 @@ impl HttpRequestItem {
         method: HttpMethod,
         url: impl Into<String>,
     ) -> Self {
+        Self::new_with_protocol(workspace_id, name, method, url, Protocol::Http)
+    }
+
+    pub fn new_with_protocol(
+        workspace_id: impl Into<String>,
+        name: impl Into<String>,
+        method: HttpMethod,
+        url: impl Into<String>,
+        protocol: Protocol,
+    ) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             workspace_id: workspace_id.into(),
@@ -354,6 +415,8 @@ impl HttpRequestItem {
             name: name.into(),
             method,
             url: url.into(),
+            protocol,
+            grpc: None,
             params: Vec::new(),
             headers: Vec::new(),
             auth: Auth::Inherit,

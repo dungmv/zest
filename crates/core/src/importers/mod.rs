@@ -164,6 +164,8 @@ pub fn apply_import_to_workspace(
             name: req.name.clone(),
             method: req.method,
             url: req.url.clone(),
+            protocol: req.protocol,
+            grpc: None,
             params: req.params.clone(),
             headers: req.headers.clone(),
             auth: req.auth.clone(),
