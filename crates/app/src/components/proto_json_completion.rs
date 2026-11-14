@@ -194,7 +194,11 @@ fn locate_message_context(
                     i += 1;
                 }
                 if i >= bytes.len() {
-                    // Unterminated string at the cursor: the key being typed.
+                    // Unterminated string at the cursor. Right after a key's
+                    // `:` it is a value being typed — no key suggestions.
+                    if expecting_value {
+                        return None;
+                    }
                     let current = current?;
                     return Some((current, start + 1));
                 }
@@ -233,6 +237,8 @@ fn locate_message_context(
                 stack.push(current.take());
                 current = new_current;
                 last_key = None;
+                // Whatever precedes the brace, the next token is a key.
+                expecting_value = false;
             }
             b'}' => {
                 current = stack.pop().flatten();
@@ -243,18 +249,14 @@ fn locate_message_context(
         i += 1;
     }
     let current = current?;
-    Some((current, partial_key_start(prefix)?))
-}
-
-/// Byte offset of the trailing identifier characters that make up the
-/// partially typed key (the text after its opening quote).
-fn partial_key_start(prefix: &str) -> Option<usize> {
-    let start = prefix.rfind('"')? + 1;
-    let tail = &prefix[start..];
-    if tail.chars().all(|c| c.is_alphanumeric() || c == '_') {
-        Some(start)
-    } else {
-        None
+    // No trailing quote under the cursor: suggestions still apply when the
+    // cursor sits where a key may start (right after `{` or `,`), inserted
+    // directly at the caret. Value positions (right after `":` or a
+    // completed value) yield nothing.
+    let last_significant = prefix.bytes().rev().find(|b| !b.is_ascii_whitespace());
+    match last_significant {
+        Some(b'{') | Some(b',') => Some((current, prefix.len())),
+        _ => None,
     }
 }
 

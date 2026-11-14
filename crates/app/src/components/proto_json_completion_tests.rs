@@ -84,6 +84,30 @@ fn test_map_literal_has_no_candidates() {
 }
 
 #[test]
+fn test_manual_trigger_positions() {
+    // Ctrl+Space right after `{` (no quote typed): all fields inserted at
+    // the caret.
+    let (start, end, candidates) = json_field_candidates(&order_message(), "{").unwrap();
+    assert_eq!((start, end), (1, 1), "insert at caret, nothing replaced");
+    assert_eq!(candidates.len(), 5);
+
+    // After a comma separating members: insertion at the caret.
+    let prefix = "{\"id\": \"a\", ";
+    let (start, end, candidates) = json_field_candidates(&order_message(), prefix).unwrap();
+    assert_eq!((start, end), (prefix.len(), prefix.len()));
+    assert_eq!(candidates.len(), 5);
+
+    // Nested: right after the inner `{`.
+    let nested = json_field_candidates(&order_message(), "{\"customer\": {").unwrap();
+    assert_eq!(nested.2.len(), 2);
+
+    // Value positions yield nothing.
+    assert!(json_field_candidates(&order_message(), "{\"id\": ").is_none());
+    assert!(json_field_candidates(&order_message(), "{\"tags\": [\"ab").is_none());
+    assert!(json_field_candidates(&order_message(), "{\"id\": \"a\"").is_none());
+}
+
+#[test]
 fn test_repeated_message_element_suggests_element_fields() {
     let dir =
         std::env::temp_dir().join(format!("zest-completion-{}", uuid::Uuid::new_v4().simple()));
