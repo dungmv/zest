@@ -222,7 +222,7 @@ mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
     use std::sync::Arc;
-    use zest_core::models::HttpResponseRecord;
+    use zest_core::models::{HttpResponseRecord, Protocol};
     use zest_core::storage::{FsWorkspaceStore, WorkspaceStore};
 
     struct Listener;
@@ -242,7 +242,7 @@ mod tests {
     #[gpui_kit::test]
     fn test_rename_request_emits_single_ids_remapped_event(cx: &mut TestAppContext) {
         let (dir, _store, mut ws_raw) = test_workspace("rename-req");
-        let req = ws_raw.create_request_internal(None);
+        let req = ws_raw.create_request_internal(None, Protocol::Http);
         let req_id = req.id.clone();
         let ws = cx.new(|_| ws_raw);
 

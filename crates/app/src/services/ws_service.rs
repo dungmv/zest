@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::sync::oneshot;
 use zest_core::http::ResolvedRequest;
-use zest_core::models::{ConsoleLogEntry, Environment, EnvironmentVariable, HttpRequestItem};
+use zest_core::models::{ConsoleLogEntry, Environment, EnvironmentVariable, RequestItem};
 use zest_core::scripting::{
     resolve_fake_vars_in_request, PreRequestContext, PreRequestOutput, ScriptSandbox,
 };
@@ -110,7 +110,7 @@ impl WsService {
     /// replaced once the new handshake succeeds.
     pub fn connect(
         &self,
-        mut req_item: HttpRequestItem,
+        mut req_item: RequestItem,
         env: Option<Arc<Environment>>,
         cancel_rx: oneshot::Receiver<()>,
     ) -> UnboundedReceiver<WsUiEvent> {

@@ -2,7 +2,7 @@ use super::{WorkspaceDataState, WorkspaceEvent};
 use crate::settings::AppSettings;
 use gpui_kit::Context;
 use std::path::PathBuf;
-use zest_core::models::{HttpMethod, HttpRequestItem, Protocol};
+use zest_core::models::{HttpMethod, Protocol, RequestItem};
 use zest_core::storage::models::RequestFile;
 
 impl WorkspaceDataState {
@@ -15,19 +15,16 @@ impl WorkspaceDataState {
         }
     }
 
-    pub fn create_request_internal(&mut self, folder_rel: Option<String>) -> HttpRequestItem {
-        self.create_request_internal_typed(folder_rel, Protocol::Http)
-    }
-
-    pub fn create_request_internal_typed(
+    /// Creates a request of `protocol` in memory and on disk (scratch excepted).
+    pub fn create_request_internal(
         &mut self,
         folder_rel: Option<String>,
         protocol: Protocol,
-    ) -> HttpRequestItem {
+    ) -> RequestItem {
         let method = Self::protocol_method(protocol);
         let (_slug, rel_path) = self
             .store
-            .create_request_typed(folder_rel.as_deref(), "New Request", method, "", protocol)
+            .create_request(folder_rel.as_deref(), "New Request", method, "", protocol)
             .unwrap_or_else(|_| {
                 (
                     format!("req-{}", uuid::Uuid::new_v4().simple()),
@@ -37,7 +34,7 @@ impl WorkspaceDataState {
 
         let ws_name = self.workspace_meta.name.clone();
         let mut item =
-            HttpRequestItem::new_with_protocol(&ws_name, "New Request", method, "", protocol);
+            RequestItem::new_with_protocol(&ws_name, "New Request", method, "", protocol);
         item.id = rel_path.clone();
         item.folder_id = folder_rel;
 
@@ -49,25 +46,15 @@ impl WorkspaceDataState {
     pub fn create_request(
         &mut self,
         folder_rel: Option<String>,
-        cx: &mut Context<Self>,
-    ) -> HttpRequestItem {
-        let item = self.create_request_internal(folder_rel);
-        cx.notify();
-        item
-    }
-
-    pub fn create_request_typed(
-        &mut self,
-        folder_rel: Option<String>,
         protocol: Protocol,
         cx: &mut Context<Self>,
-    ) -> HttpRequestItem {
-        let item = self.create_request_internal_typed(folder_rel, protocol);
+    ) -> RequestItem {
+        let item = self.create_request_internal(folder_rel, protocol);
         cx.notify();
         item
     }
 
-    pub fn duplicate_request_internal(&mut self, req_id: &str) -> Option<HttpRequestItem> {
+    pub fn duplicate_request_internal(&mut self, req_id: &str) -> Option<RequestItem> {
         let existing = self.requests.iter().find(|r| r.id == req_id)?.clone();
         let mut req_file = self
             .store
@@ -90,6 +77,7 @@ impl WorkspaceDataState {
                 &new_name,
                 req_file.method,
                 &req_file.url,
+                req_file.protocol,
             )
             .ok()?;
 
@@ -106,7 +94,7 @@ impl WorkspaceDataState {
         &mut self,
         req_id: &str,
         cx: &mut Context<Self>,
-    ) -> Option<HttpRequestItem> {
+    ) -> Option<RequestItem> {
         let res = self.duplicate_request_internal(req_id);
         if res.is_some() {
             cx.notify();

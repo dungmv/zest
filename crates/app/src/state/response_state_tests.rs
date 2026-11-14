@@ -1,5 +1,6 @@
 use super::*;
 use zest_core::models::ConsoleLogSource;
+use zest_core::models::Protocol;
 
 #[test]
 fn test_start_sending_clears_active_data() {
@@ -167,6 +168,7 @@ fn test_load_for_request_from_cache() {
             "Login",
             zest_core::models::HttpMethod::Post,
             "http://localhost:8000/login",
+            Protocol::Http,
         )
         .unwrap();
 

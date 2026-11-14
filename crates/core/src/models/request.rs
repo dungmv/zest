@@ -359,7 +359,7 @@ pub struct TestResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct HttpRequestItem {
+pub struct RequestItem {
     pub id: String,
     pub workspace_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -391,7 +391,7 @@ pub struct HttpRequestItem {
     pub examples: Vec<crate::storage::models::RequestExampleFile>,
 }
 
-impl HttpRequestItem {
+impl RequestItem {
     pub fn new(
         workspace_id: impl Into<String>,
         name: impl Into<String>,
@@ -653,7 +653,7 @@ impl HttpRequestItem {
         };
     }
 
-    pub fn apply_imported_curl(&mut self, parsed: HttpRequestItem) {
+    pub fn apply_imported_curl(&mut self, parsed: RequestItem) {
         if self.name == "New Request" || self.name == "Untitled Request" || self.name.is_empty() {
             self.name = parsed.name;
         }

@@ -1,8 +1,8 @@
 use super::*;
-use crate::models::{HttpRequestItem, Protocol};
+use crate::models::{Protocol, RequestItem};
 
-fn ws_item(url: &str) -> HttpRequestItem {
-    let mut item = HttpRequestItem::new("ws", "Echo", crate::models::HttpMethod::Get, url);
+fn ws_item(url: &str) -> RequestItem {
+    let mut item = RequestItem::new("ws", "Echo", crate::models::HttpMethod::Get, url);
     item.protocol = Protocol::WebSocket;
     item
 }
@@ -47,7 +47,7 @@ fn test_handshake_rejects_invalid_header_value() {
     let resolved = ResolvedRequest::from_item(&item, None).unwrap();
 
     let err = WebSocketClient::build_handshake_request(&resolved).unwrap_err();
-    assert!(matches!(err, HttpError::InvalidHeader(_)), "got {err:?}");
+    assert!(matches!(err, RequestError::InvalidHeader(_)), "got {err:?}");
 }
 
 #[test]
@@ -64,8 +64,8 @@ fn test_connect_times_out_on_unroutable_host() {
     // the timeout race), never a panic. Map away the non-Debug handle first.
     let result = rt.block_on(async { WebSocketClient::connect(&resolved).await.map(|_| ()) });
     match result {
-        Err(HttpError::Timeout(300)) => {}
-        Err(HttpError::Network(msg)) if msg.contains("handshake") => {}
+        Err(RequestError::Timeout(300)) => {}
+        Err(RequestError::Network(msg)) if msg.contains("handshake") => {}
         other => panic!("unexpected result: {other:?}"),
     }
 }

@@ -7,6 +7,7 @@ mod tests {
     use crate::state::{FolderMoveOutcome, WorkspaceDataState};
     use std::path::PathBuf;
     use std::sync::Arc;
+    use zest_core::models::Protocol;
     use zest_core::storage::{FsWorkspaceStore, WorkspaceStore};
 
     fn setup_ws(tag: &str) -> (PathBuf, Arc<FsWorkspaceStore>, WorkspaceDataState) {
@@ -24,7 +25,7 @@ mod tests {
     #[test]
     fn test_rename_request_duplicate_slug_suffixes() {
         let (temp_dir, store, mut ws) = setup_ws("rename-req");
-        let a = ws.create_request_internal(None);
+        let a = ws.create_request_internal(None, Protocol::Http);
         let a_id = ws
             .rename_request_internal(&a.id, "Login")
             .expect("first rename");
@@ -32,7 +33,7 @@ mod tests {
 
         // Duplicate display names are accepted: the file slug is suffixed
         // while the display name stays exactly as typed.
-        let b = ws.create_request_internal(None);
+        let b = ws.create_request_internal(None, Protocol::Http);
         assert_eq!(
             ws.rename_request_internal(&b.id, "Login"),
             Some("login-2.yaml".to_string())
@@ -98,11 +99,11 @@ mod tests {
         let fa = ws.create_folder_internal(None, "A".to_string()).unwrap();
         let fb = ws.create_folder_internal(None, "B".to_string()).unwrap();
 
-        let ra = ws.create_request_internal(Some(fa.clone()));
+        let ra = ws.create_request_internal(Some(fa.clone()), Protocol::Http);
         let ra_id = ws
             .rename_request_internal(&ra.id, "Login")
             .expect("rename in A");
-        let rb = ws.create_request_internal(Some(fb.clone()));
+        let rb = ws.create_request_internal(Some(fb.clone()), Protocol::Http);
         let rb_id = ws
             .rename_request_internal(&rb.id, "Login")
             .expect("rename in B");
@@ -150,7 +151,7 @@ mod tests {
         ws.create_folder_internal(Some("users".to_string()), "Admin".to_string())
             .unwrap();
 
-        let req = ws.create_request_internal(Some("users/admin".to_string()));
+        let req = ws.create_request_internal(Some("users/admin".to_string()), Protocol::Http);
         ws.rename_request_internal(&req.id, "Login")
             .expect("rename");
         let login_id = "users/admin/login.yaml";
@@ -283,7 +284,7 @@ mod tests {
     #[test]
     fn test_flush_before_rename_preserves_pending_edits() {
         let (temp_dir, store, mut ws) = setup_ws("flush-rename");
-        let a = ws.create_request_internal(None);
+        let a = ws.create_request_internal(None, Protocol::Http);
         ws.rename_request_internal(&a.id, "Login").expect("rename");
 
         // Simulate an edit still waiting inside the 500 ms save debounce.

@@ -1,6 +1,6 @@
 use crate::models::{
-    Auth, Environment, EnvironmentVariable, GrpcPayload, HttpMethod, HttpRequestItem,
-    HttpResponseRecord, KeyValuePair, MultipartItem, Protocol, RequestBody, RequestSentInfo,
+    Auth, Environment, EnvironmentVariable, GrpcPayload, HttpMethod, HttpResponseRecord,
+    KeyValuePair, MultipartItem, Protocol, RequestBody, RequestItem, RequestSentInfo,
     RequestSettings, ScriptConfig, TimingBreakdown,
 };
 use serde::{Deserialize, Serialize};
@@ -127,13 +127,13 @@ impl Default for RequestFile {
 }
 
 impl RequestFile {
-    pub fn from_item(item: &HttpRequestItem) -> Self {
+    pub fn from_item(item: &RequestItem) -> Self {
         let mut file = Self::default();
         file.update_from_item(item);
         file
     }
 
-    pub fn from_item_owned(item: HttpRequestItem) -> Self {
+    pub fn from_item_owned(item: RequestItem) -> Self {
         Self {
             name: item.name,
             method: item.method,
@@ -155,8 +155,8 @@ impl RequestFile {
         id: impl Into<String>,
         workspace_id: impl Into<String>,
         folder_id: Option<String>,
-    ) -> HttpRequestItem {
-        HttpRequestItem {
+    ) -> RequestItem {
+        RequestItem {
             id: id.into(),
             workspace_id: workspace_id.into(),
             folder_id,
@@ -182,8 +182,8 @@ impl RequestFile {
         id: impl Into<String>,
         workspace_id: impl Into<String>,
         folder_id: Option<String>,
-    ) -> HttpRequestItem {
-        HttpRequestItem {
+    ) -> RequestItem {
+        RequestItem {
             id: id.into(),
             workspace_id: workspace_id.into(),
             folder_id,
@@ -204,7 +204,7 @@ impl RequestFile {
         }
     }
 
-    pub fn update_from_item(&mut self, item: &HttpRequestItem) {
+    pub fn update_from_item(&mut self, item: &RequestItem) {
         self.name = item.name.clone();
         self.method = item.method;
         self.url = item.url.clone();
@@ -220,8 +220,8 @@ impl RequestFile {
     }
 }
 
-impl From<HttpRequestItem> for RequestFile {
-    fn from(item: HttpRequestItem) -> Self {
+impl From<RequestItem> for RequestFile {
+    fn from(item: RequestItem) -> Self {
         Self::from_item_owned(item)
     }
 }

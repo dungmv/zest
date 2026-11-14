@@ -2,7 +2,7 @@ use super::{ComposerSyncScope, SessionEvent};
 use crate::services::GrpcSchemaSummary;
 use gpui_kit::{Context, Task};
 use tokio::sync::oneshot;
-use zest_core::models::{HttpRequestItem, Protocol};
+use zest_core::models::{Protocol, RequestItem};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum RequestTabKind {
@@ -270,7 +270,7 @@ pub fn is_auto_name(name: &str, old_url: &str) -> bool {
 
 /// Returns the display name of a request (custom name if set, otherwise "Untitled Request"),
 /// capped at `MAX_DISPLAY_TITLE_LEN` characters.
-pub fn effective_request_name(req: &HttpRequestItem) -> String {
+pub fn effective_request_name(req: &RequestItem) -> String {
     effective_request_name_str(&req.name)
 }
 
@@ -330,7 +330,7 @@ mod tests {
 
     #[test]
     fn test_effective_request_name() {
-        let mut req = HttpRequestItem::new(
+        let mut req = RequestItem::new(
             "test",
             "New Request",
             HttpMethod::Get,

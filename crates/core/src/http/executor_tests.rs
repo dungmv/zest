@@ -1,6 +1,6 @@
 use super::*;
 use crate::http::resolved::{build_url_with_query, parse_query_from_url};
-use crate::models::{HttpMethod, HttpRequestItem, KeyValuePair, MultipartItem, RequestBody};
+use crate::models::{HttpMethod, KeyValuePair, MultipartItem, RequestBody, RequestItem};
 
 #[test]
 fn test_parse_query_from_url() {
@@ -37,7 +37,7 @@ fn test_build_url_with_query() {
 
 #[test]
 fn test_resolved_request_multipart() {
-    let mut item = HttpRequestItem::new(
+    let mut item = RequestItem::new(
         "ws-1",
         "Test Multipart",
         HttpMethod::Post,
@@ -64,7 +64,7 @@ fn test_resolved_request_multipart() {
 #[test]
 fn test_resolved_request_no_duplicate_query() {
     // Even if item.url has query params and item.params also has them, they shouldn't duplicate
-    let mut item = HttpRequestItem::new(
+    let mut item = RequestItem::new(
         "ws-1",
         "Test Dedupe",
         HttpMethod::Get,
@@ -79,7 +79,7 @@ fn test_resolved_request_no_duplicate_query() {
     assert_eq!(resolved.url, "https://api.example.com/search?q=rust&page=2");
 
     // When item.url is clean base and params are defined
-    let mut item_clean = HttpRequestItem::new(
+    let mut item_clean = RequestItem::new(
         "ws-1",
         "Test Clean",
         HttpMethod::Get,
@@ -155,7 +155,7 @@ async fn test_reqwest_executor_send_local_http() {
     let executor = ReqwestExecutor::new();
 
     // Request 1: Cold connection
-    let item1 = HttpRequestItem::new("ws-1", "Test Req 1", HttpMethod::Get, &server_url);
+    let item1 = RequestItem::new("ws-1", "Test Req 1", HttpMethod::Get, &server_url);
     let resolved1 = ResolvedRequest::from_item(&item1, None).unwrap();
     let res1 = executor
         .send(resolved1, None)
@@ -166,7 +166,7 @@ async fn test_reqwest_executor_send_local_http() {
     assert!(!res1.timing.connection_reused);
 
     // Request 2: Reused keep-alive connection
-    let item2 = HttpRequestItem::new("ws-2", "Test Req 2", HttpMethod::Get, &server_url);
+    let item2 = RequestItem::new("ws-2", "Test Req 2", HttpMethod::Get, &server_url);
     let resolved2 = ResolvedRequest::from_item(&item2, None).unwrap();
     let res2 = executor
         .send(resolved2, None)
@@ -203,13 +203,13 @@ async fn test_reqwest_executor_connection_close_not_reused() {
     let executor = ReqwestExecutor::new();
 
     // Request 1: Connection: close
-    let item1 = HttpRequestItem::new("ws-1", "Test Req 1", HttpMethod::Get, &server_url);
+    let item1 = RequestItem::new("ws-1", "Test Req 1", HttpMethod::Get, &server_url);
     let resolved1 = ResolvedRequest::from_item(&item1, None).unwrap();
     let res1 = executor.send(resolved1, None).await.unwrap();
     assert!(!res1.timing.connection_reused);
 
     // Request 2: Must not be marked as reused because connection was closed
-    let item2 = HttpRequestItem::new("ws-2", "Test Req 2", HttpMethod::Get, &server_url);
+    let item2 = RequestItem::new("ws-2", "Test Req 2", HttpMethod::Get, &server_url);
     let resolved2 = ResolvedRequest::from_item(&item2, None).unwrap();
     let res2 = executor.send(resolved2, None).await.unwrap();
     assert!(!res2.timing.connection_reused);

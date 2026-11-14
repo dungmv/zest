@@ -34,18 +34,8 @@ pub trait WorkspaceStore: Send + Sync {
     /// Request CRUD
     fn read_request(&self, rel_path: &str) -> Result<RequestFile>;
     fn write_request(&self, rel_path: &str, req: &RequestFile) -> Result<()>;
-    fn create_request(
-        &self,
-        folder_rel: Option<&str>,
-        name: &str,
-        method: HttpMethod,
-        url: &str,
-    ) -> Result<(String, String)> {
-        self.create_request_typed(folder_rel, name, method, url, Protocol::Http)
-    }
-
     /// Creates a request file with an explicit transport protocol.
-    fn create_request_typed(
+    fn create_request(
         &self,
         folder_rel: Option<&str>,
         name: &str,

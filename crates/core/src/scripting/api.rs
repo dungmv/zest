@@ -1,6 +1,6 @@
 use crate::models::{
-    ConsoleLogEntry, Environment, EnvironmentVariable, HttpRequestItem, HttpResponseRecord,
-    KeyValuePair, RequestBody, TestResult,
+    ConsoleLogEntry, Environment, EnvironmentVariable, HttpResponseRecord, KeyValuePair,
+    RequestBody, RequestItem, TestResult,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -11,7 +11,7 @@ pub struct PreRequestContext {
 }
 
 impl PreRequestContext {
-    pub fn from_request_and_env(item: &HttpRequestItem, env: Option<&Environment>) -> Self {
+    pub fn from_request_and_env(item: &RequestItem, env: Option<&Environment>) -> Self {
         let env_vars = env.map(|e| e.variables.clone()).unwrap_or_default();
         let request_body_json = match &item.body {
             RequestBody::Json { content: raw_json } => Some(raw_json.clone()),

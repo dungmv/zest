@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
-use zest_core::http::{HttpError, HttpExecutor, HttpProgress, ReqwestExecutor, ResolvedRequest};
-use zest_core::models::{Environment, EnvironmentVariable, HttpRequestItem, HttpResponseRecord};
+use zest_core::http::{HttpExecutor, HttpProgress, RequestError, ReqwestExecutor, ResolvedRequest};
+use zest_core::models::{Environment, EnvironmentVariable, HttpResponseRecord, RequestItem};
 use zest_core::scripting::{
     resolve_fake_vars_in_request, PostResponseContext, PostResponseOutput, PreRequestContext,
     PreRequestOutput, ScriptSandbox,
@@ -36,7 +36,7 @@ impl HttpEngine {
 
     pub fn execute(
         &self,
-        mut req_item: HttpRequestItem,
+        mut req_item: RequestItem,
         env: Option<Arc<Environment>>,
         cancel_rx: oneshot::Receiver<()>,
     ) -> mpsc::UnboundedReceiver<ExecEvent> {
@@ -159,7 +159,7 @@ impl HttpEngine {
                                 post_output: Box::new(post_output),
                             });
                         }
-                        Err(HttpError::Cancelled) => {
+                        Err(RequestError::Cancelled) => {
                             let _ = send_event_tx.send(ExecEvent::Cancelled);
                         }
                         Err(e) => {
@@ -185,7 +185,7 @@ mod tests {
         let executor = Arc::new(ReqwestExecutor::new());
         let engine = HttpEngine::new(executor, rt.clone());
 
-        let req = HttpRequestItem::new("test-1", "Test", HttpMethod::Get, "not a valid url");
+        let req = RequestItem::new("test-1", "Test", HttpMethod::Get, "not a valid url");
         let (_cancel_tx, cancel_rx) = oneshot::channel();
         let mut rx = engine.execute(req, None, cancel_rx);
 
@@ -207,7 +207,7 @@ mod tests {
         let executor = Arc::new(ReqwestExecutor::new());
         let engine = HttpEngine::new(executor, rt.clone());
 
-        let req = HttpRequestItem::new(
+        let req = RequestItem::new(
             "test-cancel",
             "Cancel Test",
             HttpMethod::Get,

@@ -6,8 +6,8 @@ mod tests {
     };
     use std::sync::Arc;
     use zest_core::models::{
-        Auth, Environment, EnvironmentVariable, Folder, HttpMethod, HttpRequestItem, KeyValuePair,
-        StoredCookie, Workspace,
+        Auth, Environment, EnvironmentVariable, Folder, HttpMethod, KeyValuePair, Protocol,
+        RequestItem, StoredCookie, Workspace,
     };
     use zest_core::storage::models::{EnvironmentFile, WorkspaceMeta};
     use zest_core::storage::{FsWorkspaceStore, WorkspaceStore};
@@ -234,9 +234,9 @@ mod tests {
         let store = Arc::new(FsWorkspaceStore::new(&temp_dir));
         store.init_workspace("test-ws").expect("init workspace");
         let mut ws_raw = WorkspaceDataState::new_for_path(temp_dir.clone(), store.clone());
-        let r1 = ws_raw.create_request_internal(None);
-        let r2 = ws_raw.create_request_internal(None);
-        let r3 = ws_raw.create_request_internal(None);
+        let r1 = ws_raw.create_request_internal(None, Protocol::Http);
+        let r2 = ws_raw.create_request_internal(None, Protocol::Http);
+        let r3 = ws_raw.create_request_internal(None, Protocol::Http);
         let f1 = ws_raw
             .create_folder_internal(None, "Folder A".to_string())
             .unwrap();
@@ -369,6 +369,7 @@ mod tests {
                 "Login",
                 HttpMethod::Post,
                 "https://api.example.com/login",
+                Protocol::Http,
             )
             .unwrap();
 
@@ -427,6 +428,7 @@ mod tests {
                 "Auth",
                 HttpMethod::Post,
                 "https://api.example.com/auth",
+                Protocol::Http,
             )
             .unwrap();
         let mut req_file = store.read_request(&rel_path).unwrap();
@@ -660,7 +662,7 @@ mod tests {
 
         // Case 1: Request in subfolder (users/admin) with Inherit auth
         let mut req1 =
-            HttpRequestItem::new("ws", "Admin Req", HttpMethod::Get, "https://api.com/admin");
+            RequestItem::new("ws", "Admin Req", HttpMethod::Get, "https://api.com/admin");
         req1.folder_id = Some("users/admin".to_string());
         req1.headers = vec![KeyValuePair::new("X-Req", "1")];
         req1.auth = Auth::Inherit;
@@ -677,7 +679,7 @@ mod tests {
 
         // Case 2: Request in top folder (users) with Inherit auth
         let mut req2 =
-            HttpRequestItem::new("ws", "Users Req", HttpMethod::Get, "https://api.com/users");
+            RequestItem::new("ws", "Users Req", HttpMethod::Get, "https://api.com/users");
         req2.folder_id = Some("users".to_string());
         req2.auth = Auth::Inherit;
 
@@ -691,8 +693,7 @@ mod tests {
         ); // Inherited from Workspace!
 
         // Case 3: Root request (no folder) with Inherit auth
-        let mut req3 =
-            HttpRequestItem::new("ws", "Root Req", HttpMethod::Get, "https://api.com/root");
+        let mut req3 = RequestItem::new("ws", "Root Req", HttpMethod::Get, "https://api.com/root");
         req3.auth = Auth::Inherit;
 
         let (headers3, auth3) = ws_state.resolve_request_hierarchy(&req3);
@@ -705,7 +706,7 @@ mod tests {
         );
 
         // Case 4: Request in subfolder with explicit None auth
-        let mut req4 = HttpRequestItem::new(
+        let mut req4 = RequestItem::new(
             "ws",
             "Public Req",
             HttpMethod::Get,
@@ -745,7 +746,7 @@ mod tests {
         ws_state.active_workspace = Some(ws);
         ws_state.folders = vec![folder];
 
-        let mut req = HttpRequestItem::new("ws", "R", HttpMethod::Get, "https://api.com");
+        let mut req = RequestItem::new("ws", "R", HttpMethod::Get, "https://api.com");
         req.folder_id = Some("api".to_string());
         req.headers = vec![KeyValuePair::new("x-shared", "from-request")];
         req.auth = Auth::Inherit;
@@ -801,7 +802,7 @@ mod tests {
         let mut ws_state = WorkspaceDataState::new_for_path(temp_dir.clone(), store.clone());
 
         // 1. Create Request
-        let req1 = ws_state.create_request_internal(None);
+        let req1 = ws_state.create_request_internal(None, Protocol::Http);
         assert_eq!(ws_state.requests.len(), 1);
         assert_eq!(ws_state.requests[0].id, req1.id);
         assert_eq!(ws_state.requests[0].name, "New Request");

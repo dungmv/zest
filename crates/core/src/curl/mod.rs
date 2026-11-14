@@ -1,5 +1,5 @@
 use crate::models::{
-    Auth, Environment, HttpMethod, HttpRequestItem, KeyValuePair, MultipartItem, RequestBody,
+    Auth, Environment, HttpMethod, KeyValuePair, MultipartItem, RequestBody, RequestItem,
 };
 use anyhow::{anyhow, Result};
 use base64::Engine as _;
@@ -58,8 +58,8 @@ fn sanitize_curl_command(curl_str: &str) -> String {
     result.replace("^\"", "\"")
 }
 
-/// Parse a cURL command into an HttpRequestItem
-pub fn curl_to_request(workspace_id: &str, curl_str: &str) -> Result<HttpRequestItem> {
+/// Parse a cURL command into an RequestItem
+pub fn curl_to_request(workspace_id: &str, curl_str: &str) -> Result<RequestItem> {
     let clean = sanitize_curl_command(curl_str);
     let tokens = tokenize_command(&clean)?;
 
@@ -329,7 +329,7 @@ pub fn curl_to_request(workspace_id: &str, curl_str: &str) -> Result<HttpRequest
         .unwrap_or("Imported Request")
         .to_string();
 
-    let mut req = HttpRequestItem::new(workspace_id, name, method, clean_url);
+    let mut req = RequestItem::new(workspace_id, name, method, clean_url);
     req.params = parsed_params;
     req.headers = headers;
     req.auth = auth;
@@ -338,8 +338,8 @@ pub fn curl_to_request(workspace_id: &str, curl_str: &str) -> Result<HttpRequest
     Ok(req)
 }
 
-/// Export an HttpRequestItem to a standard cURL command string
-pub fn request_to_curl(item: &HttpRequestItem, env: Option<&Environment>) -> String {
+/// Export an RequestItem to a standard cURL command string
+pub fn request_to_curl(item: &RequestItem, env: Option<&Environment>) -> String {
     let mut parts = vec!["curl".to_string()];
 
     // Method

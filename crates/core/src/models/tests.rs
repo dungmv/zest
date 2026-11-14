@@ -11,7 +11,7 @@ fn test_status_code_to_reason() {
 
 #[test]
 fn test_http_request_item_mutations() {
-    let mut req = HttpRequestItem::new("ws1", "Untitled Request", HttpMethod::Get, "");
+    let mut req = RequestItem::new("ws1", "Untitled Request", HttpMethod::Get, "");
     assert_eq!(req.name, "Untitled Request");
     assert_eq!(req.method, HttpMethod::Get);
 

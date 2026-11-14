@@ -270,7 +270,7 @@ impl WorkspaceStore for FsWorkspaceStore {
         Ok(())
     }
 
-    fn create_request_typed(
+    fn create_request(
         &self,
         folder_rel: Option<&str>,
         name: &str,

@@ -1,6 +1,6 @@
-use super::executor::HttpError;
+use super::executor::RequestError;
 use crate::models::{
-    Auth, Environment, HttpMethod, HttpRequestItem, KeyValuePair, MultipartItem, RequestBody,
+    Auth, Environment, HttpMethod, KeyValuePair, MultipartItem, RequestBody, RequestItem,
     RequestSentInfo, RequestSettings,
 };
 
@@ -75,7 +75,7 @@ pub struct ResolvedRequest {
 }
 
 impl ResolvedRequest {
-    pub fn from_item(item: &HttpRequestItem, env: Option<&Environment>) -> Result<Self, HttpError> {
+    pub fn from_item(item: &RequestItem, env: Option<&Environment>) -> Result<Self, RequestError> {
         let interpolator = crate::interpolation::VariableInterpolator::new(env);
         let raw_url = item.url.trim();
         let interpolated_url = interpolator.interpolate_cow(raw_url);

@@ -1,6 +1,6 @@
 use crate::components::kv_table::KvReadonlyRow;
 use crate::state::WorkspaceDataState;
-use zest_core::models::{ApiKeyLocation, Auth, HttpRequestItem};
+use zest_core::models::{ApiKeyLocation, Auth, RequestItem};
 
 /// Masks an inherited secret for read-only display with a fixed-length placeholder so the
 /// value length is not leaked. Values that reference an environment variable (contain
@@ -19,10 +19,7 @@ pub(crate) fn mask_secret(value: &str) -> String {
 ///   showing them as inherited values would be misleading.
 /// - a preview of the header contributed by inherited auth (e.g. Bearer ->
 ///   `Authorization: Bearer ***`), when the request auth is `Inherit`.
-pub fn inherited_readonly_rows(
-    ws: &WorkspaceDataState,
-    req: &HttpRequestItem,
-) -> Vec<KvReadonlyRow> {
+pub fn inherited_readonly_rows(ws: &WorkspaceDataState, req: &RequestItem) -> Vec<KvReadonlyRow> {
     let mut rows: Vec<KvReadonlyRow> = ws
         .inherited_headers_for_request(req)
         .into_iter()

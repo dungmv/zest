@@ -143,7 +143,7 @@ fn test_parse_curl_flags_before_url() {
 
 #[test]
 fn test_export_curl() {
-    let mut req = HttpRequestItem::new("ws1", "Test", HttpMethod::Get, "https://httpbin.org/get");
+    let mut req = RequestItem::new("ws1", "Test", HttpMethod::Get, "https://httpbin.org/get");
     req.headers
         .push(KeyValuePair::new("Accept", "application/json"));
     let exported = request_to_curl(&req, None);

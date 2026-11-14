@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use zest_core::http::{resolve_inherited_headers, InheritedHeader, ReqwestExecutor};
-use zest_core::models::{Auth, Folder, HttpRequestItem, KeyValuePair, StoredCookie, Workspace};
+use zest_core::models::{Auth, Folder, KeyValuePair, RequestItem, StoredCookie, Workspace};
 use zest_core::storage::models::{FolderNode, WorkspaceMeta};
 use zest_core::storage::{FsWorkspaceStore, WorkspaceStore};
 
@@ -16,8 +16,8 @@ pub struct WorkspaceDataState {
     pub workspace_meta: WorkspaceMeta,
     pub active_workspace: Option<Workspace>,
     pub folders: Vec<Folder>,
-    pub requests: Vec<HttpRequestItem>,
-    pub scratch_request: HttpRequestItem,
+    pub requests: Vec<RequestItem>,
+    pub scratch_request: RequestItem,
     pub parse_errors: HashMap<String, String>,
     pub pins: Vec<String>,
     pub cookies: Vec<StoredCookie>,
@@ -95,7 +95,7 @@ impl WorkspaceDataState {
             active_workspace: Some(Workspace::new(&default_name)),
             folders: Vec::new(),
             requests: Vec::new(),
-            scratch_request: HttpRequestItem::new(
+            scratch_request: RequestItem::new(
                 "scratch",
                 "Untitled Request",
                 zest_core::models::HttpMethod::Get,
@@ -122,7 +122,7 @@ impl WorkspaceDataState {
             active_workspace: Some(Workspace::new("Test Workspace")),
             folders: Vec::new(),
             requests: Vec::new(),
-            scratch_request: HttpRequestItem::new(
+            scratch_request: RequestItem::new(
                 "scratch",
                 "Untitled Request",
                 zest_core::models::HttpMethod::Get,
@@ -254,11 +254,11 @@ impl WorkspaceDataState {
     }
 
     /// Rescans the collection hierarchy on disk while preserving the in-memory
-    /// `HttpRequestItem` for any request ID in `dirty` whose file still exists
+    /// `RequestItem` for any request ID in `dirty` whose file still exists
     /// on disk. Prevents `TreeChanged` events from clobbering active typing in
     /// the request composer.
     pub fn reload_tree_preserving(&mut self, dirty: &std::collections::HashSet<String>) {
-        let mut kept_requests: HashMap<String, HttpRequestItem> = if dirty.is_empty() {
+        let mut kept_requests: HashMap<String, RequestItem> = if dirty.is_empty() {
             HashMap::new()
         } else {
             self.requests
@@ -290,7 +290,7 @@ impl WorkspaceDataState {
                 parent_id: Option<String>,
                 ws_name: &str,
                 all_folders: &mut Vec<Folder>,
-                all_requests: &mut Vec<HttpRequestItem>,
+                all_requests: &mut Vec<RequestItem>,
                 errors: &mut HashMap<String, String>,
             ) {
                 let mut f = Folder::new(ws_name, &folder_node.file.name);
@@ -355,7 +355,7 @@ impl WorkspaceDataState {
         }
     }
 
-    pub fn find_request(&self, req_id: &str) -> Option<&HttpRequestItem> {
+    pub fn find_request(&self, req_id: &str) -> Option<&RequestItem> {
         if req_id == "scratch" {
             Some(&self.scratch_request)
         } else {
@@ -363,7 +363,7 @@ impl WorkspaceDataState {
         }
     }
 
-    pub fn find_request_mut(&mut self, req_id: &str) -> Option<&mut HttpRequestItem> {
+    pub fn find_request_mut(&mut self, req_id: &str) -> Option<&mut RequestItem> {
         if req_id == "scratch" {
             Some(&mut self.scratch_request)
         } else {
@@ -373,7 +373,7 @@ impl WorkspaceDataState {
 
     pub fn mutate_request<F, R>(&mut self, req_id: &str, f: F) -> Option<R>
     where
-        F: FnOnce(&mut HttpRequestItem) -> R,
+        F: FnOnce(&mut RequestItem) -> R,
     {
         let is_scratch = req_id == "scratch";
         let mut tree_changed = false;
@@ -407,7 +407,7 @@ impl WorkspaceDataState {
 
     pub fn update_active_request<F>(&mut self, req_id: &str, f: F)
     where
-        F: FnOnce(&mut HttpRequestItem),
+        F: FnOnce(&mut RequestItem),
     {
         let _ = self.mutate_request(req_id, f);
     }
@@ -464,7 +464,7 @@ impl WorkspaceDataState {
         chain
     }
 
-    pub fn resolve_request_hierarchy(&self, req: &HttpRequestItem) -> (Vec<KeyValuePair>, Auth) {
+    pub fn resolve_request_hierarchy(&self, req: &RequestItem) -> (Vec<KeyValuePair>, Auth) {
         let ws_headers = self
             .active_workspace
             .as_ref()
@@ -495,7 +495,7 @@ impl WorkspaceDataState {
     /// send-time merge semantics (nearest ancestor wins per key, case-insensitive).
     /// Sources are display labels (`folder "X"` / `workspace "Y"`) so the UI can show
     /// where each merged value comes from.
-    pub fn inherited_headers_for_request(&self, req: &HttpRequestItem) -> Vec<InheritedHeader> {
+    pub fn inherited_headers_for_request(&self, req: &RequestItem) -> Vec<InheritedHeader> {
         let ws_label = format!(
             "workspace \"{}\"",
             self.active_workspace

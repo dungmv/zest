@@ -3,7 +3,7 @@ use super::request_node::{SidebarExampleItem, SidebarReqItem};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use zest_core::git::GitStatusResult;
-use zest_core::models::{Folder, HttpRequestItem};
+use zest_core::models::{Folder, RequestItem};
 
 /// Represents a single uniform-height row in the virtualized sidebar tree.
 #[derive(Clone, Debug)]
@@ -73,7 +73,7 @@ pub struct FlatTreeInput<'a> {
 }
 
 pub fn build_sidebar_req_items(
-    requests: &[HttpRequestItem],
+    requests: &[RequestItem],
 ) -> (Vec<SidebarReqItem>, Vec<Arc<SidebarReqItem>>) {
     let mut raw_vec = Vec::with_capacity(requests.len());
     let mut arc_vec = Vec::with_capacity(requests.len());

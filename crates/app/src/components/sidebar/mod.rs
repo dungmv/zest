@@ -430,7 +430,7 @@ impl RenderOnce for SidebarTree {
                                             .on_click(move |_, window, cx| {
                                                 let ws_c = ws_req.clone();
                                                 let req = ws_req.update(cx, |state, cx| {
-                                                    state.create_request(None, cx)
+                                                    state.create_request(None, Protocol::Http, cx)
                                                 });
                                                 let req_id = req.id.clone();
                                                 let req_name = req.name.clone();
@@ -547,7 +547,7 @@ impl RenderOnce for SidebarTree {
                                         .on_click(move |_, window, cx| {
                                             let ws_c = ws_new.clone();
                                             let req = ws_new.update(cx, |state, cx| {
-                                                state.create_request(None, cx)
+                                                state.create_request(None, Protocol::Http, cx)
                                             });
                                             let req_id = req.id.clone();
                                             let req_name = req.name.clone();

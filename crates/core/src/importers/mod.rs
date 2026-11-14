@@ -152,6 +152,7 @@ pub fn apply_import_to_workspace(
             &req.name,
             req.method,
             &req.url,
+            req.protocol,
         ) {
             Ok(res) => res,
             Err(e) => {

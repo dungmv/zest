@@ -6,7 +6,7 @@ use tokio::sync::oneshot;
 use zest_core::grpc::{
     GrpcCallSummary, GrpcClient, GrpcMethodInfo, GrpcStreamEvent, GrpcUnaryResult,
 };
-use zest_core::models::{ConsoleLogEntry, Environment, EnvironmentVariable, HttpRequestItem};
+use zest_core::models::{ConsoleLogEntry, Environment, EnvironmentVariable, RequestItem};
 use zest_core::scripting::{
     resolve_fake_vars_in_request, PreRequestContext, PreRequestOutput, ScriptSandbox,
 };
@@ -89,7 +89,7 @@ impl GrpcEngine {
     /// the returned events. Cancel via the usual oneshot channel.
     pub fn invoke(
         &self,
-        mut req_item: HttpRequestItem,
+        mut req_item: RequestItem,
         env: Option<Arc<Environment>>,
         cancel_rx: oneshot::Receiver<()>,
     ) -> UnboundedReceiver<GrpcUiEvent> {

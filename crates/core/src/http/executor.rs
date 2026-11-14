@@ -14,7 +14,7 @@ use tokio::sync::mpsc::UnboundedSender;
 
 /// Extracts base URL and query parameters from a URL string
 #[derive(Error, Debug)]
-pub enum HttpError {
+pub enum RequestError {
     #[error("Request cancelled")]
     Cancelled,
     #[error("Network error: {0}")]
@@ -47,7 +47,7 @@ pub trait HttpExecutor: Send + Sync {
         &self,
         req: ResolvedRequest,
         progress_tx: Option<UnboundedSender<HttpProgress>>,
-    ) -> impl std::future::Future<Output = Result<HttpResponseRecord, HttpError>> + Send;
+    ) -> impl std::future::Future<Output = Result<HttpResponseRecord, RequestError>> + Send;
 }
 
 fn extract_host_key(url_str: &str) -> Option<String> {
@@ -187,7 +187,7 @@ impl ReqwestExecutor {
         cookie_store: &Arc<CookieStoreMutex>,
         follow_redirects: bool,
         validate_tls: bool,
-    ) -> Result<reqwest::Client, HttpError> {
+    ) -> Result<reqwest::Client, RequestError> {
         let mut builder = reqwest::Client::builder()
             .cookie_provider(Arc::clone(cookie_store))
             .danger_accept_invalid_certs(!validate_tls);
@@ -198,14 +198,14 @@ impl ReqwestExecutor {
 
         builder
             .build()
-            .map_err(|e| HttpError::Network(e.to_string()))
+            .map_err(|e| RequestError::Network(e.to_string()))
     }
 
     pub(crate) fn get_client(
         &self,
         follow_redirects: bool,
         validate_tls: bool,
-    ) -> Result<reqwest::Client, HttpError> {
+    ) -> Result<reqwest::Client, RequestError> {
         let key = (follow_redirects, validate_tls);
         {
             let lock = self.clients.read().unwrap_or_else(|e| e.into_inner());
@@ -241,7 +241,7 @@ impl HttpExecutor for ReqwestExecutor {
         &self,
         req: ResolvedRequest,
         progress_tx: Option<UnboundedSender<HttpProgress>>,
-    ) -> Result<HttpResponseRecord, HttpError> {
+    ) -> Result<HttpResponseRecord, RequestError> {
         if let Some(tx) = &progress_tx {
             let _ = tx.send(HttpProgress::Connecting);
         }
@@ -319,9 +319,9 @@ impl HttpExecutor for ReqwestExecutor {
         let ttfb_start = Instant::now();
         let response = request_builder.send().await.map_err(|e| {
             if e.is_timeout() {
-                HttpError::Timeout(req.settings.timeout_secs())
+                RequestError::Timeout(req.settings.timeout_secs())
             } else {
-                HttpError::Network(e.to_string())
+                RequestError::Network(e.to_string())
             }
         })?;
 
@@ -362,7 +362,7 @@ impl HttpExecutor for ReqwestExecutor {
         let mut stream = response.bytes_stream();
 
         while let Some(chunk_res) = stream.next().await {
-            let chunk = chunk_res.map_err(|e| HttpError::Network(e.to_string()))?;
+            let chunk = chunk_res.map_err(|e| RequestError::Network(e.to_string()))?;
             body_bytes.extend_from_slice(&chunk);
             if let Some(tx) = &progress_tx {
                 let _ = tx.send(HttpProgress::Downloading {

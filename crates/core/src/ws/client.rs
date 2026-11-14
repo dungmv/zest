@@ -1,5 +1,5 @@
 use super::types::{WsDirection, WsEvent, WsMessage, WsMessageKind, WsOutgoing};
-use crate::http::{HttpError, ResolvedRequest};
+use crate::http::{RequestError, ResolvedRequest};
 use futures_util::{SinkExt, StreamExt};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
@@ -41,7 +41,7 @@ impl WebSocketClient {
     /// Performs the handshake with the configured timeout and spawns the
     /// reader/writer task pair backing the returned handle. Must be called
     /// inside the shared tokio runtime.
-    pub async fn connect(req: &ResolvedRequest) -> Result<WsHandle, HttpError> {
+    pub async fn connect(req: &ResolvedRequest) -> Result<WsHandle, RequestError> {
         let request = Self::build_handshake_request(req)?;
 
         let timeout_ms = req.settings.timeout_ms;
@@ -50,8 +50,8 @@ impl WebSocketClient {
         let (stream, response) =
             tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), connect_fut)
                 .await
-                .map_err(|_| HttpError::Timeout(timeout_ms))?
-                .map_err(|e| HttpError::Network(format!("WebSocket handshake failed: {e}")))?;
+                .map_err(|_| RequestError::Timeout(timeout_ms))?
+                .map_err(|e| RequestError::Network(format!("WebSocket handshake failed: {e}")))?;
 
         let response_headers: Vec<(String, String)> = response
             .headers()
@@ -88,12 +88,12 @@ impl WebSocketClient {
     /// headers are filtered out of the user-supplied set.
     fn build_handshake_request(
         req: &ResolvedRequest,
-    ) -> Result<tokio_tungstenite::tungstenite::http::Request<()>, HttpError> {
+    ) -> Result<tokio_tungstenite::tungstenite::http::Request<()>, RequestError> {
         let mut request = req
             .url
             .as_str()
             .into_client_request()
-            .map_err(|e| HttpError::InvalidUrl(format!("Invalid WebSocket URL: {e}")))?;
+            .map_err(|e| RequestError::InvalidUrl(format!("Invalid WebSocket URL: {e}")))?;
 
         let headers: &mut HeaderMap = request.headers_mut();
         for (name, value) in &req.headers {
@@ -102,10 +102,10 @@ impl WebSocketClient {
                 continue;
             }
             let header_name = HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
-                HttpError::InvalidHeader(format!("Invalid header name '{name}': {e}"))
+                RequestError::InvalidHeader(format!("Invalid header name '{name}': {e}"))
             })?;
             let header_value = HeaderValue::from_str(value).map_err(|e| {
-                HttpError::InvalidHeader(format!("Invalid header value for '{name}': {e}"))
+                RequestError::InvalidHeader(format!("Invalid header value for '{name}': {e}"))
             })?;
             headers.insert(header_name, header_value);
         }

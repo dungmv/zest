@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use std::sync::LazyLock;
 use uuid::Uuid;
 
-use crate::models::{Auth, HttpRequestItem, RequestBody};
+use crate::models::{Auth, RequestBody, RequestItem};
 
 /// Catalog of dynamic variables: `(name with $ prefix, description)` pairs.
 /// Single source of truth shared by the regex matcher and the UI autocomplete.
@@ -74,8 +74,8 @@ pub fn resolve_fake_vars_in_place(s: &mut String) {
     }
 }
 
-/// Resolve all fake variables in an HttpRequestItem, allocating only for fields that contain `{{$`.
-pub fn resolve_fake_vars_in_request(req_item: &mut HttpRequestItem) {
+/// Resolve all fake variables in an RequestItem, allocating only for fields that contain `{{$`.
+pub fn resolve_fake_vars_in_request(req_item: &mut RequestItem) {
     resolve_fake_vars_in_place(&mut req_item.url);
     for p in &mut req_item.params {
         resolve_fake_vars_in_place(&mut p.key);
@@ -176,7 +176,7 @@ mod tests {
     #[test]
     fn test_resolve_fake_vars_in_request() {
         use crate::models::{HttpMethod, KeyValuePair};
-        let mut item = HttpRequestItem::new(
+        let mut item = RequestItem::new(
             "ws1",
             "Test",
             HttpMethod::Get,

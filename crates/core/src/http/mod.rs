@@ -2,7 +2,7 @@ pub mod executor;
 pub mod hierarchy;
 pub mod resolved;
 
-pub use executor::{HttpError, HttpExecutor, HttpProgress, ReqwestExecutor};
+pub use executor::{HttpExecutor, HttpProgress, RequestError, ReqwestExecutor};
 pub use hierarchy::{
     resolve_hierarchical_headers_and_auth, resolve_inherited_headers, InheritedHeader,
 };

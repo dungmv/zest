@@ -1,7 +1,7 @@
 use super::*;
 use gpui_kit::AppContext;
 use std::time::Duration;
-use zest_core::models::{Auth, Environment, HttpMethod, HttpRequestItem, KeyValuePair};
+use zest_core::models::{Auth, Environment, HttpMethod, KeyValuePair, Protocol, RequestItem};
 use zest_core::storage::models::{FolderFile, LocalState, WorkspaceMeta};
 use zest_core::storage::{FsWorkspaceStore, WorkspaceStore};
 
@@ -18,7 +18,7 @@ fn test_coordinator_independent_targets_do_not_interfere() {
     let req_target = PersistTarget::Request("req1.yaml".to_string());
     let env_target = PersistTarget::Environment("staging".to_string());
 
-    let mut req = HttpRequestItem::new("ws", "Req1", HttpMethod::Get, "http://api.com/1");
+    let mut req = RequestItem::new("ws", "Req1", HttpMethod::Get, "http://api.com/1");
     req.id = "req1.yaml".to_string();
 
     let env = Environment::new("ws", "staging");
@@ -60,7 +60,7 @@ fn test_persist_payload_atomic_writes_to_store() {
     let (_dir, store) = setup_test_workspace("AtomicStore");
 
     // 1. Request
-    let mut req = HttpRequestItem::new("ws", "Login", HttpMethod::Post, "https://api.com/login");
+    let mut req = RequestItem::new("ws", "Login", HttpMethod::Post, "https://api.com/login");
     req.id = "auth/login.yaml".to_string();
     req.headers.push(KeyValuePair {
         key: "X-App".to_string(),
@@ -358,10 +358,15 @@ fn test_request_persistence_state_and_remap(cx: &mut gpui_kit::TestAppContext) {
     let req_id = ws_state.update(cx, |ws, cx| {
         let (_slug, rel_path) = ws
             .store
-            .create_request(None, "Get Users", HttpMethod::Get, "https://api.com/users")
+            .create_request(
+                None,
+                "Get Users",
+                HttpMethod::Get,
+                "https://api.com/users",
+                Protocol::Http,
+            )
             .unwrap();
-        let item =
-            HttpRequestItem::new("ws", "Get Users", HttpMethod::Get, "https://api.com/users");
+        let item = RequestItem::new("ws", "Get Users", HttpMethod::Get, "https://api.com/users");
         let mut item = item;
         item.id = rel_path.clone();
         ws.requests.push(item);
@@ -419,7 +424,13 @@ fn test_fs_batch_recreated_request_not_dropped(cx: &mut gpui_kit::TestAppContext
 
     // Create a request file on disk and load it into workspace state
     let req_id = store
-        .create_request(None, "Get Users", HttpMethod::Get, "https://api.com/users")
+        .create_request(
+            None,
+            "Get Users",
+            HttpMethod::Get,
+            "https://api.com/users",
+            Protocol::Http,
+        )
         .unwrap()
         .1;
     ws_state.update(cx, |ws, _| ws.reload_tree());
@@ -482,6 +493,7 @@ fn test_external_change_reconciles_clean_vs_dirty(cx: &mut gpui_kit::TestAppCont
             "Original Name",
             HttpMethod::Get,
             "https://api.com/users",
+            Protocol::Http,
         )
         .unwrap()
         .1;
@@ -571,7 +583,13 @@ async fn test_watcher_env_conflict_and_tree_changed_preserves_dirty(
     let git_state = cx.new(|_| GitState::new(dir.path().to_path_buf()));
 
     let req_id = store
-        .create_request(None, "Dirty Request", HttpMethod::Get, "https://api.com/v1")
+        .create_request(
+            None,
+            "Dirty Request",
+            HttpMethod::Get,
+            "https://api.com/v1",
+            Protocol::Http,
+        )
         .unwrap()
         .1;
     ws_state.update(cx, |ws, _| ws.reload_tree());

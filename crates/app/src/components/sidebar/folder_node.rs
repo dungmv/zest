@@ -257,7 +257,7 @@ pub fn render_folder_row(
                         .on_click(move |_, window, cx| {
                             let ws_c = ws_n.clone();
                             let req = ws_n.update(cx, |state, cx| {
-                                state.create_request(Some(f_id_n.clone()), cx)
+                                state.create_request(Some(f_id_n.clone()), Protocol::Http, cx)
                             });
                             let req_id = req.id.clone();
                             let req_name = req.name.clone();

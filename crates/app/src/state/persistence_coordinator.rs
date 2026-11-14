@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::time::Duration;
-use zest_core::models::{Environment, HttpRequestItem};
+use zest_core::models::{Environment, RequestItem};
 use zest_core::storage::models::{
     EnvironmentFile, FolderFile, LocalState, RequestFile, WorkspaceMeta,
 };
@@ -36,7 +36,7 @@ impl PersistTarget {
 /// Immutable snapshot payload captured at mutation time and serialized on background threads.
 #[derive(Debug, Clone)]
 pub enum PersistPayload {
-    Request(Box<HttpRequestItem>),
+    Request(Box<RequestItem>),
     Environment {
         name: String,
         env: Box<Environment>,
@@ -335,8 +335,8 @@ mod tests {
     use super::*;
     use zest_core::models::HttpMethod;
 
-    fn dummy_request_item(id: &str, url: &str) -> HttpRequestItem {
-        let mut item = HttpRequestItem::new("ws", "Req", HttpMethod::Get, url);
+    fn dummy_request_item(id: &str, url: &str) -> RequestItem {
+        let mut item = RequestItem::new("ws", "Req", HttpMethod::Get, url);
         item.id = id.to_string();
         item
     }

@@ -214,6 +214,7 @@ fn test_ordering_with_missing_and_extra_entries() {
             "C Req",
             HttpMethod::Get,
             "https://api.com/c",
+            Protocol::Http,
         )
         .unwrap();
     store
@@ -222,6 +223,7 @@ fn test_ordering_with_missing_and_extra_entries() {
             "A Req",
             HttpMethod::Get,
             "https://api.com/a",
+            Protocol::Http,
         )
         .unwrap();
     store
@@ -230,6 +232,7 @@ fn test_ordering_with_missing_and_extra_entries() {
             "B Req",
             HttpMethod::Get,
             "https://api.com/b",
+            Protocol::Http,
         )
         .unwrap();
 
@@ -385,7 +388,13 @@ fn test_request_lifecycle_and_orphan_loc_cleanup() {
 
     // 1. Create request
     let (slug, rel_path) = store
-        .create_request(None, "Login", HttpMethod::Post, "http://api.com")
+        .create_request(
+            None,
+            "Login",
+            HttpMethod::Post,
+            "http://api.com",
+            Protocol::Http,
+        )
         .unwrap();
     assert_eq!(slug, "login");
     assert_eq!(rel_path, "login.yaml");
@@ -483,7 +492,13 @@ fn test_loc_cache_binary_and_large_truncation() {
     store.init_workspace("Test Cache").unwrap();
 
     let (_, rel_path) = store
-        .create_request(None, "Large", HttpMethod::Get, "http://api.com")
+        .create_request(
+            None,
+            "Large",
+            HttpMethod::Get,
+            "http://api.com",
+            Protocol::Http,
+        )
         .unwrap();
 
     // 1. Large body > 512KB
@@ -660,7 +675,13 @@ fn test_store_records_disk_fingerprints_on_writes_and_deletes() {
     assert!(fp.matches_disk(&env_path));
 
     let (_, rel_req) = store
-        .create_request(None, "Ping", HttpMethod::Get, "https://example.com")
+        .create_request(
+            None,
+            "Ping",
+            HttpMethod::Get,
+            "https://example.com",
+            Protocol::Http,
+        )
         .unwrap();
     let req_path = temp_dir.join("collections").join(&rel_req);
     assert!(fp.matches_disk(&req_path));
@@ -696,10 +717,22 @@ fn test_rename_request_self_exclusion_keeps_own_suffix() {
     store.init_workspace("Self Exclude").unwrap();
 
     let (_, login_rel) = store
-        .create_request(None, "Login", HttpMethod::Post, "http://a.com")
+        .create_request(
+            None,
+            "Login",
+            HttpMethod::Post,
+            "http://a.com",
+            Protocol::Http,
+        )
         .unwrap();
     let (_, login2_rel) = store
-        .create_request(None, "Login 2", HttpMethod::Get, "http://a.com")
+        .create_request(
+            None,
+            "Login 2",
+            HttpMethod::Get,
+            "http://a.com",
+            Protocol::Http,
+        )
         .unwrap();
     assert_eq!(login_rel, "login.yaml");
     assert_eq!(login2_rel, "login-2.yaml");
@@ -715,7 +748,13 @@ fn test_rename_request_self_exclusion_keeps_own_suffix() {
 
     // A new third "Login" gets the next free suffix.
     let (_, login3_rel) = store
-        .create_request(None, "Login", HttpMethod::Get, "http://a.com")
+        .create_request(
+            None,
+            "Login",
+            HttpMethod::Get,
+            "http://a.com",
+            Protocol::Http,
+        )
         .unwrap();
     assert_eq!(login3_rel, "login-3.yaml");
 
@@ -737,6 +776,7 @@ fn test_move_request_updates_folder_order_lists() {
             "Login",
             HttpMethod::Post,
             "http://api.com",
+            Protocol::Http,
         )
         .unwrap();
     store
@@ -745,6 +785,7 @@ fn test_move_request_updates_folder_order_lists() {
             "Other",
             HttpMethod::Get,
             "http://api.com",
+            Protocol::Http,
         )
         .unwrap();
     store

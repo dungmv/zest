@@ -1,6 +1,6 @@
 # Plan: 2026111401 — Hỗ trợ giao thức WebSocket & gRPC
 
-> **Ngày tạo:** 2026-11-14 · **Trạng thái:** Đã triển khai xong (cùng commit) · **Spec gốc:** `docs/specs/03-protocols-graphql-websocket-grpc.md`, Roadmap Phase 2
+> **Ngày tạo:** 2026-11-14 · **Trạng thái:** Đã triển khai xong (cùng commit) · **Refactor 2:** 2026-11-14 đổi `HttpRequestItem` → `RequestItem`, `HttpError` → `RequestError`, gộp `create_request(_typed)` về 1 method nhận protocol · **Spec gốc:** `docs/specs/03-protocols-graphql-websocket-grpc.md`, Roadmap Phase 2
 
 ---
 
@@ -40,7 +40,7 @@ Phạm vi lần này: **cả hai giao thức, chia 2 phase triển khai (WebSock
 
 | # | Quyết định | Lý do |
 |---|---|---|
-| AD-1 | **Một struct request duy nhất**: thêm `protocol: Protocol` (`Http` default, `WebSocket`, `Grpc`) + `grpc: Option<GrpcPayload>` vào `HttpRequestItem`/`RequestFile`, cả hai `#[serde(default, skip_serializing_if = ...)]` | Ít xâm lấn nhất: `find_request`, CRUD, persistence, sidebar đều dùng chung `HttpRequestItem`; tránh tách `WebSocketRequest`/`GrpcRequest` riêng |
+| AD-1 | **Một struct request duy nhất**: thêm `protocol: Protocol` (`Http` default, `WebSocket`, `Grpc`) + `grpc: Option<GrpcPayload>` vào `RequestItem` (trước đây là `HttpRequestItem`, đã đổi tên 2026-11-14)/`RequestFile`, cả hai `#[serde(default, skip_serializing_if = ...)]` | Ít xâm lấn nhất: `find_request`, CRUD, persistence, sidebar đều dùng chung `HttpRequestItem`; tránh tách `WebSocketRequest`/`GrpcRequest` riêng |
 | AD-2 | `Protocol` là enum riêng, **không** thêm variant vào `HttpMethod` | `HttpMethod` được serde UPPERCASE + `FromStr` strict, dùng rải rác; WS không có method, gRPC method là service path |
 | AD-3 | **WsService mới** (`services/ws_service.rs`, Runner-style như `GitService`) giữ `HashMap<request_id, WsSessionHandle>` + message history (bounded) theo request | Kết nối sống độc lập với active request; không phá "9 entities" trong `AppState` (AGENTS 2.1); ResponseState chỉ giữ tham chiếu Arc của session đang active |
 | AD-4 | gRPC đi qua luồng single-shot kiểu `execute` (mới: `GrpcExecEvent` loop trong Runner), unary → JSON response hiển thị ở Response tab; server-streaming append message | Tận dụng pattern oneshot-cancel + event loop sẵn có của `Runner::send_current_request` |
