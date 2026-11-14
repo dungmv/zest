@@ -70,7 +70,8 @@ impl AppView {
 
         let executor = state.workspace.read(cx).executor.clone();
         let tokio_rt = crate::services::global_tokio_runtime();
-        let engine = Arc::new(HttpEngine::new(executor, tokio_rt));
+        let http_engine = Arc::new(HttpEngine::new(executor, tokio_rt));
+        let ws_service = Arc::new(crate::services::WsService::new());
         let runner = Runner::new(
             state.session.clone(),
             state.workspace.clone(),
@@ -78,7 +79,10 @@ impl AppView {
             state.response.clone(),
             state.toast.clone(),
             state.modal.clone(),
-            engine,
+            crate::services::Engines {
+                http: http_engine,
+                ws: ws_service,
+            },
         );
 
         // Select initial request from workspace if the user has saved requests
@@ -159,6 +163,39 @@ impl AppView {
 
     pub fn send_current_request(&self, cx: &mut App) {
         self.runner.send_current_request(cx);
+    }
+
+    pub fn connect_websocket(&self, cx: &mut App) {
+        self.runner.connect_websocket(cx);
+    }
+
+    pub fn disconnect_websocket(&self, cx: &mut App) {
+        self.runner.disconnect_websocket(cx);
+    }
+
+    /// Sends the text currently in the WS message box over the active
+    /// connection and clears the box on success.
+    pub fn send_ws_message(&self, window: &mut Window, cx: &mut App) {
+        let text = self
+            .composer_inputs
+            .ws_message_textarea
+            .read(cx)
+            .value()
+            .to_string();
+        if text.trim().is_empty() {
+            return;
+        }
+        self.runner.send_ws_message(text, cx);
+        let req_id = self.state.session.read(cx).active_request_id().to_string();
+        if self.runner.engines.ws.is_connected(&req_id) {
+            self.composer_inputs.ws_message_textarea.update(cx, |txt, cx| {
+                txt.set_value(String::new(), window, cx);
+            });
+        }
+    }
+
+    pub fn send_ws_ping(&self, cx: &mut App) {
+        self.runner.send_ws_ping(cx);
     }
 }
 

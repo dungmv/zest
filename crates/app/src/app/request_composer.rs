@@ -180,16 +180,29 @@ impl AppView {
             // Top Request Bar: Method + URL + Send
             .child({
                 let view_handle = app_view_entity.clone();
+                let view_handle_disc = app_view_entity.clone();
+                let bar_protocol = active_req.map(|r| r.protocol).unwrap_or(Protocol::Http);
                 RequestBar::new(
                     ws_entity.clone(),
                     self.state.env.clone(),
                     self.state.modal.clone(),
                     ed_entity.clone(),
+                    self.state.response.clone(),
                     self.composer_inputs.url_input.clone(),
-                    move |_, cx| {
-                        view_handle.update(cx, |view, cx| {
-                            view.send_current_request(cx);
-                        });
+                    RequestBarActions {
+                        on_send: std::rc::Rc::new(move |window, cx| {
+                            // Route the primary action by protocol: HTTP
+                            // sends, WebSocket connects.
+                            let _ = window;
+                            if bar_protocol == Protocol::WebSocket {
+                                view_handle.update(cx, |view, cx| view.connect_websocket(cx));
+                            } else {
+                                view_handle.update(cx, |view, cx| view.send_current_request(cx));
+                            }
+                        }),
+                        on_disconnect: std::rc::Rc::new(move |_, cx| {
+                            view_handle_disc.update(cx, |view, cx| view.disconnect_websocket(cx));
+                        }),
                     },
                 )
             })
@@ -282,15 +295,58 @@ impl AppView {
                     RequestTabKind::Message => {
                         let protocol = active_req.map(|r| r.protocol).unwrap_or(Protocol::Http);
                         match protocol {
-                            Protocol::WebSocket => div()
-                                .size_full()
-                                .overflow_hidden()
-                                .child(
-                                    Textarea::new(&self.composer_inputs.ws_message_textarea)
-                                        .appearance(false)
-                                        .bordered(false)
-                                        .h(gpui_kit::relative(1.)),
-                                ),
+                            Protocol::WebSocket => {
+                                let view_send = app_view_entity.clone();
+                                let view_ping = app_view_entity.clone();
+                                div()
+                                    .size_full()
+                                    .flex()
+                                    .flex_col()
+                                    .overflow_hidden()
+                                    .child(
+                                        div().flex_1().min_h(px(0.)).overflow_hidden().child(
+                                            Textarea::new(
+                                                &self.composer_inputs.ws_message_textarea,
+                                            )
+                                            .appearance(false)
+                                            .bordered(false)
+                                            .h(gpui_kit::relative(1.)),
+                                        ),
+                                    )
+                                    .child(
+                                        div()
+                                            .h(px(36.))
+                                            .px(px(8.))
+                                            .flex()
+                                            .items_center()
+                                            .justify_end()
+                                            .gap(px(6.))
+                                            .border_t_1()
+                                            .border_color(t.border_subtle)
+                                            .child(
+                                                Button::new("btn-ws-ping")
+                                                    .ghost()
+                                                    .small()
+                                                    .label("Ping")
+                                                    .on_click(move |_, _, cx| {
+                                                        view_ping.update(cx, |view, cx| {
+                                                            view.send_ws_ping(cx);
+                                                        });
+                                                    }),
+                                            )
+                                            .child(
+                                                Button::new("btn-ws-send")
+                                                    .primary()
+                                                    .small()
+                                                    .label("Send")
+                                                    .on_click(move |_, window, cx| {
+                                                        view_send.update(cx, |view, cx| {
+                                                            view.send_ws_message(window, cx);
+                                                        });
+                                                    }),
+                                            ),
+                                    )
+                            }
                             Protocol::Grpc => div().size_full().overflow_hidden().child(
                                 Editor::new(&self.composer_inputs.grpc_message_editor).h(
                                     gpui_kit::relative(1.),

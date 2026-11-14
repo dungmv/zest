@@ -1,4 +1,5 @@
 use super::http_engine::{ExecEvent, HttpEngine};
+use super::ws_service::{WsService, WsUiEvent};
 use crate::state::{
     EnvironmentState, ModalState, RequestSessionState, ResponseState, ToastState,
     WorkspaceDataState,
@@ -6,8 +7,17 @@ use crate::state::{
 use gpui_kit::{App, Entity};
 use std::sync::Arc;
 use tokio::sync::oneshot;
-use zest_core::models::EnvironmentVariable;
+use zest_core::models::{EnvironmentVariable, Protocol};
 use zest_core::storage::models::LocFile;
+use zest_core::ws::WebSocketStatus;
+
+/// Transport engines owned by the Runner, grouped to keep the constructor
+/// within the argument budget.
+#[derive(Clone)]
+pub struct Engines {
+    pub http: Arc<HttpEngine>,
+    pub ws: Arc<WsService>,
+}
 
 #[derive(Clone)]
 pub struct Runner {
@@ -17,7 +27,7 @@ pub struct Runner {
     pub response_state: Entity<ResponseState>,
     pub toast_state: Entity<ToastState>,
     pub modal_state: Entity<ModalState>,
-    pub engine: Arc<HttpEngine>,
+    pub engines: Engines,
 }
 
 impl Runner {
@@ -28,7 +38,7 @@ impl Runner {
         response_state: Entity<ResponseState>,
         toast_state: Entity<ToastState>,
         modal_state: Entity<ModalState>,
-        engine: Arc<HttpEngine>,
+        engines: Engines,
     ) -> Self {
         Self {
             session_state,
@@ -37,7 +47,7 @@ impl Runner {
             response_state,
             toast_state,
             modal_state,
-            engine,
+            engines,
         }
     }
 
@@ -75,7 +85,7 @@ impl Runner {
             state.start_sending(Some(req_item.id.clone()), cancel_tx, cx);
         });
 
-        let mut event_rx = self.engine.execute(req_item, Some(cached_env), cancel_rx);
+        let mut event_rx = self.engines.http.execute(req_item, Some(cached_env), cancel_rx);
 
         let session_state = self.session_state.clone();
         let workspace_state = self.workspace_state.clone();
@@ -126,76 +136,7 @@ impl Runner {
                                 .chain(post_output.env_mutations.iter())
                                 .cloned()
                                 .collect();
-
-                            if !all_mutations.is_empty() {
-                                env_state.update(cx, |env, cx| {
-                                    if let Some(act_env) = env.active_environment_mut() {
-                                        for (k, v_opt) in &all_mutations {
-                                            if let Some(val) = v_opt {
-                                                if let Some(var) = act_env
-                                                    .variables
-                                                    .iter_mut()
-                                                    .find(|v| v.key == *k)
-                                                {
-                                                    var.current_value = val.clone();
-                                                } else {
-                                                    act_env.variables.push(EnvironmentVariable {
-                                                        key: k.clone(),
-                                                        initial_value: "".to_string(),
-                                                        current_value: val.clone(),
-                                                        secret: false,
-                                                    });
-                                                }
-                                            } else {
-                                                act_env.variables.retain(|v| v.key != *k);
-                                            }
-                                        }
-                                        let act_name = act_env.name.clone();
-                                        env.invalidate_cache();
-                                        cx.emit(
-                                            crate::state::EnvironmentEvent::EnvironmentModified(
-                                                act_name,
-                                            ),
-                                        );
-                                        cx.emit(
-                                            crate::state::EnvironmentEvent::EnvironmentsReloaded,
-                                        );
-                                        cx.notify();
-                                    } else {
-                                        for (k, v_opt) in &all_mutations {
-                                            if let Some(val) = v_opt {
-                                                if let Some(var) = env
-                                                    .global_environment
-                                                    .variables
-                                                    .iter_mut()
-                                                    .find(|v| v.key == *k)
-                                                {
-                                                    var.current_value = val.clone();
-                                                } else {
-                                                    env.global_environment.variables.push(
-                                                        EnvironmentVariable {
-                                                            key: k.clone(),
-                                                            initial_value: "".to_string(),
-                                                            current_value: val.clone(),
-                                                            secret: false,
-                                                        },
-                                                    );
-                                                }
-                                            } else {
-                                                env.global_environment
-                                                    .variables
-                                                    .retain(|v| v.key != *k);
-                                            }
-                                        }
-                                        env.invalidate_cache();
-                                        cx.emit(crate::state::EnvironmentEvent::GlobalsModified);
-                                        cx.emit(
-                                            crate::state::EnvironmentEvent::EnvironmentsReloaded,
-                                        );
-                                        cx.notify();
-                                    }
-                                });
-                            }
+                            apply_env_mutations(&env_state, &all_mutations, cx);
 
                             if let Some(err) = &post_output.error {
                                 session_state.update(cx, |ed, cx| {
@@ -246,4 +187,239 @@ impl Runner {
         })
         .detach();
     }
+
+    /// Starts the WebSocket handshake for the active request.
+    pub fn connect_websocket(&self, cx: &mut App) {
+        let req_id = self.session_state.read(cx).active_request_id().to_string();
+        let Some(mut req_item) = self.workspace_state.read(cx).find_request(&req_id).cloned()
+        else {
+            return;
+        };
+        {
+            let ed = self.session_state.read(cx);
+            if ed.is_sending || req_item.protocol != Protocol::WebSocket {
+                return;
+            }
+        }
+
+        if self.engines.ws.is_connected(&req_id) {
+            return;
+        }
+
+        // Resolve hierarchical headers & auth, apply global settings — same
+        // preamble as the HTTP send path.
+        {
+            let ws = self.workspace_state.read(cx);
+            let (resolved_headers, resolved_auth) = ws.resolve_request_hierarchy(&req_item);
+            req_item.headers = resolved_headers;
+            req_item.auth = resolved_auth;
+        }
+        {
+            let modal = self.modal_state.read(cx);
+            req_item.set_timeout_secs(modal.network.request_timeout_secs);
+            req_item.set_validate_tls(modal.network.validate_tls);
+        }
+
+        let cached_env = self.env_state.read(cx).effective_environment();
+        let (cancel_tx, cancel_rx) = oneshot::channel();
+
+        self.session_state.update(cx, |state, cx| {
+            state.start_sending(Some(req_id.clone()), cancel_tx, cx);
+        });
+        self.response_state.update(cx, |resp, cx| {
+            resp.set_ws_status(WebSocketStatus::Connecting, cx);
+        });
+
+        let mut event_rx = self.engines.ws.connect(req_item, Some(cached_env), cancel_rx);
+
+        let session_state = self.session_state.clone();
+        let response_state = self.response_state.clone();
+        let env_state = self.env_state.clone();
+        let toast_state = self.toast_state.clone();
+        let ws_service = self.engines.ws.clone();
+
+        cx.spawn(async move |cx| {
+            while let Some(event) = event_rx.recv().await {
+                cx.update(|cx| match event {
+                    WsUiEvent::Started {
+                        request_id,
+                        initial_logs,
+                        env_mutations,
+                        pre_script_error,
+                    } => {
+                        if let Some(err) = pre_script_error {
+                            session_state.update(cx, |ed, cx| {
+                                ed.set_script_error(Some(err), cx);
+                            });
+                        } else {
+                            session_state.update(cx, |ed, cx| {
+                                ed.set_script_error(None, cx);
+                            });
+                        }
+                        apply_env_mutations(&env_state, &env_mutations, cx);
+                        response_state.update(cx, |resp, cx| {
+                            resp.set_pre_request_logs(initial_logs, cx);
+                        });
+                        let _ = request_id;
+                    }
+                    WsUiEvent::Connected {
+                        request_id,
+                        outgoing,
+                        response_headers,
+                        duration_ms: _,
+                    } => {
+                        ws_service.register_session(&request_id, outgoing, response_headers.clone());
+                        session_state.update(cx, |ed, cx| {
+                            ed.stop_sending(cx);
+                        });
+                        response_state.update(cx, |resp, cx| {
+                            resp.set_ws_handshake_headers(response_headers, cx);
+                            resp.set_ws_status(WebSocketStatus::Connected, cx);
+                        });
+                    }
+                    WsUiEvent::Message { request_id, message } => {
+                        ws_service.append_inbound(&request_id, message.clone());
+                        let active =
+                            session_state.read(cx).active_request_id() == request_id.as_str();
+                        if active {
+                            response_state.update(cx, |resp, cx| {
+                                resp.push_ws_message(message, cx);
+                            });
+                        }
+                    }
+                    WsUiEvent::Closed {
+                        request_id,
+                        code: _,
+                        reason: _,
+                    } => {
+                        ws_service.mark_disconnected(&request_id);
+                        let active =
+                            session_state.read(cx).active_request_id() == request_id.as_str();
+                        if active {
+                            response_state.update(cx, |resp, cx| {
+                                resp.set_ws_status(WebSocketStatus::Disconnected, cx);
+                            });
+                        }
+                    }
+                    WsUiEvent::Failed { request_id, error } => {
+                        ws_service.mark_failed(&request_id, &error);
+                        session_state.update(cx, |ed, cx| {
+                            ed.stop_sending(cx);
+                        });
+                        let active =
+                            session_state.read(cx).active_request_id() == request_id.as_str();
+                        if active {
+                            response_state.update(cx, |resp, cx| {
+                                resp.set_ws_status(WebSocketStatus::Failed(error.clone()), cx);
+                            });
+                        }
+                        toast_state.update(cx, |ts, cx| {
+                            ts.push_error("WebSocket Failed", error, cx);
+                        });
+                    }
+                });
+            }
+        })
+        .detach();
+    }
+
+    /// Queues an outgoing text frame for the active request's connection.
+    pub fn send_ws_message(&self, text: String, cx: &mut App) {
+        let req_id = self.session_state.read(cx).active_request_id().to_string();
+        match self.engines.ws.send_text(&req_id, text) {
+            Ok(message) => {
+                self.response_state.update(cx, |resp, cx| {
+                    resp.push_ws_message(message, cx);
+                });
+            }
+            Err(err) => {
+                self.toast_state.update(cx, |ts, cx| {
+                    ts.push_error("Send Failed", err, cx);
+                });
+            }
+        }
+    }
+
+    /// Sends a ping frame on the active request's connection.
+    pub fn send_ws_ping(&self, cx: &mut App) {
+        let req_id = self.session_state.read(cx).active_request_id().to_string();
+        if let Err(err) = self.engines.ws.send_ping(&req_id) {
+            self.toast_state.update(cx, |ts, cx| {
+                ts.push_error("Ping Failed", err, cx);
+            });
+        }
+    }
+
+    /// Requests a graceful close of the active request's connection.
+    pub fn disconnect_websocket(&self, cx: &mut App) {
+        let req_id = self.session_state.read(cx).active_request_id().to_string();
+        self.engines.ws.disconnect(&req_id);
+        self.response_state.update(cx, |resp, cx| {
+            resp.set_ws_status(WebSocketStatus::Disconnected, cx);
+        });
+    }
+}
+
+/// Applies `(key, Some(value))` / `(key, None)` environment mutations to the
+/// active environment (or globals when none is active). Shared by the HTTP
+/// send path and the WebSocket connect path.
+pub(crate) fn apply_env_mutations(
+    env_state: &Entity<EnvironmentState>,
+    mutations: &[(String, Option<String>)],
+    cx: &mut App,
+) {
+    if mutations.is_empty() {
+        return;
+    }
+    env_state.update(cx, |env, cx| {
+        if let Some(act_env) = env.active_environment_mut() {
+            for (k, v_opt) in mutations {
+                if let Some(val) = v_opt {
+                    if let Some(var) = act_env.variables.iter_mut().find(|v| v.key == *k) {
+                        var.current_value = val.clone();
+                    } else {
+                        act_env.variables.push(EnvironmentVariable {
+                            key: k.clone(),
+                            initial_value: "".to_string(),
+                            current_value: val.clone(),
+                            secret: false,
+                        });
+                    }
+                } else {
+                    act_env.variables.retain(|v| v.key != *k);
+                }
+            }
+            let act_name = act_env.name.clone();
+            env.invalidate_cache();
+            cx.emit(crate::state::EnvironmentEvent::EnvironmentModified(act_name));
+            cx.emit(crate::state::EnvironmentEvent::EnvironmentsReloaded);
+            cx.notify();
+        } else {
+            for (k, v_opt) in mutations {
+                if let Some(val) = v_opt {
+                    if let Some(var) = env
+                        .global_environment
+                        .variables
+                        .iter_mut()
+                        .find(|v| v.key == *k)
+                    {
+                        var.current_value = val.clone();
+                    } else {
+                        env.global_environment.variables.push(EnvironmentVariable {
+                            key: k.clone(),
+                            initial_value: "".to_string(),
+                            current_value: val.clone(),
+                            secret: false,
+                        });
+                    }
+                } else {
+                    env.global_environment.variables.retain(|v| v.key != *k);
+                }
+            }
+            env.invalidate_cache();
+            cx.emit(crate::state::EnvironmentEvent::GlobalsModified);
+            cx.emit(crate::state::EnvironmentEvent::EnvironmentsReloaded);
+            cx.notify();
+        }
+    });
 }

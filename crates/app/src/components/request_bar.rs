@@ -4,7 +4,7 @@ use crate::components::env_autocomplete::{
     render_candidate_row, variable_value_tooltip, AutocompleteNavState, CANDIDATE_DETAIL_GAP,
     CANDIDATE_LIST_WIDTH,
 };
-use crate::components::status_badge::MethodBadge;
+use crate::components::status_badge::{MethodBadge, ProtocolBadge};
 use crate::state::{EnvironmentState, ModalState, RequestSessionState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -19,17 +19,27 @@ use gpui_kit::{
     deferred, div, px, App, Entity, Focusable as _, InteractiveElement as _, IntoElement,
     ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
-use zest_core::models::HttpMethod;
+use zest_core::models::{HttpMethod, Protocol};
+use zest_core::ws::WebSocketStatus;
 
+/// Primary/secondary bar actions, grouped to keep the constructor within the
+/// argument budget. `on_send` is the HTTP send, or the WebSocket connect when
+/// disconnected; `on_disconnect` closes a live WebSocket connection.
 #[allow(clippy::type_complexity)]
+pub struct RequestBarActions {
+    pub on_send: std::rc::Rc<dyn Fn(&mut Window, &mut App)>,
+    pub on_disconnect: std::rc::Rc<dyn Fn(&mut Window, &mut App)>,
+}
+
 #[derive(IntoElement)]
 pub struct RequestBar {
     workspace_state: Entity<crate::state::WorkspaceDataState>,
     env_state: Entity<EnvironmentState>,
     modal_state: Entity<ModalState>,
     editor_state: Entity<RequestSessionState>,
+    response_state: Entity<crate::state::ResponseState>,
     url_input: Entity<InputState>,
-    on_send: std::rc::Rc<dyn Fn(&mut Window, &mut App)>,
+    actions: RequestBarActions,
 }
 
 impl RequestBar {
@@ -38,16 +48,18 @@ impl RequestBar {
         env_state: Entity<EnvironmentState>,
         modal_state: Entity<ModalState>,
         editor_state: Entity<RequestSessionState>,
+        response_state: Entity<crate::state::ResponseState>,
         url_input: Entity<InputState>,
-        on_send: impl Fn(&mut Window, &mut App) + 'static,
+        actions: RequestBarActions,
     ) -> Self {
         Self {
             workspace_state,
             env_state,
             modal_state,
             editor_state,
+            response_state,
             url_input,
-            on_send: std::rc::Rc::new(on_send),
+            actions,
         }
     }
 }
@@ -55,24 +67,23 @@ impl RequestBar {
 impl RenderOnce for RequestBar {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let t = theme();
-        let (method, is_sending) = {
+        let (method, is_sending, protocol, ws_connected) = {
             let ed = self.editor_state.read(cx);
             let active_id = ed.active_request_id();
-            let method = self
-                .workspace_state
-                .read(cx)
-                .find_request(active_id)
-                .map(|r| r.method)
-                .unwrap_or(HttpMethod::Get);
-            (method, ed.is_sending)
+            let req = self.workspace_state.read(cx).find_request(active_id);
+            let method = req.map(|r| r.method).unwrap_or(HttpMethod::Get);
+            let protocol = req.map(|r| r.protocol).unwrap_or(Protocol::Http);
+            let ws_connected = self.response_state.read(cx).ws_status == WebSocketStatus::Connected;
+            (method, ed.is_sending, protocol, ws_connected)
         };
+        let is_ws = protocol == Protocol::WebSocket;
         let url = self.url_input.read(cx).value().to_string();
 
         let ws_clone = self.env_state.clone();
         let modal_clone = self.modal_state.clone();
         let ed_clone = self.editor_state.clone();
         let url_input_clone = self.url_input.clone();
-        let on_send = self.on_send.clone();
+        let on_send = self.actions.on_send.clone();
 
         // Build completions only if URL contains {{
         let (completion_candidates, unclosed) = if url.contains("{{") {
@@ -200,61 +211,21 @@ impl RenderOnce for RequestBar {
                             );
                         })
                     })
-                    // Method dropdown trigger
-                    .child({
+                    // Method dropdown trigger (HTTP only); WS/gRPC show a static badge
+                    .child(if is_ws {
+                        div()
+                            .h(px(22.))
+                            .px(px(4.))
+                            .flex()
+                            .items_center()
+                            .child(ProtocolBadge::new(protocol))
+                            .into_any_element()
+                    } else {
                         let ws_s = self.workspace_state.clone();
                         let ed_s = ed_clone.clone();
                         let req_id_str = ed_clone.read(cx).active_request_id().to_string();
-
-                        Button::new("method-dropdown-btn")
-                            .ghost()
-                            .compact()
-                            .small()
-                            .h(px(22.))
-                            .px(px(4.))
-                            .rounded(px(4.))
-                            .flex()
-                            .items_center()
-                            .child(MethodBadge::new(method))
-                            .dropdown_menu(move |menu, _window, _cx| {
-                                [
-                                    HttpMethod::Get,
-                                    HttpMethod::Post,
-                                    HttpMethod::Put,
-                                    HttpMethod::Delete,
-                                    HttpMethod::Patch,
-                                    HttpMethod::Head,
-                                    HttpMethod::Options,
-                                ]
-                                .into_iter()
-                                .fold(menu, |m, mth| {
-                                    let ws_set = ws_s.clone();
-                                    let ed_set = ed_s.clone();
-                                    let req_id = req_id_str.clone();
-                                    m.item(
-                                        PopupMenuItem::element(move |_window, _cx| {
-                                            div()
-                                                .text_xs()
-                                                .font_weight(gpui_kit::FontWeight::NORMAL)
-                                                .text_color(theme().method_color(mth))
-                                                .child(mth.as_str().to_string())
-                                        })
-                                        .checked(mth == method)
-                                        .on_click(
-                                            move |_, _, cx| {
-                                                ws_set.update(cx, |ws, _| {
-                                                    ws.update_active_request(&req_id, |r| {
-                                                        r.set_method(mth);
-                                                    });
-                                                });
-                                                ed_set.update(cx, |ed, cx| {
-                                                    ed.mark_dirty(cx);
-                                                });
-                                            },
-                                        ),
-                                    )
-                                })
-                            })
+                        render_http_method_dropdown(ws_s, ed_s, req_id_str, method)
+                            .into_any_element()
                     })
                     // Subtle vertical separator
                     .child(Separator::vertical().h(px(14.)))
@@ -318,10 +289,37 @@ impl RenderOnce for RequestBar {
                     )
                     // Subtle vertical separator
                     .child(Separator::vertical().h(px(14.)))
-                    // Send / Cancel Action Button
+                    // Send / Cancel / Connect / Disconnect Action Button
                     .child({
                         let ed_s = ed_clone.clone();
                         let on_send_cb = on_send.clone();
+                        let on_disconnect_cb = self.actions.on_disconnect.clone();
+
+                        // WebSocket requests: primary action is Connect, and a
+                        // live connection turns the button into Disconnect.
+                        let (tooltip, icon, icon_color) = if is_sending {
+                            ("Cancel".to_string(), IconName::Close, t.status_5xx)
+                        } else if is_ws && ws_connected {
+                            ("Disconnect".to_string(), IconName::Close, t.text_secondary)
+                        } else if is_ws {
+                            (
+                                "Connect".to_string(),
+                                IconName::SendHorizontal,
+                                t.method_websocket,
+                            )
+                        } else if cfg!(target_os = "macos") {
+                            (
+                                "Send (⌘Enter)".to_string(),
+                                IconName::SendHorizontal,
+                                t.text_secondary,
+                            )
+                        } else {
+                            (
+                                "Send (Ctrl+Enter)".to_string(),
+                                IconName::SendHorizontal,
+                                t.text_secondary,
+                            )
+                        };
 
                         Button::new("btn-send-or-cancel")
                             .ghost()
@@ -333,13 +331,7 @@ impl RenderOnce for RequestBar {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .tooltip(if is_sending {
-                                "Cancel request".to_string()
-                            } else if cfg!(target_os = "macos") {
-                                "Send (⌘Enter)".to_string()
-                            } else {
-                                "Send (Ctrl+Enter)".to_string()
-                            })
+                            .tooltip(tooltip)
                             .on_click(move |_, window, cx| {
                                 if is_sending {
                                     ed_s.update(cx, |state, cx| {
@@ -348,22 +340,16 @@ impl RenderOnce for RequestBar {
                                         }
                                         state.stop_sending(cx);
                                     });
+                                } else if is_ws && ws_connected {
+                                    on_disconnect_cb(window, cx);
                                 } else {
                                     on_send_cb(window, cx);
                                 }
                             })
                             .child(
-                                Icon::new(if is_sending {
-                                    IconName::Close
-                                } else {
-                                    IconName::SendHorizontal
-                                })
-                                .size(px(14.))
-                                .text_color(if is_sending {
-                                    t.status_5xx
-                                } else {
-                                    t.text_secondary
-                                }),
+                                Icon::new(icon)
+                                    .size(px(14.))
+                                    .text_color(icon_color),
                             )
                     }),
             )
@@ -483,4 +469,61 @@ impl RenderOnce for RequestBar {
                 )
             })
     }
+}
+
+/// HTTP method dropdown trigger (extracted so the WS/gRPC branch can render
+/// a static protocol badge in its place).
+fn render_http_method_dropdown(
+    ws_s: Entity<crate::state::WorkspaceDataState>,
+    ed_s: Entity<RequestSessionState>,
+    req_id_str: String,
+    method: HttpMethod,
+) -> impl IntoElement {
+    Button::new("method-dropdown-btn")
+        .ghost()
+        .compact()
+        .small()
+        .h(px(22.))
+        .px(px(4.))
+        .rounded(px(4.))
+        .flex()
+        .items_center()
+        .child(MethodBadge::new(method))
+        .dropdown_menu(move |menu, _window, _cx| {
+            [
+                HttpMethod::Get,
+                HttpMethod::Post,
+                HttpMethod::Put,
+                HttpMethod::Delete,
+                HttpMethod::Patch,
+                HttpMethod::Head,
+                HttpMethod::Options,
+            ]
+            .into_iter()
+            .fold(menu, |m, mth| {
+                let ws_set = ws_s.clone();
+                let ed_set = ed_s.clone();
+                let req_id = req_id_str.clone();
+                m.item(
+                    PopupMenuItem::element(move |_window, _cx| {
+                        div()
+                            .text_xs()
+                            .font_weight(gpui_kit::FontWeight::NORMAL)
+                            .text_color(theme().method_color(mth))
+                            .child(mth.as_str().to_string())
+                    })
+                    .checked(mth == method)
+                    .on_click(move |_, _, cx| {
+                        ws_set.update(cx, |ws, _| {
+                            ws.update_active_request(&req_id, |r| {
+                                r.set_method(mth);
+                            });
+                        });
+                        ed_set.update(cx, |ed, cx| {
+                            ed.mark_dirty(cx);
+                        });
+                    }),
+                )
+            })
+        })
 }

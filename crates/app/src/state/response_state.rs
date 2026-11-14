@@ -3,6 +3,11 @@ use gpui_kit::Context;
 use std::sync::Arc;
 use zest_core::cache::ResponseCache;
 use zest_core::models::{ConsoleLogEntry, ConsoleLogLevel, HttpResponseRecord, TestResult};
+use zest_core::models::Protocol;
+use zest_core::ws::{WsMessage, WebSocketStatus};
+
+/// View-side cap for the live WS frame log (service keeps its own copy).
+const MAX_WS_VIEW_MESSAGES: usize = 1000;
 use zest_core::storage::models::RequestExampleFile;
 use zest_core::storage::WorkspaceStore;
 
@@ -31,9 +36,54 @@ pub enum ResponseTabKind {
     #[default]
     Response,
     Request,
+    Messages,
     Headers,
     Cookies,
     Console,
+}
+
+impl ResponseTabKind {
+    /// Response-area tab strip for a request of the given protocol:
+    /// - HTTP: Response, Request Sent, Headers, Cookies, Console
+    /// - WebSocket: Messages (frame log), Headers (handshake), Console
+    /// - gRPC: Messages (stream frames), Headers, Console
+    pub fn tabs_for(protocol: Protocol) -> &'static [ResponseTabKind] {
+        match protocol {
+            Protocol::Http => &[
+                ResponseTabKind::Response,
+                ResponseTabKind::Request,
+                ResponseTabKind::Headers,
+                ResponseTabKind::Cookies,
+                ResponseTabKind::Console,
+            ],
+            Protocol::WebSocket | Protocol::Grpc => &[
+                ResponseTabKind::Messages,
+                ResponseTabKind::Headers,
+                ResponseTabKind::Console,
+            ],
+        }
+    }
+
+    /// Returns `kind` if it is valid for `protocol`, else the first valid tab.
+    pub fn clamp_for(kind: ResponseTabKind, protocol: Protocol) -> ResponseTabKind {
+        let tabs = Self::tabs_for(protocol);
+        if tabs.contains(&kind) {
+            kind
+        } else {
+            tabs[0]
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            ResponseTabKind::Response => "Response",
+            ResponseTabKind::Request => "Request Sent",
+            ResponseTabKind::Messages => "Messages",
+            ResponseTabKind::Headers => "Headers",
+            ResponseTabKind::Cookies => "Cookies",
+            ResponseTabKind::Console => "Console",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -70,6 +120,12 @@ pub struct ResponseState {
     pub formatted_body: Option<FormattedResponseBody>,
     pub scroll_handle: gpui_kit::UniformListScrollHandle,
     pub wrap_lines: bool,
+    /// Live WebSocket connection status for the active request.
+    pub ws_status: WebSocketStatus,
+    /// Live frame log for the active request (mirrored from `WsService`).
+    pub ws_messages: Vec<WsMessage>,
+    /// Handshake response headers of the active WS session.
+    pub ws_handshake_headers: Vec<(String, String)>,
 }
 
 impl ResponseState {
@@ -90,6 +146,9 @@ impl ResponseState {
             formatted_body: None,
             scroll_handle: gpui_kit::UniformListScrollHandle::new(),
             wrap_lines: false,
+            ws_status: WebSocketStatus::default(),
+            ws_messages: Vec::new(),
+            ws_handshake_headers: Vec::new(),
         }
     }
 
@@ -385,6 +444,48 @@ impl ResponseState {
 
     pub fn set_pre_request_logs(&mut self, logs: Vec<ConsoleLogEntry>, cx: &mut Context<Self>) {
         self.console_logs = logs;
+        cx.notify();
+    }
+
+    // --- WebSocket session view ------------------------------------------
+
+    pub fn set_ws_status(&mut self, status: WebSocketStatus, cx: &mut Context<Self>) {
+        self.ws_status = status;
+        cx.notify();
+    }
+
+    pub fn push_ws_message(&mut self, message: WsMessage, cx: &mut Context<Self>) {
+        self.ws_messages.push(message);
+        if self.ws_messages.len() > MAX_WS_VIEW_MESSAGES {
+            let overflow = self.ws_messages.len() - MAX_WS_VIEW_MESSAGES;
+            self.ws_messages.drain(..overflow);
+        }
+        self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
+        cx.notify();
+    }
+
+    pub fn set_ws_handshake_headers(
+        &mut self,
+        headers: Vec<(String, String)>,
+        cx: &mut Context<Self>,
+    ) {
+        self.ws_handshake_headers = headers;
+        cx.notify();
+    }
+
+    /// Restores the session view when switching back to a request that has a
+    /// live (or previously failed) connection in `WsService`.
+    pub fn restore_ws_session(
+        &mut self,
+        status: WebSocketStatus,
+        messages: Vec<WsMessage>,
+        handshake_headers: Vec<(String, String)>,
+        cx: &mut Context<Self>,
+    ) {
+        self.ws_status = status;
+        self.ws_messages = messages;
+        self.ws_handshake_headers = handshake_headers;
+        self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
         cx.notify();
     }
 
