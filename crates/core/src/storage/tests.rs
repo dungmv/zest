@@ -1,6 +1,6 @@
 use super::slug::unique_slug;
 use super::*;
-use crate::models::{GrpcPayload, HttpMethod, Protocol};
+use crate::models::{HttpMethod, Protocol};
 use crate::storage::serialize::to_yaml_string;
 #[test]
 fn test_byte_identical_roundtrip_request() {
@@ -139,7 +139,7 @@ fn test_protocol_defaults_and_roundtrip() {
     let payload = grpc_req.grpc.as_ref().expect("grpc payload must parse");
     assert_eq!(payload.service, "helloworld.Greeter");
     assert_eq!(payload.method, "SayHello");
-    assert_eq!(payload.use_reflection, true);
+    assert!(payload.use_reflection);
     assert!(payload.proto_path.is_none());
     let grpc_out = to_yaml_string(&grpc_req).unwrap();
     assert!(grpc_out.contains("protocol: grpc"));

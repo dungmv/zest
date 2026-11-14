@@ -8,3 +8,4 @@ pub mod models;
 pub mod scripting;
 pub mod storage;
 pub mod updater;
+pub mod ws;
