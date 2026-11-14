@@ -195,13 +195,36 @@ pub fn setup_app_subscriptions(
     // 2c. Subscribe to gRPC message editor change (persisted into GrpcPayload)
     let ed_grpc = editor_state.clone();
     let ws_grpc = workspace_state.clone();
+    let grpc_marks = targets.composer_inputs.grpc_error_marks.clone();
     subscriptions.push(cx.subscribe(grpc_message_editor, move |_, txt, event, cx| {
         if let InputEvent::Change = event {
             let val = txt.read(cx).value().to_string();
             let active_id = ed_grpc.read(cx).active_request_id().to_string();
             ws_grpc.update(cx, |ws, _| {
-                ws.update_active_request(&active_id, |r| r.set_grpc_message_json(val));
+                ws.update_active_request(&active_id, |r| r.set_grpc_message_json(val.clone()));
             });
+            // Validate and surface the error on the offending line: editor
+            // diagnostic (hover tooltip) + red gutter mark.
+            let schema = ed_grpc.read(cx).grpc_schema.clone().unwrap_or_default();
+            let payload = ws_grpc
+                .read(cx)
+                .find_request(&active_id)
+                .and_then(|r| r.grpc.clone())
+                .unwrap_or_default();
+            let result = crate::components::proto_json_completion::validate_message(
+                &schema.pool,
+                &payload.service,
+                &payload.method,
+                &val,
+            );
+            crate::components::proto_json_completion::update_grpc_diagnostics(
+                &txt,
+                &grpc_marks,
+                &result,
+                &val,
+                crate::theme::theme().status_5xx,
+                cx,
+            );
             ed_grpc.update(cx, |ed, cx| ed.mark_dirty(cx));
         }
     }));

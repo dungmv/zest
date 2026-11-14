@@ -226,6 +226,47 @@ impl AppView {
     pub fn fetch_grpc_schema(&self, cx: &mut App) {
         self.runner.fetch_grpc_schema(cx);
     }
+
+    /// Revalidates the gRPC message editor content and refreshes the error
+    /// diagnostics + gutter mark. Called when the active request changes so
+    /// the marks follow the editor's restored content.
+    pub fn refresh_grpc_message_diagnostics(&self, cx: &mut App) {
+        let req_id = self.state.session.read(cx).active_request_id().to_string();
+        let schema = self
+            .state
+            .session
+            .read(cx)
+            .grpc_schema
+            .clone()
+            .unwrap_or_default();
+        let payload = self
+            .state
+            .workspace
+            .read(cx)
+            .find_request(&req_id)
+            .and_then(|r| r.grpc.clone())
+            .unwrap_or_default();
+        let text = self
+            .composer_inputs
+            .grpc_message_editor
+            .read(cx)
+            .value()
+            .to_string();
+        let result = crate::components::proto_json_completion::validate_message(
+            &schema.pool,
+            &payload.service,
+            &payload.method,
+            &text,
+        );
+        crate::components::proto_json_completion::update_grpc_diagnostics(
+            &self.composer_inputs.grpc_message_editor,
+            &self.composer_inputs.grpc_error_marks,
+            &result,
+            &text,
+            crate::theme::theme().status_5xx,
+            cx,
+        );
+    }
 }
 
 impl Render for AppView {

@@ -51,19 +51,19 @@ pub fn render_grpc_message_tab(
     let message_editor = ctx.message_editor.clone();
     let toast_state = ctx.toast_state.clone();
 
-    // Live validation: JSON syntax first, then schema conformance when the
-    // service/method selection resolves against the fetched pool.
+    // Live validity for the toolbar check: JSON syntax first, then schema
+    // conformance when the selection resolves against the fetched pool.
+    // Error details are surfaced as editor diagnostics on the offending
+    // line, not here.
     let raw = ctx.message_editor.read(cx).value().to_string();
-    let validation = if raw.trim().is_empty() {
-        None
-    } else {
-        Some(validate_message(
+    let is_valid = raw.trim().is_empty()
+        || crate::components::proto_json_completion::validate_message(
             &schema.pool,
             &payload.service,
             &payload.method,
             &raw,
-        ))
-    };
+        )
+        .is_ok();
 
     div()
         .size_full()
@@ -155,21 +155,20 @@ pub fn render_grpc_message_tab(
                                 }),
                         ),
                 )
-                // Validation status: green check when valid, red reason when
-                // the editor content does not parse or violates the schema.
-                .child(match &validation {
-                    Some(Ok(())) => div()
+                // Validity check: a green check when the message parses and
+                // conforms to the schema (details live on the editor line).
+                .child(if is_valid {
+                    div()
                         .text_xs()
                         .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                         .text_color(t.status_2xx)
-                        .child("✓"),
-                    Some(Err(err)) => div()
-                        .max_w(px(420.))
-                        .truncate()
+                        .child("✓")
+                } else {
+                    div()
                         .text_xs()
+                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                         .text_color(t.status_5xx)
-                        .child(err.clone()),
-                    None => div(),
+                        .child("✗")
                 })
                 .child(
                     Button::new("btn-format-json-grpc")
@@ -204,110 +203,4 @@ pub fn render_grpc_message_tab(
                 .overflow_hidden()
                 .child(Editor::new(ctx.message_editor).h(gpui_kit::relative(1.))),
         )
-}
-
-/// Validates the message JSON: syntax first, then schema conformance (strict
-/// unknown-field checking, matching the send path) when the selection
-/// resolves against the fetched pool.
-fn validate_message(
-    pool: &zest_core::grpc::DescriptorPool,
-    service: &str,
-    method: &str,
-    text: &str,
-) -> Result<(), String> {
-    // An empty editor means the proto3 zero-value message.
-    if text.trim().is_empty() {
-        return Ok(());
-    }
-    serde_json::from_str::<serde_json::Value>(text).map_err(|e| format!("Invalid JSON: {e}"))?;
-    let Some((input, _)) = zest_core::grpc::method_descriptors(pool, service, method) else {
-        return Ok(());
-    };
-    let mut deserializer = serde_json::Deserializer::from_str(text);
-    zest_core::grpc::DynamicMessage::deserialize(input, &mut deserializer)
-        .map_err(|e| e.to_string())?;
-    deserializer.end().map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use prost::Message as _;
-    use zest_core::grpc::DescriptorPool;
-
-    const SHOP_PROTO: &str = r#"
-syntax = "proto3";
-package shop;
-
-message Order {
-  string id = 1;
-  int32 quantity = 2;
-  map<string, string> labels = 3;
-}
-
-service Svc {
-  rpc Create(Order) returns (Order);
-}
-"#;
-
-    fn pool() -> DescriptorPool {
-        let dir =
-            std::env::temp_dir().join(format!("zest-validate-{}", uuid::Uuid::new_v4().simple()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("shop.proto");
-        std::fs::write(&path, SHOP_PROTO).unwrap();
-        let file_set = protox::compile([path], [dir.clone()]).unwrap();
-        let _ = std::fs::remove_dir_all(&dir);
-        DescriptorPool::decode(file_set.encode_to_vec().as_slice()).unwrap()
-    }
-
-    #[test]
-    fn test_empty_message_is_valid() {
-        assert_eq!(validate_message(&pool(), "shop.Svc", "Create", ""), Ok(()));
-        assert_eq!(
-            validate_message(&pool(), "shop.Svc", "Create", "  "),
-            Ok(())
-        );
-    }
-
-    #[test]
-    fn test_syntax_error_flagged() {
-        let err = validate_message(&pool(), "shop.Svc", "Create", "{ nope").unwrap_err();
-        assert!(err.starts_with("Invalid JSON"), "got {err}");
-    }
-
-    #[test]
-    fn test_unknown_field_rejected() {
-        let err = validate_message(&pool(), "shop.Svc", "Create", "{\"nme\": \"x\"}").unwrap_err();
-        assert!(err.contains("unrecognized field name"), "got {err}");
-    }
-
-    #[test]
-    fn test_type_mismatch_rejected() {
-        let err = validate_message(&pool(), "shop.Svc", "Create", "{\"quantity\": \"lots\"}")
-            .unwrap_err();
-        assert!(err.contains("invalid digit"), "got {err}");
-    }
-
-    #[test]
-    fn test_valid_message_passes() {
-        assert_eq!(
-            validate_message(
-                &pool(),
-                "shop.Svc",
-                "Create",
-                "{\"id\": \"a\", \"quantity\": 2, \"labels\": {\"k\": \"v\"}}"
-            ),
-            Ok(())
-        );
-    }
-
-    #[test]
-    fn test_without_schema_only_syntax_checked() {
-        assert_eq!(
-            validate_message(&DescriptorPool::default(), "", "", "{\"anything\": 1}"),
-            Ok(())
-        );
-    }
 }

@@ -1,6 +1,8 @@
 use crate::components::script_editor::{ScriptCompletionProvider, ScriptEditorKind};
 use crate::state::{ComposerSyncScope, EnvironmentState, RequestSessionState, WorkspaceDataState};
-use gpui_kit::component::input::{EditorState as CodeEditorState, InputState, TextareaState};
+use gpui_kit::component::input::{
+    EditorState as CodeEditorState, GutterDecorationCollection, InputState, TextareaState,
+};
 use gpui_kit::{App, AppContext as _, Entity, Window};
 use std::rc::Rc;
 use zest_core::models::{Auth, Protocol, RequestBody};
@@ -26,6 +28,8 @@ pub struct ComposerInputs {
     pub ws_message_textarea: Entity<TextareaState>,
     /// `.proto` file path input for gRPC requests (persisted).
     pub grpc_proto_path_input: Entity<InputState>,
+    /// Red gutter marks for gRPC message validation errors.
+    pub grpc_error_marks: GutterDecorationCollection,
     /// Request that currently owns `ws_message_textarea` content.
     ws_message_owner: Option<String>,
 }
@@ -76,6 +80,9 @@ impl ComposerInputs {
             ));
             state.language("json").line_number(true).folding(true)
         });
+        let grpc_error_marks = grpc_message_editor.update(cx, |state, cx| {
+            state.create_gutter_decorations_collection(vec![], cx)
+        });
 
         let ws_message_textarea = cx.new(|cx| TextareaState::new(window, cx));
 
@@ -125,6 +132,7 @@ impl ComposerInputs {
             grpc_message_editor,
             ws_message_textarea,
             grpc_proto_path_input,
+            grpc_error_marks,
             ws_message_owner: None,
         }
     }

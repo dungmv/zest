@@ -226,6 +226,9 @@ pub fn handle_session_event(
                 resp.restore_ws_session(ws_status, ws_messages, ws_headers, cx);
             });
 
+            // Follow the restored editor content with fresh validation marks.
+            this.refresh_grpc_message_diagnostics(cx);
+
             let is_scratch = req_id == "scratch" || req_id.is_empty();
             let persisted_id = if is_scratch {
                 None
