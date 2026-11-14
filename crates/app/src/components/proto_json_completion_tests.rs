@@ -119,8 +119,29 @@ fn test_manual_trigger_positions() {
     let nested = json_field_candidates(&order_message(), "{\"customer\": {").unwrap();
     assert_eq!(nested.1.len(), 2);
 
+    // Second field after a NUMBER value on its own line: the comma must
+    // reset the expecting-value state (regression: only the first field
+    // suggested).
+    let prefix = "{
+  \"quantity\": 5,
+  \"i";
+    let (span, candidates) = json_field_candidates(&order_message(), prefix).unwrap();
+    assert!(!span.needs_quote);
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].name, "id");
+
+    // Unquoted identifier after a number value on a new line.
+    let prefix = "{
+  \"quantity\": 5,
+  i";
+    let (span, candidates) = json_field_candidates(&order_message(), prefix).unwrap();
+    assert!(span.needs_quote);
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].name, "id");
+
     // Value positions yield nothing.
     assert!(json_field_candidates(&order_message(), "{\"id\": ").is_none());
+    assert!(json_field_candidates(&order_message(), "{\"quantity\": 5").is_none());
     assert!(json_field_candidates(&order_message(), "{\"tags\": [\"ab").is_none());
     assert!(json_field_candidates(&order_message(), "{\"id\": \"a\"").is_none());
 }

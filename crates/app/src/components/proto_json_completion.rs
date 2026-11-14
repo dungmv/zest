@@ -277,6 +277,14 @@ fn locate_message_context(
             b'}' => {
                 current = stack.pop().flatten();
                 last_key = None;
+                expecting_value = false;
+            }
+            b',' => {
+                // A comma ends the current member/element: the next string
+                // is a key again inside the enclosing object — including
+                // after scalar (number/bool/null) values, which the string
+                // branch above cannot reset.
+                expecting_value = false;
             }
             _ => {}
         }
