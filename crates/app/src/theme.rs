@@ -1,3 +1,4 @@
+use gpui_kit::component::highlighter::StatusColors;
 use gpui_kit::{App, Hsla, Rgba, WindowAppearance};
 use serde::{Deserialize, Serialize};
 use zest_core::models::{HttpMethod, Protocol};
@@ -591,6 +592,31 @@ pub fn sync_component_theme(mode: ThemeMode, cx: &mut App) {
         c.table_hover = t.bg_hover;
         c.table_active = t.bg_selected;
         c.table_row_border = t.border_subtle;
+
+        // Editor diagnostics: opaque, high-contrast token backgrounds so
+        // hover tooltips stay readable over any content. StatusColors has
+        // private fields — its serde JSON form is the configuration path.
+        let mut highlight = (*c.highlight_theme).clone();
+        let status_token = |bg: gpui_kit::Hsla, accent: gpui_kit::Hsla, alpha: f32| -> String {
+            let blended = bg.blend(accent.alpha(alpha));
+            let rgba = gpui_kit::Rgba::from(blended);
+            format!(
+                "#{:02x}{:02x}{:02x}",
+                (rgba.r * 255.0).round() as u8,
+                (rgba.g * 255.0).round() as u8,
+                (rgba.b * 255.0).round() as u8
+            )
+        };
+        let error_bg = status_token(t.bg_app, t.status_5xx, 0.30);
+        let warning_bg = status_token(t.bg_app, t.warning, 0.22);
+        let info_bg = status_token(t.bg_app, t.info, 0.18);
+        let success_bg = status_token(t.bg_app, t.success, 0.18);
+        if let Ok(status) = serde_json::from_str::<StatusColors>(&format!(
+            "{{\"error.background\": \"{error_bg}\", \"warning.background\": \"{warning_bg}\", \"info.background\": \"{info_bg}\", \"success.background\": \"{success_bg}\"}}"
+        )) {
+            highlight.style.status = status;
+            c.highlight_theme = std::sync::Arc::new(highlight);
+        }
     });
 }
 

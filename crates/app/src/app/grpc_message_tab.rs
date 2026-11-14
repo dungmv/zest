@@ -51,20 +51,6 @@ pub fn render_grpc_message_tab(
     let message_editor = ctx.message_editor.clone();
     let toast_state = ctx.toast_state.clone();
 
-    // Live validity for the toolbar check: JSON syntax first, then schema
-    // conformance when the selection resolves against the fetched pool.
-    // Error details are surfaced as editor diagnostics on the offending
-    // line, not here.
-    let raw = ctx.message_editor.read(cx).value().to_string();
-    let is_valid = raw.trim().is_empty()
-        || crate::components::proto_json_completion::validate_message(
-            &schema.pool,
-            &payload.service,
-            &payload.method,
-            &raw,
-        )
-        .is_ok();
-
     div()
         .size_full()
         .flex()
@@ -155,21 +141,6 @@ pub fn render_grpc_message_tab(
                                 }),
                         ),
                 )
-                // Validity check: a green check when the message parses and
-                // conforms to the schema (details live on the editor line).
-                .child(if is_valid {
-                    div()
-                        .text_xs()
-                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                        .text_color(t.status_2xx)
-                        .child("✓")
-                } else {
-                    div()
-                        .text_xs()
-                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                        .text_color(t.status_5xx)
-                        .child("✗")
-                })
                 .child(
                     Button::new("btn-format-json-grpc")
                         .ghost()
