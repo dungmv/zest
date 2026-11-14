@@ -47,13 +47,11 @@ impl WebSocketClient {
         let timeout_ms = req.settings.timeout_ms;
         let started = std::time::Instant::now();
         let connect_fut = connect_async(request);
-        let (stream, response) = tokio::time::timeout(
-            std::time::Duration::from_millis(timeout_ms),
-            connect_fut,
-        )
-        .await
-        .map_err(|_| HttpError::Timeout(timeout_ms))?
-        .map_err(|e| HttpError::Network(format!("WebSocket handshake failed: {e}")))?;
+        let (stream, response) =
+            tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), connect_fut)
+                .await
+                .map_err(|_| HttpError::Timeout(timeout_ms))?
+                .map_err(|e| HttpError::Network(format!("WebSocket handshake failed: {e}")))?;
 
         let response_headers: Vec<(String, String)> = response
             .headers()

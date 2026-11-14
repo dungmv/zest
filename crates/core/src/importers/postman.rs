@@ -158,7 +158,11 @@ fn parse_items(
 fn detect_protocol(method_str: &str, url: &str) -> Protocol {
     let upper = method_str.to_uppercase();
     let lower_url = url.to_lowercase();
-    if upper == "WS" || upper == "WSS" || lower_url.starts_with("ws://") || lower_url.starts_with("wss://") {
+    if upper == "WS"
+        || upper == "WSS"
+        || lower_url.starts_with("ws://")
+        || lower_url.starts_with("wss://")
+    {
         Protocol::WebSocket
     } else if upper == "GRPC" || upper == "GRPCCALL" {
         Protocol::Grpc

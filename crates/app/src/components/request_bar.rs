@@ -346,11 +346,7 @@ impl RenderOnce for RequestBar {
                                     on_send_cb(window, cx);
                                 }
                             })
-                            .child(
-                                Icon::new(icon)
-                                    .size(px(14.))
-                                    .text_color(icon_color),
-                            )
+                            .child(Icon::new(icon).size(px(14.)).text_color(icon_color))
                     }),
             )
             // Autocomplete Dropdown popup when user types {{

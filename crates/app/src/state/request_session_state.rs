@@ -1,4 +1,5 @@
 use super::{ComposerSyncScope, SessionEvent};
+use crate::services::GrpcSchemaSummary;
 use gpui_kit::{Context, Task};
 use tokio::sync::oneshot;
 use zest_core::models::{HttpRequestItem, Protocol};
@@ -40,6 +41,7 @@ impl RequestTabKind {
             ],
             Protocol::Grpc => &[
                 RequestTabKind::Message,
+                RequestTabKind::Proto,
                 RequestTabKind::Headers,
                 RequestTabKind::Auth,
                 RequestTabKind::PreRequestScript,
@@ -79,6 +81,8 @@ pub struct RequestSessionState {
     pub send_progress: Option<String>,
     pub cancel_tx: Option<oneshot::Sender<()>>,
     pub script_error: Option<String>,
+    /// Resolved gRPC schema for the service/method picker (session-only).
+    pub grpc_schema: Option<GrpcSchemaSummary>,
     input_refresh_task: Option<Task<()>>,
 }
 
@@ -92,6 +96,7 @@ impl RequestSessionState {
             send_progress: None,
             cancel_tx: None,
             script_error: None,
+            grpc_schema: None,
             input_refresh_task: None,
         }
     }
@@ -184,6 +189,11 @@ impl RequestSessionState {
         self.running_request_id = None;
         self.send_progress = None;
         self.cancel_tx = None;
+        cx.notify();
+    }
+
+    pub fn set_grpc_schema(&mut self, schema: Option<GrpcSchemaSummary>, cx: &mut Context<Self>) {
+        self.grpc_schema = schema;
         cx.notify();
     }
 

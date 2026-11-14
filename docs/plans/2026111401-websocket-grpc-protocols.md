@@ -1,6 +1,22 @@
 # Plan: 2026111401 — Hỗ trợ giao thức WebSocket & gRPC
 
-> **Ngày tạo:** 2026-11-14 · **Trạng thái:** Đang triển khai · **Spec gốc:** `docs/specs/03-protocols-graphql-websocket-grpc.md`, Roadmap Phase 2
+> **Ngày tạo:** 2026-11-14 · **Trạng thái:** Đã triển khai xong (cùng commit) · **Spec gốc:** `docs/specs/03-protocols-graphql-websocket-grpc.md`, Roadmap Phase 2
+
+---
+
+## 0. Kết quả triển khai (cập nhật 2026-11-14)
+
+Toàn bộ Phase 1–4 hoàn tất: 234 test pass, `cargo clippy --all-targets -- -D warnings` = 0.
+
+**Deviations so với kế hoạch gốc:**
+
+- **WS binary send** hoãn (nhận binary hiển thị hex đủ; gửi Text + Ping có đủ).
+- **`validate_tls = false` chưa được honor cho WSS và gRPC TLS** (dùng connector rustls mặc định với native/webpki roots); ghi rõ là hạn chế, xử lý sau bằng custom verifier.
+- **gRPC client-streaming/bidi** hoãn (đúng kế hoạch); unary + server-streaming hoàn chỉnh, streaming có thể cancel giữa chừng (oneshot → watch channel).
+- **Frame log dùng chung**: log message của gRPC tái dùng storage `WsMessage` trong `ResponseState` (direction/kind/payload), Cards UI dùng chung với WS.
+- **Schema gRPC cache** theo `(endpoint, proto_path)` trong `GrpcEngine`; danh sách service/method cho picker là session-only (`RequestSessionState.grpc_schema`).
+- **Auto-reconnect (`WebSocketStatus::Reconnecting`)** chưa làm — status vẫn giữ variant cho tương lai.
+- **TLS gRPC**: tonic `tls-aws-lc` + `tls-native-roots` khớp provider aws-lc-rs của reqwest (1 bản rustls duy nhất trong tree).
 
 ---
 

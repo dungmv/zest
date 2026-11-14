@@ -101,31 +101,37 @@ impl RenderOnce for ResponseInspector {
                                 .send_progress
                                 .clone()
                                 .unwrap_or_else(|| "Sending request...".to_string());
-                            div().flex().items_center().gap(px(8.)).child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(6.))
-                                    .px(px(8.))
-                                    .py(px(3.))
-                                    .rounded(px(4.))
-                                    .bg(gpui_kit::Hsla {
-                                        a: 0.12,
-                                        ..t.primary
-                                    })
-                                    .border_1()
-                                    .border_color(gpui_kit::Hsla {
-                                        a: 0.3,
-                                        ..t.primary
-                                    })
-                                    .text_xs()
-                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                                    .text_color(t.primary)
-                                    .child(Spinner::new().with_size(px(12.)).color(t.primary))
-                                    .child(progress_text),
-                            )
-                            .into_any_element()
-                        } else if is_realtime {
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(8.))
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(6.))
+                                        .px(px(8.))
+                                        .py(px(3.))
+                                        .rounded(px(4.))
+                                        .bg(gpui_kit::Hsla {
+                                            a: 0.12,
+                                            ..t.primary
+                                        })
+                                        .border_1()
+                                        .border_color(gpui_kit::Hsla {
+                                            a: 0.3,
+                                            ..t.primary
+                                        })
+                                        .text_xs()
+                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
+                                        .text_color(t.primary)
+                                        .child(Spinner::new().with_size(px(12.)).color(t.primary))
+                                        .child(progress_text),
+                                )
+                                .into_any_element()
+                        } else if protocol == Protocol::Grpc {
+                            Self::render_grpc_status_pill(resp_s.grpc_last_call.as_ref(), t)
+                        } else if protocol == Protocol::WebSocket {
                             Self::render_realtime_status_pill(&resp_s.ws_status, t)
                         } else if let Some(resp) = &current_resp {
                             let status_color = t.status_color(resp.status_code);
@@ -340,8 +346,45 @@ impl RenderOnce for ResponseInspector {
 }
 
 impl ResponseInspector {
-    /// Connection status pill for WebSocket/gRPC requests (non-sending states).
-    fn render_realtime_status_pill(status: &WebSocketStatus, t: &crate::theme::AppTheme) -> gpui_kit::AnyElement {
+    /// grpc-status pill for the most recent gRPC call.
+    fn render_grpc_status_pill(
+        last_call: Option<&zest_core::grpc::GrpcCallSummary>,
+        t: &crate::theme::AppTheme,
+    ) -> gpui_kit::AnyElement {
+        let (label, color) = match last_call {
+            Some(summary) if summary.is_ok() => (
+                format!("\u{25cf} OK \u{00b7} {} ms", summary.duration_ms),
+                t.status_2xx,
+            ),
+            Some(summary) => (
+                format!(
+                    "\u{25cf} ERROR {} {}",
+                    summary.status_code,
+                    summary.status_message.clone().unwrap_or_default()
+                ),
+                t.status_5xx,
+            ),
+            None => ("\u{25cf} Not called".to_string(), t.text_muted),
+        };
+        div()
+            .px(px(6.))
+            .py(px(2.))
+            .rounded(px(4.))
+            .bg(gpui_kit::Hsla { a: 0.12, ..color })
+            .border_1()
+            .border_color(gpui_kit::Hsla { a: 0.3, ..color })
+            .text_xs()
+            .font_weight(gpui_kit::FontWeight::NORMAL)
+            .text_color(color)
+            .child(label)
+            .into_any_element()
+    }
+
+    /// Connection status pill for WebSocket requests (non-sending states).
+    fn render_realtime_status_pill(
+        status: &WebSocketStatus,
+        t: &crate::theme::AppTheme,
+    ) -> gpui_kit::AnyElement {
         let (label, color) = match status {
             WebSocketStatus::Connected => ("● Connected", t.status_2xx),
             WebSocketStatus::Disconnected => ("● Disconnected", t.text_muted),
@@ -356,10 +399,7 @@ impl ResponseInspector {
             .px(px(6.))
             .py(px(2.))
             .rounded(px(4.))
-            .bg(gpui_kit::Hsla {
-                a: 0.12,
-                ..color
-            })
+            .bg(gpui_kit::Hsla { a: 0.12, ..color })
             .border_1()
             .border_color(gpui_kit::Hsla { a: 0.3, ..color })
             .text_xs()

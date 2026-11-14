@@ -1,3 +1,4 @@
+use super::grpc_engine::{GrpcEngine, GrpcUiEvent};
 use super::http_engine::{ExecEvent, HttpEngine};
 use super::ws_service::{WsService, WsUiEvent};
 use crate::state::{
@@ -17,6 +18,7 @@ use zest_core::ws::WebSocketStatus;
 pub struct Engines {
     pub http: Arc<HttpEngine>,
     pub ws: Arc<WsService>,
+    pub grpc: Arc<GrpcEngine>,
 }
 
 #[derive(Clone)]
@@ -85,7 +87,10 @@ impl Runner {
             state.start_sending(Some(req_item.id.clone()), cancel_tx, cx);
         });
 
-        let mut event_rx = self.engines.http.execute(req_item, Some(cached_env), cancel_rx);
+        let mut event_rx = self
+            .engines
+            .http
+            .execute(req_item, Some(cached_env), cancel_rx);
 
         let session_state = self.session_state.clone();
         let workspace_state = self.workspace_state.clone();
@@ -230,7 +235,10 @@ impl Runner {
             resp.set_ws_status(WebSocketStatus::Connecting, cx);
         });
 
-        let mut event_rx = self.engines.ws.connect(req_item, Some(cached_env), cancel_rx);
+        let mut event_rx = self
+            .engines
+            .ws
+            .connect(req_item, Some(cached_env), cancel_rx);
 
         let session_state = self.session_state.clone();
         let response_state = self.response_state.clone();
@@ -268,7 +276,11 @@ impl Runner {
                         response_headers,
                         duration_ms: _,
                     } => {
-                        ws_service.register_session(&request_id, outgoing, response_headers.clone());
+                        ws_service.register_session(
+                            &request_id,
+                            outgoing,
+                            response_headers.clone(),
+                        );
                         session_state.update(cx, |ed, cx| {
                             ed.stop_sending(cx);
                         });
@@ -277,7 +289,10 @@ impl Runner {
                             resp.set_ws_status(WebSocketStatus::Connected, cx);
                         });
                     }
-                    WsUiEvent::Message { request_id, message } => {
+                    WsUiEvent::Message {
+                        request_id,
+                        message,
+                    } => {
                         ws_service.append_inbound(&request_id, message.clone());
                         let active =
                             session_state.read(cx).active_request_id() == request_id.as_str();
@@ -358,6 +373,182 @@ impl Runner {
             resp.set_ws_status(WebSocketStatus::Disconnected, cx);
         });
     }
+
+    /// Invokes the active gRPC request (unary or server-streaming).
+    pub fn invoke_grpc(&self, cx: &mut App) {
+        let req_id = self.session_state.read(cx).active_request_id().to_string();
+        let Some(mut req_item) = self.workspace_state.read(cx).find_request(&req_id).cloned()
+        else {
+            return;
+        };
+        {
+            let ed = self.session_state.read(cx);
+            if ed.is_sending || req_item.protocol != Protocol::Grpc {
+                return;
+            }
+        }
+
+        // Resolve hierarchical headers & auth, apply global settings — same
+        // preamble as the HTTP send path.
+        {
+            let ws = self.workspace_state.read(cx);
+            let (resolved_headers, resolved_auth) = ws.resolve_request_hierarchy(&req_item);
+            req_item.headers = resolved_headers;
+            req_item.auth = resolved_auth;
+        }
+        {
+            let modal = self.modal_state.read(cx);
+            req_item.set_timeout_secs(modal.network.request_timeout_secs);
+            req_item.set_validate_tls(modal.network.validate_tls);
+        }
+
+        let cached_env = self.env_state.read(cx).effective_environment();
+        let (cancel_tx, cancel_rx) = oneshot::channel();
+
+        self.session_state.update(cx, |state, cx| {
+            state.start_sending(Some(req_id.clone()), cancel_tx, cx);
+        });
+
+        let mut event_rx = self
+            .engines
+            .grpc
+            .invoke(req_item, Some(cached_env), cancel_rx);
+
+        let session_state = self.session_state.clone();
+        let response_state = self.response_state.clone();
+        let env_state = self.env_state.clone();
+        let toast_state = self.toast_state.clone();
+
+        cx.spawn(async move |cx| {
+            while let Some(event) = event_rx.recv().await {
+                cx.update(|cx| match event {
+                    GrpcUiEvent::Started {
+                        request_id: _,
+                        initial_logs,
+                        env_mutations,
+                        pre_script_error,
+                    } => {
+                        if let Some(err) = pre_script_error {
+                            session_state.update(cx, |ed, cx| {
+                                ed.set_script_error(Some(err), cx);
+                            });
+                        } else {
+                            session_state.update(cx, |ed, cx| {
+                                ed.set_script_error(None, cx);
+                            });
+                        }
+                        apply_env_mutations(&env_state, &env_mutations, cx);
+                        response_state.update(cx, |resp, cx| {
+                            resp.set_pre_request_logs(initial_logs, cx);
+                        });
+                    }
+                    GrpcUiEvent::RequestMessage {
+                        request_id,
+                        message,
+                    } => {
+                        let active =
+                            session_state.read(cx).active_request_id() == request_id.as_str();
+                        if active {
+                            response_state.update(cx, |resp, cx| {
+                                resp.push_ws_message(message, cx);
+                            });
+                        }
+                    }
+                    GrpcUiEvent::ResponseMessage {
+                        request_id,
+                        message,
+                    } => {
+                        let active =
+                            session_state.read(cx).active_request_id() == request_id.as_str();
+                        if active {
+                            response_state.update(cx, |resp, cx| {
+                                resp.push_ws_message(message, cx);
+                            });
+                        }
+                    }
+                    GrpcUiEvent::CallCompleted {
+                        request_id: _,
+                        summary,
+                    } => {
+                        response_state.update(cx, |resp, cx| {
+                            resp.set_grpc_last_call(Some(summary), cx);
+                        });
+                        session_state.update(cx, |ed, cx| {
+                            ed.stop_sending(cx);
+                        });
+                    }
+                    GrpcUiEvent::CallFailed {
+                        request_id: _,
+                        summary,
+                    } => {
+                        let status_message = summary.status_message.clone().unwrap_or_default();
+                        response_state.update(cx, |resp, cx| {
+                            resp.set_grpc_last_call(Some(summary), cx);
+                        });
+                        session_state.update(cx, |ed, cx| {
+                            ed.stop_sending(cx);
+                        });
+                        toast_state.update(cx, |ts, cx| {
+                            ts.push_error("gRPC Error", status_message, cx);
+                        });
+                    }
+                    GrpcUiEvent::Failed {
+                        request_id: _,
+                        error,
+                    } => {
+                        session_state.update(cx, |ed, cx| {
+                            ed.stop_sending(cx);
+                        });
+                        toast_state.update(cx, |ts, cx| {
+                            ts.push_error("gRPC Failed", error, cx);
+                        });
+                    }
+                });
+            }
+        })
+        .detach();
+    }
+
+    /// Resolves the gRPC schema (reflection or .proto) for the picker UI.
+    pub fn fetch_grpc_schema(&self, cx: &mut App) {
+        let req_id = self.session_state.read(cx).active_request_id().to_string();
+        let Some(req) = self.workspace_state.read(cx).find_request(&req_id).cloned() else {
+            return;
+        };
+        if req.protocol != Protocol::Grpc {
+            return;
+        }
+        let Some(payload) = req.grpc.clone() else {
+            return;
+        };
+
+        let session_state = self.session_state.clone();
+        let toast_state = self.toast_state.clone();
+
+        let rx = self.engines.grpc.fetch_schema(
+            req.url.clone(),
+            payload.proto_path.clone(),
+            payload.use_reflection,
+        );
+        cx.spawn(async move |cx| {
+            let result = rx
+                .await
+                .unwrap_or_else(|_| Err("Schema fetch task dropped".to_string()));
+            cx.update(|cx| match result {
+                Ok(summary) => {
+                    session_state.update(cx, |ed, cx| {
+                        ed.set_grpc_schema(Some(summary), cx);
+                    });
+                }
+                Err(err) => {
+                    toast_state.update(cx, |ts, cx| {
+                        ts.push_error("Schema Fetch Failed", err, cx);
+                    });
+                }
+            });
+        })
+        .detach();
+    }
 }
 
 /// Applies `(key, Some(value))` / `(key, None)` environment mutations to the
@@ -391,7 +582,9 @@ pub(crate) fn apply_env_mutations(
             }
             let act_name = act_env.name.clone();
             env.invalidate_cache();
-            cx.emit(crate::state::EnvironmentEvent::EnvironmentModified(act_name));
+            cx.emit(crate::state::EnvironmentEvent::EnvironmentModified(
+                act_name,
+            ));
             cx.emit(crate::state::EnvironmentEvent::EnvironmentsReloaded);
             cx.notify();
         } else {

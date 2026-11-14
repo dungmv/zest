@@ -1,6 +1,7 @@
 pub mod actions;
 pub mod auth_tab;
 pub mod composer_inputs;
+pub mod grpc_proto_tab;
 pub mod inspector_displays;
 pub mod modals;
 pub mod request_composer;
@@ -72,6 +73,7 @@ impl AppView {
         let tokio_rt = crate::services::global_tokio_runtime();
         let http_engine = Arc::new(HttpEngine::new(executor, tokio_rt));
         let ws_service = Arc::new(crate::services::WsService::new());
+        let grpc_engine = Arc::new(crate::services::GrpcEngine::new());
         let runner = Runner::new(
             state.session.clone(),
             state.workspace.clone(),
@@ -82,6 +84,7 @@ impl AppView {
             crate::services::Engines {
                 http: http_engine,
                 ws: ws_service,
+                grpc: grpc_engine,
             },
         );
 
@@ -188,14 +191,24 @@ impl AppView {
         self.runner.send_ws_message(text, cx);
         let req_id = self.state.session.read(cx).active_request_id().to_string();
         if self.runner.engines.ws.is_connected(&req_id) {
-            self.composer_inputs.ws_message_textarea.update(cx, |txt, cx| {
-                txt.set_value(String::new(), window, cx);
-            });
+            self.composer_inputs
+                .ws_message_textarea
+                .update(cx, |txt, cx| {
+                    txt.set_value(String::new(), window, cx);
+                });
         }
     }
 
     pub fn send_ws_ping(&self, cx: &mut App) {
         self.runner.send_ws_ping(cx);
+    }
+
+    pub fn invoke_grpc(&self, cx: &mut App) {
+        self.runner.invoke_grpc(cx);
+    }
+
+    pub fn fetch_grpc_schema(&self, cx: &mut App) {
+        self.runner.fetch_grpc_schema(cx);
     }
 }
 

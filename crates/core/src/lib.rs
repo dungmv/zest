@@ -1,6 +1,7 @@
 pub mod cache;
 pub mod curl;
 pub mod git;
+pub mod grpc;
 pub mod http;
 pub mod importers;
 pub mod interpolation;

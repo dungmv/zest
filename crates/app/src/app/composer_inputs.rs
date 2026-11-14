@@ -24,6 +24,8 @@ pub struct ComposerInputs {
     pub grpc_message_editor: Entity<CodeEditorState>,
     /// WebSocket outgoing message box (session-only, never persisted).
     pub ws_message_textarea: Entity<TextareaState>,
+    /// `.proto` file path input for gRPC requests (persisted).
+    pub grpc_proto_path_input: Entity<InputState>,
     /// Request that currently owns `ws_message_textarea` content.
     ws_message_owner: Option<String>,
 }
@@ -71,6 +73,9 @@ impl ComposerInputs {
 
         let ws_message_textarea = cx.new(|cx| TextareaState::new(window, cx));
 
+        let grpc_proto_path_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Path to .proto file…"));
+
         let pre_script_editor = cx.new(|cx| {
             let mut state = CodeEditorState::new(window, cx);
             state.set_highlighter_factory(highlighter_factory.clone(), cx);
@@ -113,6 +118,7 @@ impl ComposerInputs {
             apikey_val_input,
             grpc_message_editor,
             ws_message_textarea,
+            grpc_proto_path_input,
             ws_message_owner: None,
         }
     }
@@ -272,7 +278,8 @@ impl ComposerInputs {
         // Protocol-specific message editors. gRPC payload is persisted in the
         // request file; the WebSocket outgoing box is session-only, so it is
         // cleared when switching to a different request.
-        if matches!(scope, ComposerSyncScope::All) && self.ws_message_owner.as_deref() != Some(req_id)
+        if matches!(scope, ComposerSyncScope::All)
+            && self.ws_message_owner.as_deref() != Some(req_id)
         {
             self.ws_message_owner = Some(req_id.to_string());
             self.ws_message_textarea.update(cx, |txt, cx| {
@@ -283,6 +290,14 @@ impl ComposerInputs {
             let message_json = req.grpc_message_json().to_string();
             self.grpc_message_editor.update(cx, |txt, cx| {
                 txt.set_value(message_json, window, cx);
+            });
+            let proto_path = req
+                .grpc
+                .as_ref()
+                .and_then(|g| g.proto_path.clone())
+                .unwrap_or_default();
+            self.grpc_proto_path_input.update(cx, |inp, cx| {
+                inp.set_value(proto_path, window, cx);
             });
         } else {
             self.grpc_message_editor.update(cx, |txt, cx| {

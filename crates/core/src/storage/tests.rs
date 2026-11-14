@@ -80,7 +80,8 @@ fn test_byte_identical_roundtrip_request() {
 }
 
 #[test]
-fn test_deny_unknown_fields_on_storage_models() {    let invalid_req = "name: Test\nmethod: GET\nurl: http://localhost\nunknown_field: 123\n";
+fn test_deny_unknown_fields_on_storage_models() {
+    let invalid_req = "name: Test\nmethod: GET\nurl: http://localhost\nunknown_field: 123\n";
     let res_req = serde_yaml::from_str::<RequestFile>(invalid_req);
     assert!(res_req.is_err(), "RequestFile must reject unknown fields");
 

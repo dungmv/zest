@@ -212,19 +212,14 @@ pub fn handle_session_event(
 
             // Restore the WebSocket session view (status + frame log) for the
             // incoming request, or an empty disconnected view.
-            let (ws_status, ws_messages, ws_headers) = this
-                .runner
-                .engines
-                .ws
-                .snapshot(req_id)
-                .unwrap_or((
+            let (ws_status, ws_messages, ws_headers) =
+                this.runner.engines.ws.snapshot(req_id).unwrap_or((
                     zest_core::ws::WebSocketStatus::Disconnected,
                     Vec::new(),
                     Vec::new(),
                 ));
             this.state.response.update(cx, |resp, cx| {
-                let clamped_tab =
-                    ResponseTabKind::clamp_for(resp.active_tab, protocol);
+                let clamped_tab = ResponseTabKind::clamp_for(resp.active_tab, protocol);
                 if clamped_tab != resp.active_tab {
                     resp.set_active_tab(clamped_tab, cx);
                 }

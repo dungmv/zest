@@ -62,8 +62,7 @@ fn test_connect_times_out_on_unroutable_host() {
         .unwrap();
     // Unroutable addresses fail with a network error (TCP connect refused by
     // the timeout race), never a panic. Map away the non-Debug handle first.
-    let result = rt
-        .block_on(async { WebSocketClient::connect(&resolved).await.map(|_| ()) });
+    let result = rt.block_on(async { WebSocketClient::connect(&resolved).await.map(|_| ()) });
     match result {
         Err(HttpError::Timeout(300)) => {}
         Err(HttpError::Network(msg)) if msg.contains("handshake") => {}

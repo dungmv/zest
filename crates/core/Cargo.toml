@@ -6,6 +6,12 @@ edition = "2021"
 [dependencies]
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "gzip", "brotli", "cookies", "stream", "json", "multipart"] }
 tokio-tungstenite = { version = "0.24", default-features = false, features = ["rustls-tls-webpki-roots", "connect"] }
+tonic = { version = "0.14", default-features = false, features = ["transport", "codegen", "tls-aws-lc", "tls-native-roots"] }
+tonic-reflection = "0.14"
+prost = "0.14"
+prost-types = "0.14"
+prost-reflect = { version = "0.16", features = ["serde"] }
+protox = "0.10"
 reqwest_cookie_store = "0.10.0"
 cookie_store = "0.22.1"
 tokio = { version = "1", features = ["full"] }

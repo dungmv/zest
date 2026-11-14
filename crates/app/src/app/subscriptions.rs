@@ -42,6 +42,7 @@ pub fn setup_app_subscriptions(
     let xml_editor = &targets.composer_inputs.xml_editor;
     let raw_textarea = &targets.composer_inputs.raw_textarea;
     let grpc_message_editor = &targets.composer_inputs.grpc_message_editor;
+    let grpc_proto_path_input = &targets.composer_inputs.grpc_proto_path_input;
     let bearer_token_input = &targets.composer_inputs.bearer_token_input;
     let basic_user_input = &targets.composer_inputs.basic_user_input;
     let basic_pass_input = &targets.composer_inputs.basic_pass_input;
@@ -167,6 +168,29 @@ pub fn setup_app_subscriptions(
             ed_xml.update(cx, |ed, cx| ed.mark_dirty(cx));
         }
     }));
+
+    // 2b-2. Subscribe to gRPC .proto path input (persisted into GrpcPayload)
+    let ed_gpath = editor_state.clone();
+    let ws_gpath = workspace_state.clone();
+    subscriptions.push(
+        cx.subscribe(grpc_proto_path_input, move |_, inp, event, cx| {
+            if let InputEvent::Change = event {
+                let val = inp.read(cx).value().to_string();
+                let active_id = ed_gpath.read(cx).active_request_id().to_string();
+                ws_gpath.update(cx, |ws, _| {
+                    ws.update_active_request(&active_id, |r| {
+                        let path = if val.trim().is_empty() {
+                            None
+                        } else {
+                            Some(val.clone())
+                        };
+                        r.grpc_mut().proto_path = path;
+                    });
+                });
+                ed_gpath.update(cx, |ed, cx| ed.mark_dirty(cx));
+            }
+        }),
+    );
 
     // 2c. Subscribe to gRPC message editor change (persisted into GrpcPayload)
     let ed_grpc = editor_state.clone();

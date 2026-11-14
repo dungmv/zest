@@ -2,9 +2,10 @@ use super::ResponseEvent;
 use gpui_kit::Context;
 use std::sync::Arc;
 use zest_core::cache::ResponseCache;
-use zest_core::models::{ConsoleLogEntry, ConsoleLogLevel, HttpResponseRecord, TestResult};
+use zest_core::grpc::GrpcCallSummary;
 use zest_core::models::Protocol;
-use zest_core::ws::{WsMessage, WebSocketStatus};
+use zest_core::models::{ConsoleLogEntry, ConsoleLogLevel, HttpResponseRecord, TestResult};
+use zest_core::ws::{WebSocketStatus, WsMessage};
 
 /// View-side cap for the live WS frame log (service keeps its own copy).
 const MAX_WS_VIEW_MESSAGES: usize = 1000;
@@ -126,6 +127,8 @@ pub struct ResponseState {
     pub ws_messages: Vec<WsMessage>,
     /// Handshake response headers of the active WS session.
     pub ws_handshake_headers: Vec<(String, String)>,
+    /// Summary of the most recent gRPC call (status, headers, duration).
+    pub grpc_last_call: Option<GrpcCallSummary>,
 }
 
 impl ResponseState {
@@ -149,6 +152,7 @@ impl ResponseState {
             ws_status: WebSocketStatus::default(),
             ws_messages: Vec::new(),
             ws_handshake_headers: Vec::new(),
+            grpc_last_call: None,
         }
     }
 
@@ -464,6 +468,11 @@ impl ResponseState {
         cx.notify();
     }
 
+    pub fn set_grpc_last_call(&mut self, summary: Option<GrpcCallSummary>, cx: &mut Context<Self>) {
+        self.grpc_last_call = summary;
+        cx.notify();
+    }
+
     pub fn set_ws_handshake_headers(
         &mut self,
         headers: Vec<(String, String)>,
@@ -485,6 +494,7 @@ impl ResponseState {
         self.ws_status = status;
         self.ws_messages = messages;
         self.ws_handshake_headers = handshake_headers;
+        self.grpc_last_call = None;
         self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
         cx.notify();
     }

@@ -82,9 +82,11 @@ impl ResolvedRequest {
 
         // Base URL (strip any residual query string from URL if params are provided, or use parse_query_from_url)
         let (base_interpolated, raw_url_params) = parse_query_from_url(&interpolated_url);
-        let known_scheme = ["http://", "https://", "ws://", "wss://", "grpc://", "grpcs://"]
-            .iter()
-            .any(|s| base_interpolated.starts_with(s));
+        let known_scheme = [
+            "http://", "https://", "ws://", "wss://", "grpc://", "grpcs://",
+        ]
+        .iter()
+        .any(|s| base_interpolated.starts_with(s));
         let mut full_url = if known_scheme {
             base_interpolated
         } else {

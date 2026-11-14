@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::sync::Mutex;
 use std::sync::Arc;
+use std::sync::Mutex;
 
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::sync::oneshot;
@@ -10,7 +10,7 @@ use zest_core::scripting::{
     resolve_fake_vars_in_request, PreRequestContext, PreRequestOutput, ScriptSandbox,
 };
 use zest_core::ws::{
-    WebSocketClient, WsDirection, WsEvent, WsMessage, WsMessageKind, WsOutgoing, WebSocketStatus,
+    WebSocketClient, WebSocketStatus, WsDirection, WsEvent, WsMessage, WsMessageKind, WsOutgoing,
 };
 
 use super::global_tokio_runtime;
@@ -119,10 +119,7 @@ impl WsService {
         self.tokio_rt.spawn(async move {
             // 1. Resolve dynamic fake variables + run the pre-request script
             resolve_fake_vars_in_request(&mut req_item);
-            let pre_script_code = req_item
-                .script
-                .as_ref()
-                .and_then(|s| s.pre_request.clone());
+            let pre_script_code = req_item.script.as_ref().and_then(|s| s.pre_request.clone());
             let pre_output = match pre_script_code {
                 Some(code) => {
                     let ctx = PreRequestContext::from_request_and_env(&req_item, env.as_deref());

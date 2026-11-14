@@ -74,7 +74,10 @@ pub enum WsEvent {
     },
     Message(WsMessage),
     /// Peer closed the connection (or we closed it and got the close ack).
-    Closed { code: Option<u16>, reason: String },
+    Closed {
+        code: Option<u16>,
+        reason: String,
+    },
     /// Terminal failure of the connection (network/protocol error).
     Error(String),
 }

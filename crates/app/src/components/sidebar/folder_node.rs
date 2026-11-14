@@ -6,7 +6,6 @@ use crate::app::actions::DismissModal;
 use crate::state::ScopeSettingsTarget;
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
-use zest_core::models::Protocol;
 use gpui_kit::component::menu::ContextMenuExt as _;
 use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -14,6 +13,7 @@ use gpui_kit::{
     div, px, AnyElement, AppContext as _, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement, StatefulInteractiveElement as _, Styled,
 };
+use zest_core::models::Protocol;
 
 pub fn render_folder_row(
     folder_id: &str,

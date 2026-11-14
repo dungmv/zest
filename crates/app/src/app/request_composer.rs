@@ -192,12 +192,19 @@ impl AppView {
                     RequestBarActions {
                         on_send: std::rc::Rc::new(move |window, cx| {
                             // Route the primary action by protocol: HTTP
-                            // sends, WebSocket connects.
+                            // sends, WebSocket connects, gRPC invokes.
                             let _ = window;
-                            if bar_protocol == Protocol::WebSocket {
-                                view_handle.update(cx, |view, cx| view.connect_websocket(cx));
-                            } else {
-                                view_handle.update(cx, |view, cx| view.send_current_request(cx));
+                            match bar_protocol {
+                                Protocol::WebSocket => {
+                                    view_handle.update(cx, |view, cx| view.connect_websocket(cx));
+                                }
+                                Protocol::Grpc => {
+                                    view_handle.update(cx, |view, cx| view.invoke_grpc(cx));
+                                }
+                                Protocol::Http => {
+                                    view_handle
+                                        .update(cx, |view, cx| view.send_current_request(cx));
+                                }
                             }
                         }),
                         on_disconnect: std::rc::Rc::new(move |_, cx| {
@@ -211,10 +218,7 @@ impl AppView {
             .child({
                 let protocol = active_req.map(|r| r.protocol).unwrap_or(Protocol::Http);
                 let tabs = RequestTabKind::tabs_for(protocol);
-                let active_idx = tabs
-                    .iter()
-                    .position(|k| *k == active_tab_kind)
-                    .unwrap_or(0);
+                let active_idx = tabs.iter().position(|k| *k == active_tab_kind).unwrap_or(0);
                 let param_count = active_req_info.as_ref().map(|info| info.0).unwrap_or(0);
                 let header_count = active_req_info.as_ref().map(|info| info.1).unwrap_or(0);
                 let has_pre = active_req_info.as_ref().map(|info| info.2).unwrap_or(false);
@@ -235,42 +239,34 @@ impl AppView {
                 for kind in tabs {
                     let mut tab = Tab::new().label(kind.label());
                     tab = match kind {
-                        RequestTabKind::Params => {
-                            tab.when(param_count > 0, |tab| {
-                                tab.suffix(render_tab_badge(
-                                    format!("{param_count}"),
-                                    active_tab_kind == RequestTabKind::Params,
-                                    t,
-                                ))
-                            })
-                        }
-                        RequestTabKind::Headers => {
-                            tab.when(header_count > 0, |tab| {
-                                tab.suffix(render_tab_badge(
-                                    format!("{header_count}"),
-                                    active_tab_kind == RequestTabKind::Headers,
-                                    t,
-                                ))
-                            })
-                        }
-                        RequestTabKind::PreRequestScript => {
-                            tab.when(has_pre, |tab| {
-                                tab.suffix(render_tab_badge(
-                                    "*",
-                                    active_tab_kind == RequestTabKind::PreRequestScript,
-                                    t,
-                                ))
-                            })
-                        }
-                        RequestTabKind::Tests => {
-                            tab.when(has_test, |tab| {
-                                tab.suffix(render_tab_badge(
-                                    "*",
-                                    active_tab_kind == RequestTabKind::Tests,
-                                    t,
-                                ))
-                            })
-                        }
+                        RequestTabKind::Params => tab.when(param_count > 0, |tab| {
+                            tab.suffix(render_tab_badge(
+                                format!("{param_count}"),
+                                active_tab_kind == RequestTabKind::Params,
+                                t,
+                            ))
+                        }),
+                        RequestTabKind::Headers => tab.when(header_count > 0, |tab| {
+                            tab.suffix(render_tab_badge(
+                                format!("{header_count}"),
+                                active_tab_kind == RequestTabKind::Headers,
+                                t,
+                            ))
+                        }),
+                        RequestTabKind::PreRequestScript => tab.when(has_pre, |tab| {
+                            tab.suffix(render_tab_badge(
+                                "*",
+                                active_tab_kind == RequestTabKind::PreRequestScript,
+                                t,
+                            ))
+                        }),
+                        RequestTabKind::Tests => tab.when(has_test, |tab| {
+                            tab.suffix(render_tab_badge(
+                                "*",
+                                active_tab_kind == RequestTabKind::Tests,
+                                t,
+                            ))
+                        }),
                         _ => tab,
                     };
                     bar = bar.child(tab);
@@ -348,25 +344,29 @@ impl AppView {
                                     )
                             }
                             Protocol::Grpc => div().size_full().overflow_hidden().child(
-                                Editor::new(&self.composer_inputs.grpc_message_editor).h(
-                                    gpui_kit::relative(1.),
-                                ),
+                                Editor::new(&self.composer_inputs.grpc_message_editor)
+                                    .h(gpui_kit::relative(1.)),
                             ),
                             Protocol::Http => div(),
                         }
                     }
-                    RequestTabKind::Proto => div()
-                        .size_full()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(
-                            gpui_kit::component::empty::Empty::new().child(
-                                gpui_kit::component::empty::EmptyDescription::new().child(
-                                    "Schema source (Server Reflection or .proto file) is configured here.",
-                                ),
-                            ),
-                        ),
+                    RequestTabKind::Proto => div().size_full().child({
+                        let payload = active_req.and_then(|r| r.grpc.clone()).unwrap_or_default();
+                        let view_fetch = app_view_entity.clone();
+                        super::grpc_proto_tab::render_grpc_proto_tab(
+                            &payload,
+                            super::grpc_proto_tab::GrpcProtoTabContext {
+                                workspace_state: &self.state.workspace,
+                                editor_state: &self.state.session,
+                                on_fetch_schema: std::rc::Rc::new(move |cx| {
+                                    view_fetch.update(cx, |view, cx| view.fetch_grpc_schema(cx));
+                                }),
+                                proto_path_input: &self.composer_inputs.grpc_proto_path_input,
+                            },
+                            window,
+                            cx,
+                        )
+                    }),
                     RequestTabKind::Params => {
                         let params = ws_read
                             .find_request(&req_id_str)

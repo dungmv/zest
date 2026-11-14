@@ -5,7 +5,7 @@ use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::spinner::Spinner;
 use gpui_kit::component::Sizable as _;
 use gpui_kit::{div, px, AnyElement, App, IntoElement, ParentElement, Styled};
-use zest_core::ws::{WsDirection, WsMessage, WsMessageKind, WebSocketStatus};
+use zest_core::ws::{WebSocketStatus, WsDirection, WsMessage, WsMessageKind};
 
 /// Frame log for WebSocket/gRPC requests (Messages tab).
 pub(super) fn render_messages_tab(
@@ -41,20 +41,18 @@ pub(super) fn render_messages_tab(
         .flex()
         .flex_col()
         .bg(t.bg_response)
-        .child(
-            div().flex_1().overflow_y_scrollbar().p(px(12.)).child({
-                if messages.is_empty() {
-                    render_messages_empty_state(&status)
-                } else {
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap(px(6.))
-                        .children(messages.into_iter().map(render_message_card))
-                        .into_any_element()
-                }
-            }),
-        )
+        .child(div().flex_1().overflow_y_scrollbar().p(px(12.)).child({
+            if messages.is_empty() {
+                render_messages_empty_state(&status)
+            } else {
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .children(messages.into_iter().map(render_message_card))
+                    .into_any_element()
+            }
+        }))
         .into_any_element()
 }
 
@@ -70,9 +68,7 @@ fn render_messages_empty_state(status: &WebSocketStatus) -> AnyElement {
         .flex()
         .items_center()
         .justify_center()
-        .child(
-            Empty::new().child(EmptyDescription::new().child(hint)),
-        )
+        .child(Empty::new().child(EmptyDescription::new().child(hint)))
         .into_any_element()
 }
 
@@ -81,9 +77,7 @@ fn render_message_card(msg: WsMessage) -> AnyElement {
     let is_inbound = msg.direction == WsDirection::Inbound;
 
     let (direction_symbol, direction_color) = match (is_inbound, msg.kind) {
-        (true, WsMessageKind::Ping) | (true, WsMessageKind::Pong) => {
-            ("←", t.text_muted)
-        }
+        (true, WsMessageKind::Ping) | (true, WsMessageKind::Pong) => ("←", t.text_muted),
         (true, _) => ("←", t.status_2xx),
         (false, WsMessageKind::Ping) | (false, WsMessageKind::Pong) => ("→", t.text_muted),
         (false, _) => ("→", t.method_websocket),
@@ -97,7 +91,11 @@ fn render_message_card(msg: WsMessage) -> AnyElement {
     };
 
     let time = chrono::DateTime::from_timestamp_millis(msg.timestamp_ms)
-        .map(|dt| dt.with_timezone(&chrono::Local).format("%H:%M:%S%.3f").to_string())
+        .map(|dt| {
+            dt.with_timezone(&chrono::Local)
+                .format("%H:%M:%S%.3f")
+                .to_string()
+        })
         .unwrap_or_default();
 
     div()
@@ -127,11 +125,11 @@ fn render_message_card(msg: WsMessage) -> AnyElement {
                         .text_color(direction_color)
                         .child(kind_label),
                 )
-                .child(
-                    div()
-                        .text_color(t.text_muted)
-                        .child(format!("{} · {} B", time, msg.size_bytes())),
-                ),
+                .child(div().text_color(t.text_muted).child(format!(
+                    "{} · {} B",
+                    time,
+                    msg.size_bytes()
+                ))),
         )
         .child(render_payload(&msg))
         .into_any_element()
@@ -164,49 +162,57 @@ fn render_payload(msg: &WsMessage) -> AnyElement {
         .into_any_element()
 }
 
-/// Headers tab for realtime protocols: shows the handshake response headers.
+/// Headers tab for realtime protocols: WS shows the handshake response
+/// headers; gRPC shows the most recent call's response headers.
 pub(super) fn render_realtime_headers_tab(ri: &ResponseInspector, cx: &App) -> AnyElement {
     let t = theme();
     let resp_s = ri.response_state.read(cx);
-    let headers = resp_s.ws_handshake_headers.clone();
+    let headers = match &resp_s.grpc_last_call {
+        Some(call) if !call.headers.is_empty() => call.headers.clone(),
+        _ => resp_s.ws_handshake_headers.clone(),
+    };
 
-    div().size_full().overflow_y_scrollbar().p(px(12.)).child({
-        if headers.is_empty() {
-            div()
-                .text_xs()
-                .text_color(t.text_muted)
-                .child("No handshake headers (not connected yet)")
-                .into_any_element()
-        } else {
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(2.))
-                .children(headers.into_iter().map(|(name, value)| {
-                    div()
-                        .flex()
-                        .gap(px(8.))
-                        .text_xs()
-                        .py(px(2.))
-                        .border_b_1()
-                        .border_color(t.border_subtle)
-                        .child(
-                            div()
-                                .font_family("monospace")
-                                .font_weight(gpui_kit::FontWeight::MEDIUM)
-                                .text_color(t.text_primary)
-                                .min_w(px(180.))
-                                .child(name.clone()),
-                        )
-                        .child(
-                            div()
-                                .font_family("monospace")
-                                .text_color(t.text_secondary)
-                                .child(value),
-                        )
-                }))
-                .into_any_element()
-        }
-    })
-    .into_any_element()
+    div()
+        .size_full()
+        .overflow_y_scrollbar()
+        .p(px(12.))
+        .child({
+            if headers.is_empty() {
+                div()
+                    .text_xs()
+                    .text_color(t.text_muted)
+                    .child("No handshake headers (not connected yet)")
+                    .into_any_element()
+            } else {
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .children(headers.into_iter().map(|(name, value)| {
+                        div()
+                            .flex()
+                            .gap(px(8.))
+                            .text_xs()
+                            .py(px(2.))
+                            .border_b_1()
+                            .border_color(t.border_subtle)
+                            .child(
+                                div()
+                                    .font_family("monospace")
+                                    .font_weight(gpui_kit::FontWeight::MEDIUM)
+                                    .text_color(t.text_primary)
+                                    .min_w(px(180.))
+                                    .child(name.clone()),
+                            )
+                            .child(
+                                div()
+                                    .font_family("monospace")
+                                    .text_color(t.text_secondary)
+                                    .child(value),
+                            )
+                    }))
+                    .into_any_element()
+            }
+        })
+        .into_any_element()
 }
