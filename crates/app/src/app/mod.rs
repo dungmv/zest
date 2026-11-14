@@ -19,6 +19,7 @@ use crate::components::*;
 use crate::services::{HttpEngine, Runner};
 use crate::state::*;
 use crate::theme::theme;
+use gpui_kit::component::input::ShowCompletions;
 use gpui_kit::component::resizable::{h_resizable, resizable_panel, v_resizable};
 use gpui_kit::*;
 use std::sync::Arc;
@@ -311,6 +312,16 @@ impl Render for AppView {
             .text_color(t.text_primary)
             .flex()
             .flex_col()
+            // Fallback for the completion popup: fires only when the
+            // Ctrl+Space keybinding was not consumed by binding dispatch
+            // (e.g. a key-context quirk), so there is no double dispatch.
+            .on_key_down(move |event: &gpui_kit::KeyDownEvent, window, cx| {
+                let k = &event.keystroke;
+                if k.modifiers.control && !k.modifiers.alt && !k.modifiers.shift && k.key == "space"
+                {
+                    window.dispatch_action(Box::new(ShowCompletions), cx);
+                }
+            })
             // Keyboard shortcut action handlers
             .on_action({
                 let view_handle = app_view_entity.clone();

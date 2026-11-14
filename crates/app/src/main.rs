@@ -94,11 +94,6 @@ fn main() {
                 ShowCompletions,
                 Some("Input && mode == editor"),
             ),
-            KeyBinding::new(
-                "cmd-space",
-                ShowCompletions,
-                Some("Input && mode == editor"),
-            ),
             KeyBinding::new("ctrl-k", ToggleCommandPalette, None),
             KeyBinding::new("cmd-k", ToggleCommandPalette, None),
             KeyBinding::new("ctrl-b", ToggleSidebar, None),
@@ -133,4 +128,40 @@ fn main() {
         let modal = app_view.read(cx).state.modal.clone();
         platform::init_app_menu(modal, cx);
     });
+}
+
+#[cfg(test)]
+mod keybinding_probe {
+    use gpui_kit::component::input::ShowCompletions;
+    use gpui_kit::{KeyBinding, KeyContext, Keystroke};
+
+    #[test]
+    fn test_ctrl_space_binding_matches_editor_context() {
+        let binding = KeyBinding::new(
+            "ctrl-space",
+            ShowCompletions,
+            Some("Input && mode == editor"),
+        );
+
+        // The keystroke itself must parse and match. Some(false) means the
+        // single-keystroke binding is fully consumed by one typed keystroke.
+        let typed = Keystroke::parse("ctrl-space").unwrap();
+        assert_eq!(
+            binding.match_keystrokes(&[typed]),
+            Some(false),
+            "ctrl-space keystroke must match the binding"
+        );
+
+        // The editor's key context must satisfy the predicate.
+        let predicate = binding.predicate().expect("binding has a context");
+        let editor_context = KeyContext::parse("Input mode=editor").unwrap();
+        assert!(
+            predicate.eval(&[editor_context]),
+            "editor key context must satisfy the binding predicate"
+        );
+
+        // A non-editor context must NOT trigger the binding.
+        let other = KeyContext::parse("Sidebar").unwrap();
+        assert!(!predicate.eval(&[other]));
+    }
 }
