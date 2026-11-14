@@ -1,6 +1,7 @@
 pub mod actions;
 pub mod auth_tab;
 pub mod composer_inputs;
+pub mod grpc_message_tab;
 pub mod grpc_proto_tab;
 pub mod inspector_displays;
 pub mod modals;

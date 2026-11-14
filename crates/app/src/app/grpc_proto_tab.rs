@@ -2,7 +2,6 @@ use crate::state::{RequestSessionState, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Input, InputState};
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::Sizable as _;
 use gpui_kit::prelude::FluentBuilder as _;
@@ -42,20 +41,6 @@ pub fn render_grpc_proto_tab(
     let req_fetch = req_id.clone();
 
     let use_reflection = payload.use_reflection;
-    let selected_service = payload.service.clone();
-    let selected_method = payload.method.clone();
-
-    // Service / method lists from the resolved schema
-    let services: Vec<String> = schema
-        .as_ref()
-        .map(|s| s.services.iter().map(|(name, _)| name.clone()).collect())
-        .unwrap_or_default();
-    let methods = schema.as_ref().and_then(|s| {
-        s.services
-            .iter()
-            .find(|(name, _)| *name == selected_service)
-            .map(|(_, methods)| methods.clone())
-    });
 
     div()
         .size_full()
@@ -181,133 +166,14 @@ pub fn render_grpc_proto_tab(
                     ),
             )
         })
-        // Service picker
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(6.))
-                .child(
-                    div()
-                        .text_xs()
-                        .font_weight(gpui_kit::FontWeight::MEDIUM)
-                        .text_color(t.text_secondary)
-                        .child("Service"),
-                )
-                .child(render_service_dropdown(
-                    ws.clone(),
-                    ed.clone(),
-                    req_id.clone(),
-                    services,
-                    selected_service.clone(),
-                )),
-        )
-        // Method picker
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(6.))
-                .child(
-                    div()
-                        .text_xs()
-                        .font_weight(gpui_kit::FontWeight::MEDIUM)
-                        .text_color(t.text_secondary)
-                        .child("Method"),
-                )
-                .child(render_method_dropdown(
-                    ws.clone(),
-                    ed.clone(),
-                    req_id.clone(),
-                    methods.unwrap_or_default(),
-                    selected_method.clone(),
-                )),
-        )
-        .when(schema.is_none(), |this| {
+.when(schema.is_none(), |this| {
             this.child(
                 div()
                     .text_xs()
                     .text_color(t.text_muted)
                     .child(
-                        "No schema loaded. Use Reflection (server must support it) or pick a .proto file, then Fetch Schema.",
+                        "No schema loaded. Use Reflection (server must support it) or pick a .proto file, then Fetch Schema. Service/method selection lives in the Message tab.",
                     ),
             )
-        })
-}
-
-fn render_service_dropdown(
-    ws: Entity<WorkspaceDataState>,
-    ed: Entity<RequestSessionState>,
-    req_id: String,
-    services: Vec<String>,
-    selected: String,
-) -> impl IntoElement {
-    let label = if selected.is_empty() {
-        "Select service…".to_string()
-    } else {
-        selected.clone()
-    };
-    Button::new("btn-grpc-service-dropdown")
-        .ghost()
-        .small()
-        .label(label)
-        .dropdown_menu(move |menu, _window, _cx| {
-            services.iter().fold(menu, |m, svc| {
-                let ws_set = ws.clone();
-                let ed_set = ed.clone();
-                let req = req_id.clone();
-                let svc_name = svc.clone();
-                m.item(
-                    PopupMenuItem::new(svc.clone())
-                        .checked(*svc == selected)
-                        .on_click(move |_, _, cx| {
-                            ws_set.update(cx, |ws, _| {
-                                ws.update_active_request(&req, |r| {
-                                    r.grpc_mut().service = svc_name.clone();
-                                });
-                            });
-                            ed_set.update(cx, |ed, cx| ed.mark_dirty(cx));
-                        }),
-                )
-            })
-        })
-}
-
-fn render_method_dropdown(
-    ws: Entity<WorkspaceDataState>,
-    ed: Entity<RequestSessionState>,
-    req_id: String,
-    methods: Vec<zest_core::grpc::GrpcMethodInfo>,
-    selected: String,
-) -> impl IntoElement {
-    let label = if selected.is_empty() {
-        "Select method…".to_string()
-    } else {
-        selected.clone()
-    };
-    Button::new("btn-grpc-method-dropdown")
-        .ghost()
-        .small()
-        .label(label)
-        .dropdown_menu(move |menu, _window, _cx| {
-            methods.iter().fold(menu, |m, info| {
-                let ws_set = ws.clone();
-                let ed_set = ed.clone();
-                let req = req_id.clone();
-                let method_name = info.name.clone();
-                let label = info.label();
-                m.item(
-                    PopupMenuItem::new(label)
-                        .checked(info.name == selected)
-                        .on_click(move |_, _, cx| {
-                            ws_set.update(cx, |ws, _| {
-                                ws.update_active_request(&req, |r| {
-                                    r.grpc_mut().method = method_name.clone();
-                                });
-                            });
-                            ed_set.update(cx, |ed, cx| ed.mark_dirty(cx));
-                        }),
-                )
-            })
         })
 }

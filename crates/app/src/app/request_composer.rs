@@ -4,7 +4,7 @@ use crate::components::*;
 use crate::state::*;
 use crate::theme::theme;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::input::{Editor, Textarea};
+use gpui_kit::component::input::Textarea;
 use gpui_kit::component::tab::{Tab, TabBar};
 use gpui_kit::component::Sizable as _;
 use gpui_kit::prelude::FluentBuilder as _;
@@ -329,10 +329,21 @@ impl AppView {
                                             ),
                                     )
                             }
-                            Protocol::Grpc => div().size_full().overflow_hidden().child(
-                                Editor::new(&self.composer_inputs.grpc_message_editor)
-                                    .h(gpui_kit::relative(1.)),
-                            ),
+                            Protocol::Grpc => div().size_full().child({
+                                let payload =
+                                    active_req.and_then(|r| r.grpc.clone()).unwrap_or_default();
+                                super::grpc_message_tab::render_grpc_message_tab(
+                                    &payload,
+                                    super::grpc_message_tab::GrpcMessageTabContext {
+                                        workspace_state: &self.state.workspace,
+                                        editor_state: &self.state.session,
+                                        toast_state: &self.state.toast,
+                                        message_editor: &self.composer_inputs.grpc_message_editor,
+                                    },
+                                    window,
+                                    cx,
+                                )
+                            }),
                             Protocol::Http => div(),
                         }
                     }
