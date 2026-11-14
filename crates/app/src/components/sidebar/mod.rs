@@ -425,8 +425,8 @@ impl RenderOnce for SidebarTree {
                                     let sb_grpc = sb_menu.clone();
 
                                     menu.item(
-                                        PopupMenuItem::new("New Request")
-                                            .icon(Icon::new(IconName::FileText))
+                                        PopupMenuItem::new("New HTTP")
+                                            .icon(Icon::new(IconName::Globe))
                                             .on_click(move |_, window, cx| {
                                                 let ws_c = ws_req.clone();
                                                 let req = ws_req.update(cx, |state, cx| {
@@ -445,8 +445,8 @@ impl RenderOnce for SidebarTree {
                                             }),
                                     )
                                     .item(
-                                        PopupMenuItem::new("New WebSocket Request")
-                                            .icon(Icon::new(IconName::FileText))
+                                        PopupMenuItem::new("New WebSocket")
+                                            .icon(Icon::new(IconName::ArrowLeftRight))
                                             .on_click(move |_, window, cx| {
                                                 super::item_actions::create_and_rename_request(
                                                     Protocol::WebSocket,
@@ -460,8 +460,8 @@ impl RenderOnce for SidebarTree {
                                             }),
                                     )
                                     .item(
-                                        PopupMenuItem::new("New gRPC Request")
-                                            .icon(Icon::new(IconName::FileText))
+                                        PopupMenuItem::new("New gRPC")
+                                            .icon(Icon::new(IconName::Network))
                                             .on_click(move |_, window, cx| {
                                                 super::item_actions::create_and_rename_request(
                                                     Protocol::Grpc,

@@ -252,8 +252,8 @@ pub fn render_folder_row(
                 let f_id_d = f_id_del.clone();
 
                 menu.item(
-                    gpui_kit::component::menu::PopupMenuItem::new("New Request")
-                        .icon(IconName::Plus)
+                    gpui_kit::component::menu::PopupMenuItem::new("New HTTP")
+                        .icon(Icon::new(IconName::Globe))
                         .on_click(move |_, window, cx| {
                             let ws_c = ws_n.clone();
                             let req = ws_n.update(cx, |state, cx| {
@@ -271,8 +271,8 @@ pub fn render_folder_row(
                         }),
                 )
                 .item(
-                    gpui_kit::component::menu::PopupMenuItem::new("New WebSocket Request")
-                        .icon(IconName::Plus)
+                    gpui_kit::component::menu::PopupMenuItem::new("New WebSocket")
+                        .icon(Icon::new(IconName::ArrowLeftRight))
                         .on_click(move |_, window, cx| {
                             sb_nws.update(cx, |state, _| {
                                 state.collapsed_folders.remove(&f_id_nws.clone());
@@ -289,8 +289,8 @@ pub fn render_folder_row(
                         }),
                 )
                 .item(
-                    gpui_kit::component::menu::PopupMenuItem::new("New gRPC Request")
-                        .icon(IconName::Plus)
+                    gpui_kit::component::menu::PopupMenuItem::new("New gRPC")
+                        .icon(Icon::new(IconName::Network))
                         .on_click(move |_, window, cx| {
                             sb_ngrpc.update(cx, |state, _| {
                                 state.collapsed_folders.remove(&f_id_ngrpc.clone());
