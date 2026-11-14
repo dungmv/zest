@@ -252,16 +252,13 @@ impl AppView {
             .read(cx)
             .value()
             .to_string();
-        let result = crate::components::proto_json_completion::validate_message(
+        crate::components::proto_json_completion::refresh_grpc_validation(
+            &self.composer_inputs.grpc_message_editor,
+            &self.composer_inputs.grpc_error_marks,
+            self.composer_inputs.grpc_diagnostics_hover.get(),
             &schema.pool,
             &payload.service,
             &payload.method,
-            &text,
-        );
-        crate::components::proto_json_completion::update_grpc_diagnostics(
-            &self.composer_inputs.grpc_message_editor,
-            &self.composer_inputs.grpc_error_marks,
-            &result,
             &text,
             crate::theme::theme().status_5xx,
             cx,

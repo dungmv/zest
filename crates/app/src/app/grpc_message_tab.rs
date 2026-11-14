@@ -2,10 +2,15 @@ use crate::state::{RequestSessionState, ToastState, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::input::{Editor, EditorState as CodeEditorState};
+use gpui_kit::component::input::{
+    Editor, EditorState as CodeEditorState, GutterDecorationCollection,
+};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::{Icon, Sizable as _};
-use gpui_kit::{div, px, App, Entity, IntoElement, ParentElement, Styled, Window};
+use gpui_kit::{
+    div, px, App, Entity, InteractiveElement as _, IntoElement, ParentElement,
+    StatefulInteractiveElement as _, Styled, Window,
+};
 use zest_core::models::GrpcPayload;
 
 pub struct GrpcMessageTabContext<'a> {
@@ -13,6 +18,8 @@ pub struct GrpcMessageTabContext<'a> {
     pub editor_state: &'a Entity<RequestSessionState>,
     pub toast_state: &'a Entity<ToastState>,
     pub message_editor: &'a Entity<CodeEditorState>,
+    pub error_marks: &'a GutterDecorationCollection,
+    pub diagnostics_hover: &'a std::rc::Rc<std::cell::Cell<bool>>,
 }
 
 /// gRPC Message tab, styled after the HTTP Body tab: a toolbar with the
@@ -166,12 +173,44 @@ pub fn render_grpc_message_tab(
                         }),
                 ),
         )
-        // Message JSON editor
+        // Message JSON editor. Hovering the pane enables the in-editor
+        // error diagnostic (hover tooltip on the offending line); leaving
+        // clears it so nothing floats over the content while typing.
         .child(
             div()
+                .id("grpc-message-editor-pane")
                 .flex_1()
                 .min_h(px(0.))
                 .overflow_hidden()
+                .on_hover({
+                    let hover_cell = ctx.diagnostics_hover.clone();
+                    let ws_hover = ctx.workspace_state.clone();
+                    let ed_hover = ctx.editor_state.clone();
+                    let editor_hover = ctx.message_editor.clone();
+                    let marks_hover = ctx.error_marks.clone();
+                    move |hovered: &bool, _window, cx| {
+                        let hovered = *hovered;
+                        hover_cell.set(hovered);
+                        let payload = ws_hover
+                            .read(cx)
+                            .find_request(ed_hover.read(cx).active_request_id())
+                            .and_then(|r| r.grpc.clone())
+                            .unwrap_or_default();
+                        let schema = ed_hover.read(cx).grpc_schema.clone().unwrap_or_default();
+                        let text = editor_hover.read(cx).value().to_string();
+                        crate::components::proto_json_completion::refresh_grpc_validation(
+                            &editor_hover,
+                            &marks_hover,
+                            hovered,
+                            &schema.pool,
+                            &payload.service,
+                            &payload.method,
+                            &text,
+                            crate::theme::theme().status_5xx,
+                            cx,
+                        );
+                    }
+                })
                 .child(Editor::new(ctx.message_editor).h(gpui_kit::relative(1.))),
         )
 }

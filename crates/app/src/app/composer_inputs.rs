@@ -30,6 +30,9 @@ pub struct ComposerInputs {
     pub grpc_proto_path_input: Entity<InputState>,
     /// Red gutter marks for gRPC message validation errors.
     pub grpc_error_marks: GutterDecorationCollection,
+    /// Whether the pointer currently hovers the gRPC message editor —
+    /// gates the in-editor diagnostic tooltip (hover-only by design).
+    pub grpc_diagnostics_hover: std::rc::Rc<std::cell::Cell<bool>>,
     /// Request that currently owns `ws_message_textarea` content.
     ws_message_owner: Option<String>,
 }
@@ -83,6 +86,7 @@ impl ComposerInputs {
         let grpc_error_marks = grpc_message_editor.update(cx, |state, cx| {
             state.create_gutter_decorations_collection(vec![], cx)
         });
+        let grpc_diagnostics_hover = std::rc::Rc::new(std::cell::Cell::new(false));
 
         let ws_message_textarea = cx.new(|cx| TextareaState::new(window, cx));
 
@@ -133,6 +137,7 @@ impl ComposerInputs {
             ws_message_textarea,
             grpc_proto_path_input,
             grpc_error_marks,
+            grpc_diagnostics_hover,
             ws_message_owner: None,
         }
     }

@@ -196,6 +196,7 @@ pub fn setup_app_subscriptions(
     let ed_grpc = editor_state.clone();
     let ws_grpc = workspace_state.clone();
     let grpc_marks = targets.composer_inputs.grpc_error_marks.clone();
+    let grpc_hover = targets.composer_inputs.grpc_diagnostics_hover.clone();
     subscriptions.push(cx.subscribe(grpc_message_editor, move |_, txt, event, cx| {
         if let InputEvent::Change = event {
             let val = txt.read(cx).value().to_string();
@@ -211,16 +212,13 @@ pub fn setup_app_subscriptions(
                 .find_request(&active_id)
                 .and_then(|r| r.grpc.clone())
                 .unwrap_or_default();
-            let result = crate::components::proto_json_completion::validate_message(
+            crate::components::proto_json_completion::refresh_grpc_validation(
+                &txt,
+                &grpc_marks,
+                grpc_hover.get(),
                 &schema.pool,
                 &payload.service,
                 &payload.method,
-                &val,
-            );
-            crate::components::proto_json_completion::update_grpc_diagnostics(
-                &txt,
-                &grpc_marks,
-                &result,
                 &val,
                 crate::theme::theme().status_5xx,
                 cx,

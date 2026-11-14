@@ -430,18 +430,26 @@ pub fn validate_message(
     Ok(())
 }
 
-/// Pushes a validation result into the editor as editor diagnostics (hover
-/// tooltip on the offending line) and a red gutter mark on that line, like
-/// a breakpoint. Clears both when the message is valid.
-pub fn update_grpc_diagnostics(
+/// Revalidates the gRPC message and mirrors the result into the editor:
+/// a red gutter mark on the offending line always reflects the state,
+/// while the in-editor diagnostic (hover tooltip) is only pushed while
+/// the pointer hovers the editor — the underlying popover latches on
+/// mouse-move and cannot be dismissed programmatically, so pushing it
+/// unconditionally would leave it stuck on screen while typing.
+#[allow(clippy::too_many_arguments)]
+pub fn refresh_grpc_validation(
     editor: &Entity<CodeEditorState>,
     gutter_marks: &GutterDecorationCollection,
-    result: &Result<(), MessageValidationError>,
+    hovered: bool,
+    pool: &DescriptorPool,
+    service: &str,
+    method: &str,
     text: &str,
     error_color: Hsla,
     cx: &mut App,
 ) {
-    let gutter = match result {
+    let result = validate_message(pool, service, method, text);
+    let gutter = match &result {
         Ok(()) => Vec::new(),
         Err(e) => {
             let (start, end) = line_byte_range(text, e.line);
@@ -453,30 +461,33 @@ pub fn update_grpc_diagnostics(
     editor.update(cx, |state, cx| {
         if let Some(set) = state.diagnostics_mut() {
             set.clear();
-            if let Err(e) = result {
-                // Span the diagnostic from the error column to the end of
-                // the line: a zero-width range paints no decoration and its
-                // hover hit-test would only match one pixel column.
-                let line_chars = text
-                    .split('\n')
-                    .nth(e.line)
-                    .map(|line| line.chars().count() as u32)
-                    .unwrap_or(e.column as u32);
-                let start = Position {
-                    line: e.line as u32,
-                    character: (e.column as u32).min(line_chars),
-                };
-                let end = Position {
-                    line: e.line as u32,
-                    character: line_chars,
-                };
-                set.push(Diagnostic {
-                    range: start..end,
-                    severity: DiagnosticSeverity::Error,
-                    message: e.message.clone().into(),
-                    source: Some("zest-grpc".into()),
-                    ..Default::default()
-                });
+            if hovered {
+                if let Err(e) = &result {
+                    // Span the diagnostic from the error column to the end
+                    // of the line: a zero-width range paints no decoration
+                    // and its hover hit-test would only match one pixel
+                    // column.
+                    let line_chars = text
+                        .split('\n')
+                        .nth(e.line)
+                        .map(|line| line.chars().count() as u32)
+                        .unwrap_or(e.column as u32);
+                    let start = Position {
+                        line: e.line as u32,
+                        character: (e.column as u32).min(line_chars),
+                    };
+                    let end = Position {
+                        line: e.line as u32,
+                        character: line_chars,
+                    };
+                    set.push(Diagnostic {
+                        range: start..end,
+                        severity: DiagnosticSeverity::Error,
+                        message: e.message.clone().into(),
+                        source: Some("zest-grpc".into()),
+                        ..Default::default()
+                    });
+                }
             }
         }
         cx.notify();

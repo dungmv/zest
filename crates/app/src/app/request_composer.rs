@@ -339,6 +339,10 @@ impl AppView {
                                         editor_state: &self.state.session,
                                         toast_state: &self.state.toast,
                                         message_editor: &self.composer_inputs.grpc_message_editor,
+                                        error_marks: &self.composer_inputs.grpc_error_marks,
+                                        diagnostics_hover: &self
+                                            .composer_inputs
+                                            .grpc_diagnostics_hover,
                                     },
                                     window,
                                     cx,
