@@ -181,7 +181,6 @@ impl AppView {
             .child({
                 let view_handle = app_view_entity.clone();
                 let view_handle_disc = app_view_entity.clone();
-                let bar_protocol = active_req.map(|r| r.protocol).unwrap_or(Protocol::Http);
                 RequestBar::new(
                     ws_entity.clone(),
                     self.state.env.clone(),
@@ -190,22 +189,9 @@ impl AppView {
                     self.state.response.clone(),
                     self.composer_inputs.url_input.clone(),
                     RequestBarActions {
-                        on_send: std::rc::Rc::new(move |window, cx| {
-                            // Route the primary action by protocol: HTTP
-                            // sends, WebSocket connects, gRPC invokes.
-                            let _ = window;
-                            match bar_protocol {
-                                Protocol::WebSocket => {
-                                    view_handle.update(cx, |view, cx| view.connect_websocket(cx));
-                                }
-                                Protocol::Grpc => {
-                                    view_handle.update(cx, |view, cx| view.invoke_grpc(cx));
-                                }
-                                Protocol::Http => {
-                                    view_handle
-                                        .update(cx, |view, cx| view.send_current_request(cx));
-                                }
-                            }
+                        // `send_current_request` routes by protocol itself.
+                        on_send: std::rc::Rc::new(move |_, cx| {
+                            view_handle.update(cx, |view, cx| view.send_current_request(cx));
                         }),
                         on_disconnect: std::rc::Rc::new(move |_, cx| {
                             view_handle_disc.update(cx, |view, cx| view.disconnect_websocket(cx));
