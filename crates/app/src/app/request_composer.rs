@@ -4,11 +4,12 @@ use crate::components::*;
 use crate::state::*;
 use crate::theme::theme;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::input::{Editor, Textarea};
 use gpui_kit::component::tab::{Tab, TabBar};
 use gpui_kit::component::Sizable as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{div, px, AnyElement, Context, IntoElement, ParentElement, Styled, Window};
-use zest_core::models::Auth;
+use zest_core::models::{Auth, Protocol};
 
 impl AppView {
     pub(crate) fn render_request_composer(
@@ -192,69 +193,76 @@ impl AppView {
                     },
                 )
             })
-            // Request Tabs with TabBar: Body, Params [count], Headers [count], Auth, Pre-request, Post-response
+            // Request Tabs with TabBar — the strip depends on the request's
+            // transport protocol (HTTP: Body..scripts, WS/gRPC: Message..)
             .child({
-                let active_idx = match active_tab_kind {
-                    RequestTabKind::Body => 0,
-                    RequestTabKind::Params => 1,
-                    RequestTabKind::Headers => 2,
-                    RequestTabKind::Auth => 3,
-                    RequestTabKind::PreRequestScript => 4,
-                    RequestTabKind::Tests => 5,
-                };
+                let protocol = active_req.map(|r| r.protocol).unwrap_or(Protocol::Http);
+                let tabs = RequestTabKind::tabs_for(protocol);
+                let active_idx = tabs
+                    .iter()
+                    .position(|k| *k == active_tab_kind)
+                    .unwrap_or(0);
                 let param_count = active_req_info.as_ref().map(|info| info.0).unwrap_or(0);
                 let header_count = active_req_info.as_ref().map(|info| info.1).unwrap_or(0);
                 let has_pre = active_req_info.as_ref().map(|info| info.2).unwrap_or(false);
                 let has_test = active_req_info.as_ref().map(|info| info.3).unwrap_or(false);
                 let ed_c = ed_entity.clone();
 
-                TabBar::new("request-composer-tabs")
+                let mut bar = TabBar::new("request-composer-tabs")
                     .underline()
                     .px(px(8.))
                     .selected_index(active_idx)
                     .on_click(move |&idx, _, cx| {
-                        let kind = match idx {
-                            0 => RequestTabKind::Body,
-                            1 => RequestTabKind::Params,
-                            2 => RequestTabKind::Headers,
-                            3 => RequestTabKind::Auth,
-                            4 => RequestTabKind::PreRequestScript,
-                            _ => RequestTabKind::Tests,
-                        };
+                        let tabs = RequestTabKind::tabs_for(protocol);
+                        let kind = tabs.get(idx).copied().unwrap_or(tabs[0]);
                         ed_c.update(cx, |state, cx| {
                             state.set_active_tab_kind(kind, cx);
                         });
-                    })
-                    .child(Tab::new().label("Body"))
-                    .child(Tab::new().label("Params").when(param_count > 0, |tab| {
-                        tab.suffix(render_tab_badge(
-                            format!("{param_count}"),
-                            active_tab_kind == RequestTabKind::Params,
-                            t,
-                        ))
-                    }))
-                    .child(Tab::new().label("Headers").when(header_count > 0, |tab| {
-                        tab.suffix(render_tab_badge(
-                            format!("{header_count}"),
-                            active_tab_kind == RequestTabKind::Headers,
-                            t,
-                        ))
-                    }))
-                    .child(Tab::new().label("Auth"))
-                    .child(Tab::new().label("Pre-request").when(has_pre, |tab| {
-                        tab.suffix(render_tab_badge(
-                            "*",
-                            active_tab_kind == RequestTabKind::PreRequestScript,
-                            t,
-                        ))
-                    }))
-                    .child(Tab::new().label("Post-response").when(has_test, |tab| {
-                        tab.suffix(render_tab_badge(
-                            "*",
-                            active_tab_kind == RequestTabKind::Tests,
-                            t,
-                        ))
-                    }))
+                    });
+                for kind in tabs {
+                    let mut tab = Tab::new().label(kind.label());
+                    tab = match kind {
+                        RequestTabKind::Params => {
+                            tab.when(param_count > 0, |tab| {
+                                tab.suffix(render_tab_badge(
+                                    format!("{param_count}"),
+                                    active_tab_kind == RequestTabKind::Params,
+                                    t,
+                                ))
+                            })
+                        }
+                        RequestTabKind::Headers => {
+                            tab.when(header_count > 0, |tab| {
+                                tab.suffix(render_tab_badge(
+                                    format!("{header_count}"),
+                                    active_tab_kind == RequestTabKind::Headers,
+                                    t,
+                                ))
+                            })
+                        }
+                        RequestTabKind::PreRequestScript => {
+                            tab.when(has_pre, |tab| {
+                                tab.suffix(render_tab_badge(
+                                    "*",
+                                    active_tab_kind == RequestTabKind::PreRequestScript,
+                                    t,
+                                ))
+                            })
+                        }
+                        RequestTabKind::Tests => {
+                            tab.when(has_test, |tab| {
+                                tab.suffix(render_tab_badge(
+                                    "*",
+                                    active_tab_kind == RequestTabKind::Tests,
+                                    t,
+                                ))
+                            })
+                        }
+                        _ => tab,
+                    };
+                    bar = bar.child(tab);
+                }
+                bar
             })
             // Request Tab Content
             .child(div().flex_1().overflow_hidden().child({
@@ -271,6 +279,38 @@ impl AppView {
                         .modal_state(self.state.modal.clone())
                         .toast_state(self.state.toast.clone()),
                     ),
+                    RequestTabKind::Message => {
+                        let protocol = active_req.map(|r| r.protocol).unwrap_or(Protocol::Http);
+                        match protocol {
+                            Protocol::WebSocket => div()
+                                .size_full()
+                                .overflow_hidden()
+                                .child(
+                                    Textarea::new(&self.composer_inputs.ws_message_textarea)
+                                        .appearance(false)
+                                        .bordered(false)
+                                        .h(gpui_kit::relative(1.)),
+                                ),
+                            Protocol::Grpc => div().size_full().overflow_hidden().child(
+                                Editor::new(&self.composer_inputs.grpc_message_editor).h(
+                                    gpui_kit::relative(1.),
+                                ),
+                            ),
+                            Protocol::Http => div(),
+                        }
+                    }
+                    RequestTabKind::Proto => div()
+                        .size_full()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(
+                            gpui_kit::component::empty::Empty::new().child(
+                                gpui_kit::component::empty::EmptyDescription::new().child(
+                                    "Schema source (Server Reflection or .proto file) is configured here.",
+                                ),
+                            ),
+                        ),
                     RequestTabKind::Params => {
                         let params = ws_read
                             .find_request(&req_id_str)

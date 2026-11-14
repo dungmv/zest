@@ -1,7 +1,7 @@
 use crate::theme::theme;
 use gpui_kit::component::tag::Tag;
 use gpui_kit::{div, px, App, IntoElement, ParentElement, RenderOnce, Styled, Window};
-use zest_core::models::HttpMethod;
+use zest_core::models::{HttpMethod, Protocol};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, IntoElement)]
 pub struct MethodBadge {
@@ -25,6 +25,32 @@ impl RenderOnce for MethodBadge {
             .font_weight(gpui_kit::FontWeight::NORMAL)
             .text_color(color)
             .child(self.method.as_str())
+    }
+}
+
+/// Colored protocol label for non-HTTP requests ("WS" / "gRPC").
+#[derive(Clone, Copy, Debug, PartialEq, Eq, IntoElement)]
+pub struct ProtocolBadge {
+    pub protocol: Protocol,
+}
+
+impl ProtocolBadge {
+    pub fn new(protocol: Protocol) -> Self {
+        Self { protocol }
+    }
+}
+
+impl RenderOnce for ProtocolBadge {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        let t = theme();
+        let color = t.protocol_color(self.protocol);
+
+        div()
+            .flex_shrink_0()
+            .text_xs()
+            .font_weight(gpui_kit::FontWeight::NORMAL)
+            .text_color(color)
+            .child(self.protocol.as_str())
     }
 }
 

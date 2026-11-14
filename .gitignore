@@ -1,8 +1,10 @@
-/target
+.DS_Store
 target/
 *.pdb
 .idea/
 .vscode/
 .local/
 *.loc
-.agents/.DS_Store
+
+# ZCode session drafts
+.zcode/

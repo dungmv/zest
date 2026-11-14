@@ -41,6 +41,7 @@ pub fn setup_app_subscriptions(
     let json_editor = &targets.composer_inputs.json_editor;
     let xml_editor = &targets.composer_inputs.xml_editor;
     let raw_textarea = &targets.composer_inputs.raw_textarea;
+    let grpc_message_editor = &targets.composer_inputs.grpc_message_editor;
     let bearer_token_input = &targets.composer_inputs.bearer_token_input;
     let basic_user_input = &targets.composer_inputs.basic_user_input;
     let basic_pass_input = &targets.composer_inputs.basic_pass_input;
@@ -164,6 +165,20 @@ pub fn setup_app_subscriptions(
                 });
             });
             ed_xml.update(cx, |ed, cx| ed.mark_dirty(cx));
+        }
+    }));
+
+    // 2c. Subscribe to gRPC message editor change (persisted into GrpcPayload)
+    let ed_grpc = editor_state.clone();
+    let ws_grpc = workspace_state.clone();
+    subscriptions.push(cx.subscribe(grpc_message_editor, move |_, txt, event, cx| {
+        if let InputEvent::Change = event {
+            let val = txt.read(cx).value().to_string();
+            let active_id = ed_grpc.read(cx).active_request_id().to_string();
+            ws_grpc.update(cx, |ws, _| {
+                ws.update_active_request(&active_id, |r| r.set_grpc_message_json(val));
+            });
+            ed_grpc.update(cx, |ed, cx| ed.mark_dirty(cx));
         }
     }));
 

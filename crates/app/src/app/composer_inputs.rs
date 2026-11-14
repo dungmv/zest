@@ -3,7 +3,7 @@ use crate::state::{ComposerSyncScope, EnvironmentState, WorkspaceDataState};
 use gpui_kit::component::input::{EditorState as CodeEditorState, InputState, TextareaState};
 use gpui_kit::{App, AppContext as _, Entity, Window};
 use std::rc::Rc;
-use zest_core::models::{Auth, RequestBody};
+use zest_core::models::{Auth, Protocol, RequestBody};
 
 type HighlighterFactory =
     Rc<dyn Fn(&str) -> Option<Box<dyn gpui_kit::component::input::InputHighlighter>>>;
@@ -20,6 +20,12 @@ pub struct ComposerInputs {
     pub basic_pass_input: Entity<InputState>,
     pub apikey_key_input: Entity<InputState>,
     pub apikey_val_input: Entity<InputState>,
+    /// gRPC request message JSON editor (persisted into `GrpcPayload`).
+    pub grpc_message_editor: Entity<CodeEditorState>,
+    /// WebSocket outgoing message box (session-only, never persisted).
+    pub ws_message_textarea: Entity<TextareaState>,
+    /// Request that currently owns `ws_message_textarea` content.
+    ws_message_owner: Option<String>,
 }
 
 impl ComposerInputs {
@@ -53,6 +59,17 @@ impl ComposerInputs {
         });
 
         let raw_textarea = cx.new(|cx| TextareaState::new(window, cx));
+
+        let grpc_message_editor = cx.new(|cx| {
+            let mut state = CodeEditorState::new(window, cx);
+            state.set_highlighter_factory(highlighter_factory.clone(), cx);
+            state.lsp_mut().completion_provider = Some(Rc::new(
+                crate::components::env_autocomplete::EnvCompletionProvider::new(env_state.clone()),
+            ));
+            state.language("json").line_number(true).folding(true)
+        });
+
+        let ws_message_textarea = cx.new(|cx| TextareaState::new(window, cx));
 
         let pre_script_editor = cx.new(|cx| {
             let mut state = CodeEditorState::new(window, cx);
@@ -94,6 +111,9 @@ impl ComposerInputs {
             basic_pass_input,
             apikey_key_input,
             apikey_val_input,
+            grpc_message_editor,
+            ws_message_textarea,
+            ws_message_owner: None,
         }
     }
 
@@ -247,6 +267,27 @@ impl ComposerInputs {
                     txt.set_value(String::new(), window, cx);
                 });
             }
+        }
+
+        // Protocol-specific message editors. gRPC payload is persisted in the
+        // request file; the WebSocket outgoing box is session-only, so it is
+        // cleared when switching to a different request.
+        if matches!(scope, ComposerSyncScope::All) && self.ws_message_owner.as_deref() != Some(req_id)
+        {
+            self.ws_message_owner = Some(req_id.to_string());
+            self.ws_message_textarea.update(cx, |txt, cx| {
+                txt.set_value(String::new(), window, cx);
+            });
+        }
+        if req.protocol == Protocol::Grpc {
+            let message_json = req.grpc_message_json().to_string();
+            self.grpc_message_editor.update(cx, |txt, cx| {
+                txt.set_value(message_json, window, cx);
+            });
+        } else {
+            self.grpc_message_editor.update(cx, |txt, cx| {
+                txt.set_value(String::new(), window, cx);
+            });
         }
     }
 }

@@ -34,6 +34,7 @@ use gpui_kit::{
     Styled, Window,
 };
 use std::collections::{HashMap, HashSet};
+use zest_core::models::Protocol;
 
 pub struct SidebarRenderContext<'a> {
     pub active_req_id: Option<&'a str>,
@@ -416,6 +417,12 @@ impl RenderOnce for SidebarTree {
                                     let sb_req = sb_menu.clone();
                                     let ws_folder = ws_menu.clone();
                                     let sb_folder = sb_menu.clone();
+                                    let ws_ws = ws_menu.clone();
+                                    let ed_ws = ed_menu.clone();
+                                    let sb_ws = sb_menu.clone();
+                                    let ws_grpc = ws_menu.clone();
+                                    let ed_grpc = ed_menu.clone();
+                                    let sb_grpc = sb_menu.clone();
 
                                     menu.item(
                                         PopupMenuItem::new("New Request")
@@ -435,6 +442,36 @@ impl RenderOnce for SidebarTree {
                                                         req_id, req_name, ws_c, window, cx,
                                                     );
                                                 });
+                                            }),
+                                    )
+                                    .item(
+                                        PopupMenuItem::new("New WebSocket Request")
+                                            .icon(Icon::new(IconName::FileText))
+                                            .on_click(move |_, window, cx| {
+                                                super::item_actions::create_and_rename_request(
+                                                    Protocol::WebSocket,
+                                                    None,
+                                                    &ws_ws,
+                                                    &ed_ws,
+                                                    &sb_ws,
+                                                    window,
+                                                    cx,
+                                                );
+                                            }),
+                                    )
+                                    .item(
+                                        PopupMenuItem::new("New gRPC Request")
+                                            .icon(Icon::new(IconName::FileText))
+                                            .on_click(move |_, window, cx| {
+                                                super::item_actions::create_and_rename_request(
+                                                    Protocol::Grpc,
+                                                    None,
+                                                    &ws_grpc,
+                                                    &ed_grpc,
+                                                    &sb_grpc,
+                                                    window,
+                                                    cx,
+                                                );
                                             }),
                                     )
                                     .item(

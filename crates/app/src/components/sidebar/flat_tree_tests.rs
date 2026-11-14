@@ -1,6 +1,6 @@
 use super::*;
 use zest_core::git::{GitFileStatus, GitStatusItem, GitStatusResult};
-use zest_core::models::{Auth, HttpMethod};
+use zest_core::models::{Auth, HttpMethod, Protocol};
 
 fn make_folder(id: &str, parent_id: Option<&str>, name: &str) -> Folder {
     Folder {
@@ -26,6 +26,7 @@ fn make_req(
         name: name.to_string(),
         display_name: name.to_string(),
         method: HttpMethod::Get,
+        protocol: Protocol::Http,
         url: format!("https://api.example.com/{}", id),
         last_status_code: Some(200),
         examples,

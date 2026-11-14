@@ -6,6 +6,7 @@ use crate::app::actions::DismissModal;
 use crate::state::ScopeSettingsTarget;
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
+use zest_core::models::Protocol;
 use gpui_kit::component::menu::ContextMenuExt as _;
 use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -225,6 +226,16 @@ pub fn render_folder_row(
                 let sb_n = sb_menu.clone();
                 let f_id_n = f_id_new.clone();
 
+                let ws_nws = ws_new.clone();
+                let ed_nws = ed_new.clone();
+                let sb_nws = sb_menu.clone();
+                let f_id_nws = f_id_new.clone();
+
+                let ws_ngrpc = ws_new.clone();
+                let ed_ngrpc = ed_new.clone();
+                let sb_ngrpc = sb_menu.clone();
+                let f_id_ngrpc = f_id_new.clone();
+
                 let ws_ns = ws_new_sub.clone();
                 let sb_ns = sb_new_sub.clone();
                 let f_id_ns = f_id_new_sub.clone();
@@ -257,6 +268,42 @@ pub fn render_folder_row(
                                 state.collapsed_folders.remove(&f_id_n);
                                 state.start_renaming_request(req_id, req_name, ws_c, window, cx);
                             });
+                        }),
+                )
+                .item(
+                    gpui_kit::component::menu::PopupMenuItem::new("New WebSocket Request")
+                        .icon(IconName::Plus)
+                        .on_click(move |_, window, cx| {
+                            sb_nws.update(cx, |state, _| {
+                                state.collapsed_folders.remove(&f_id_nws.clone());
+                            });
+                            super::item_actions::create_and_rename_request(
+                                Protocol::WebSocket,
+                                Some(f_id_nws.clone()),
+                                &ws_nws,
+                                &ed_nws,
+                                &sb_nws,
+                                window,
+                                cx,
+                            );
+                        }),
+                )
+                .item(
+                    gpui_kit::component::menu::PopupMenuItem::new("New gRPC Request")
+                        .icon(IconName::Plus)
+                        .on_click(move |_, window, cx| {
+                            sb_ngrpc.update(cx, |state, _| {
+                                state.collapsed_folders.remove(&f_id_ngrpc.clone());
+                            });
+                            super::item_actions::create_and_rename_request(
+                                Protocol::Grpc,
+                                Some(f_id_ngrpc.clone()),
+                                &ws_ngrpc,
+                                &ed_ngrpc,
+                                &sb_ngrpc,
+                                window,
+                                cx,
+                            );
                         }),
                 )
                 .item(

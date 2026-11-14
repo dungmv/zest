@@ -1,6 +1,6 @@
 use gpui_kit::{App, Hsla, Rgba, WindowAppearance};
 use serde::{Deserialize, Serialize};
-use zest_core::models::HttpMethod;
+use zest_core::models::{HttpMethod, Protocol};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
@@ -142,6 +142,8 @@ pub struct AppTheme {
     pub method_patch: Hsla,
     pub method_head: Hsla,
     pub method_options: Hsla,
+    pub method_websocket: Hsla,
+    pub method_grpc: Hsla,
 
     // Status colors
     pub status_2xx: Hsla,
@@ -278,6 +280,8 @@ impl AppTheme {
             method_patch: hex_to_hsla(0x8b5cf6),
             method_head: hex_to_hsla(0x06b6d4),
             method_options: hex_to_hsla(0x64748b),
+            method_websocket: hex_to_hsla(0xf97316),
+            method_grpc: hex_to_hsla(0xec4899),
 
             // Status colors
             status_2xx: hex_to_hsla(0x10b981),
@@ -399,6 +403,8 @@ impl AppTheme {
             method_patch: hex_to_hsla(0x7c3aed),
             method_head: hex_to_hsla(0x0891b2),
             method_options: hex_to_hsla(0x475569),
+            method_websocket: hex_to_hsla(0xea580c),
+            method_grpc: hex_to_hsla(0xdb2777),
 
             // Status colors
             status_2xx: hex_to_hsla(0x059669),
@@ -598,6 +604,15 @@ impl AppTheme {
             HttpMethod::Patch => self.method_patch,
             HttpMethod::Head => self.method_head,
             HttpMethod::Options => self.method_options,
+        }
+    }
+
+    /// Badge color for non-HTTP transport protocols.
+    pub fn protocol_color(&self, protocol: Protocol) -> Hsla {
+        match protocol {
+            Protocol::Http => self.method_get,
+            Protocol::WebSocket => self.method_websocket,
+            Protocol::Grpc => self.method_grpc,
         }
     }
 

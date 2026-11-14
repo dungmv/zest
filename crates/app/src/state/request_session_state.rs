@@ -1,17 +1,74 @@
 use super::{ComposerSyncScope, SessionEvent};
 use gpui_kit::{Context, Task};
 use tokio::sync::oneshot;
-use zest_core::models::HttpRequestItem;
+use zest_core::models::{HttpRequestItem, Protocol};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum RequestTabKind {
     #[default]
     Body,
+    Message,
     Params,
     Headers,
     Auth,
+    Proto,
     PreRequestScript,
     Tests,
+}
+
+impl RequestTabKind {
+    /// Tab strip for a request of the given protocol:
+    /// - HTTP: Body, Params, Headers, Auth, scripts
+    /// - WebSocket: Message (outgoing frame), Params, Headers, Auth, pre-request
+    /// - gRPC: Message (JSON payload), Headers (metadata), Auth, pre-request
+    pub fn tabs_for(protocol: Protocol) -> &'static [RequestTabKind] {
+        match protocol {
+            Protocol::Http => &[
+                RequestTabKind::Body,
+                RequestTabKind::Params,
+                RequestTabKind::Headers,
+                RequestTabKind::Auth,
+                RequestTabKind::PreRequestScript,
+                RequestTabKind::Tests,
+            ],
+            Protocol::WebSocket => &[
+                RequestTabKind::Message,
+                RequestTabKind::Params,
+                RequestTabKind::Headers,
+                RequestTabKind::Auth,
+                RequestTabKind::PreRequestScript,
+            ],
+            Protocol::Grpc => &[
+                RequestTabKind::Message,
+                RequestTabKind::Headers,
+                RequestTabKind::Auth,
+                RequestTabKind::PreRequestScript,
+            ],
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            RequestTabKind::Body => "Body",
+            RequestTabKind::Message => "Message",
+            RequestTabKind::Params => "Params",
+            RequestTabKind::Headers => "Headers",
+            RequestTabKind::Auth => "Auth",
+            RequestTabKind::Proto => "Proto",
+            RequestTabKind::PreRequestScript => "Pre-request",
+            RequestTabKind::Tests => "Post-response",
+        }
+    }
+
+    /// Returns `kind` if it is valid for `protocol`, else the first valid tab.
+    pub fn clamp_for(kind: RequestTabKind, protocol: Protocol) -> RequestTabKind {
+        let tabs = Self::tabs_for(protocol);
+        if tabs.contains(&kind) {
+            kind
+        } else {
+            tabs[0]
+        }
+    }
 }
 
 pub struct RequestSessionState {

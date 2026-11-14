@@ -454,6 +454,20 @@ impl HttpRequestItem {
         self.method = method;
     }
 
+    /// Writes the gRPC request message JSON, creating the payload if needed.
+    pub fn set_grpc_message_json(&mut self, json: String) {
+        let payload = self.grpc.get_or_insert_with(GrpcPayload::default);
+        payload.message_json = json;
+    }
+
+    /// Read-only view of the gRPC request message JSON (empty when absent).
+    pub fn grpc_message_json(&self) -> &str {
+        self.grpc
+            .as_ref()
+            .map(|g| g.message_json.as_str())
+            .unwrap_or("")
+    }
+
     pub fn set_name(&mut self, name: String) {
         self.name = name;
     }

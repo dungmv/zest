@@ -1,5 +1,29 @@
 use crate::state::{RequestSessionState, SidebarState, WorkspaceDataState};
-use gpui_kit::{App, Entity};
+use gpui_kit::{App, Entity, Window};
+use zest_core::models::Protocol;
+
+/// Creates a new request of `protocol`, activates it and starts inline rename.
+pub fn create_and_rename_request(
+    protocol: Protocol,
+    folder_id: Option<String>,
+    ws_entity: &Entity<WorkspaceDataState>,
+    ed_entity: &Entity<RequestSessionState>,
+    sb_entity: &Entity<SidebarState>,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let req = ws_entity.update(cx, |ws, cx| {
+        ws.create_request_typed(folder_id, protocol, cx)
+    });
+    let req_id = req.id.clone();
+    let req_name = req.name.clone();
+    ed_entity.update(cx, |ed, cx| {
+        ed.set_active_request_id(&req_id, cx);
+    });
+    sb_entity.update(cx, |sb, cx| {
+        sb.start_renaming_request(req_id, req_name, ws_entity.clone(), window, cx);
+    });
+}
 
 pub fn delete_multi_selected_items(
     ws_entity: &Entity<WorkspaceDataState>,

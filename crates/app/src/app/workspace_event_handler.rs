@@ -6,9 +6,11 @@
 
 use crate::app::AppView;
 use crate::state::{
-    ComposerSyncScope, EnvironmentEvent, ResponseEvent, SessionEvent, WorkspaceEvent,
+    ComposerSyncScope, EnvironmentEvent, RequestTabKind, ResponseEvent, SessionEvent,
+    WorkspaceEvent,
 };
 use gpui_kit::{Context, Window};
+use zest_core::models::Protocol;
 
 pub fn handle_workspace_event(
     this: &mut AppView,
@@ -191,6 +193,22 @@ pub fn handle_session_event(
                 window,
                 cx,
             );
+
+            // Keep the composer tab strip valid for this request's protocol
+            // (e.g. an HTTP "Body" tab does not exist on a WebSocket request).
+            let protocol = this
+                .state
+                .workspace
+                .read(cx)
+                .find_request(req_id)
+                .map(|r| r.protocol)
+                .unwrap_or(Protocol::Http);
+            this.state.session.update(cx, |ed, cx| {
+                let clamped = RequestTabKind::clamp_for(ed.active_tab_kind, protocol);
+                if clamped != ed.active_tab_kind {
+                    ed.set_active_tab_kind(clamped, cx);
+                }
+            });
 
             let is_scratch = req_id == "scratch" || req_id.is_empty();
             let persisted_id = if is_scratch {

@@ -2,14 +2,32 @@ use super::{WorkspaceDataState, WorkspaceEvent};
 use crate::settings::AppSettings;
 use gpui_kit::Context;
 use std::path::PathBuf;
-use zest_core::models::{HttpMethod, HttpRequestItem};
+use zest_core::models::{HttpMethod, HttpRequestItem, Protocol};
 use zest_core::storage::models::RequestFile;
 
 impl WorkspaceDataState {
+    /// Conventional HTTP verb persisted for a request of the given protocol.
+    /// WS handshake is a GET; gRPC rides on HTTP/2 POST.
+    fn protocol_method(protocol: Protocol) -> HttpMethod {
+        match protocol {
+            Protocol::Http | Protocol::WebSocket => HttpMethod::Get,
+            Protocol::Grpc => HttpMethod::Post,
+        }
+    }
+
     pub fn create_request_internal(&mut self, folder_rel: Option<String>) -> HttpRequestItem {
+        self.create_request_internal_typed(folder_rel, Protocol::Http)
+    }
+
+    pub fn create_request_internal_typed(
+        &mut self,
+        folder_rel: Option<String>,
+        protocol: Protocol,
+    ) -> HttpRequestItem {
+        let method = Self::protocol_method(protocol);
         let (_slug, rel_path) = self
             .store
-            .create_request(folder_rel.as_deref(), "New Request", HttpMethod::Get, "")
+            .create_request_typed(folder_rel.as_deref(), "New Request", method, "", protocol)
             .unwrap_or_else(|_| {
                 (
                     format!("req-{}", uuid::Uuid::new_v4().simple()),
@@ -18,7 +36,8 @@ impl WorkspaceDataState {
             });
 
         let ws_name = self.workspace_meta.name.clone();
-        let mut item = HttpRequestItem::new(&ws_name, "New Request", HttpMethod::Get, "");
+        let mut item =
+            HttpRequestItem::new_with_protocol(&ws_name, "New Request", method, "", protocol);
         item.id = rel_path.clone();
         item.folder_id = folder_rel;
 
@@ -33,6 +52,17 @@ impl WorkspaceDataState {
         cx: &mut Context<Self>,
     ) -> HttpRequestItem {
         let item = self.create_request_internal(folder_rel);
+        cx.notify();
+        item
+    }
+
+    pub fn create_request_typed(
+        &mut self,
+        folder_rel: Option<String>,
+        protocol: Protocol,
+        cx: &mut Context<Self>,
+    ) -> HttpRequestItem {
+        let item = self.create_request_internal_typed(folder_rel, protocol);
         cx.notify();
         item
     }

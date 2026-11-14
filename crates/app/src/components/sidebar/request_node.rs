@@ -3,7 +3,7 @@ use super::git_status::SidebarGitStatus;
 use super::item_actions::{delete_multi_selected_items, delete_request_item};
 use super::{SidebarRenderContext, SIDEBAR_ROW_HEIGHT};
 use crate::app::actions::DismissModal;
-use crate::components::{MethodBadge, StatusCodeBadge};
+use crate::components::{MethodBadge, ProtocolBadge, StatusCodeBadge};
 use crate::services::GitService;
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -14,7 +14,7 @@ use gpui_kit::{
     div, px, AnyElement, AppContext as _, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement, StatefulInteractiveElement as _, Styled,
 };
-use zest_core::models::HttpMethod;
+use zest_core::models::{HttpMethod, Protocol};
 
 #[derive(Clone, Debug)]
 pub struct SidebarExampleItem {
@@ -29,6 +29,7 @@ pub struct SidebarReqItem {
     pub name: String,
     pub display_name: String,
     pub method: HttpMethod,
+    pub protocol: Protocol,
     pub url: String,
     pub last_status_code: Option<u16>,
     pub examples: Vec<SidebarExampleItem>,
@@ -469,7 +470,11 @@ pub fn render_request_inner_pill(
                         .flex_shrink_0()
                         .into_any_element()
                 })
-                .child(MethodBadge::new(req.method))
+                .child(if req.protocol.is_http() {
+                    MethodBadge::new(req.method).into_any_element()
+                } else {
+                    ProtocolBadge::new(req.protocol).into_any_element()
+                })
                 .child(if let (true, Some(inp)) = (is_renaming, ctx.rename_input) {
                     let sb_esc = ctx.sidebar.clone();
                     div()

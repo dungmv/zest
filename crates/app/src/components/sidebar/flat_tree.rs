@@ -103,6 +103,7 @@ pub fn build_sidebar_req_items(
             name: r.name.clone(),
             display_name: initial_name,
             method: r.method,
+            protocol: r.protocol,
             url: r.url.clone(),
             last_status_code: r.last_status_code,
             examples,

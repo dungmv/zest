@@ -196,7 +196,7 @@ mod tests {
     use super::*;
     use std::collections::HashSet;
     use zest_core::git::{GitFileStatus, GitStatusItem, GitStatusResult};
-    use zest_core::models::HttpMethod;
+    use zest_core::models::{HttpMethod, Protocol};
 
     #[test]
     fn test_calculate_request_git_status_untracked_is_new() {
@@ -330,6 +330,7 @@ mod tests {
                 name: "Token".to_string(),
                 display_name: "Token".to_string(),
                 method: HttpMethod::Post,
+                protocol: Protocol::Http,
                 url: "".to_string(),
                 last_status_code: None,
                 examples: vec![],
@@ -340,6 +341,7 @@ mod tests {
                 name: "Login".to_string(),
                 display_name: "Login".to_string(),
                 method: HttpMethod::Post,
+                protocol: Protocol::Http,
                 url: "".to_string(),
                 last_status_code: None,
                 examples: vec![],
