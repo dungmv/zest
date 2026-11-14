@@ -166,6 +166,7 @@ impl Runner {
         let response_state = self.response_state.clone();
         let toast_state = self.toast_state.clone();
         let ws_service = self.engines.ws.clone();
+        let grpc_engine = self.engines.grpc.clone();
 
         cx.spawn(async move |cx| {
             while let Some(event) = event_rx.recv().await {
@@ -203,16 +204,20 @@ impl Runner {
                                 session_state.read(cx).active_request_id() == request_id.as_str();
                             if active {
                                 response_state.update(cx, |resp, cx| {
-                                    resp.push_ws_message(frame, cx);
+                                    resp.push_frame(frame, cx);
                                 });
                             }
                         }
                         Protocol::Grpc => {
+                            // The engine log is authoritative: register the
+                            // frame even when another request is active so
+                            // the history survives request switches.
+                            grpc_engine.register_frame(&request_id, frame.clone());
                             let active =
                                 session_state.read(cx).active_request_id() == request_id.as_str();
                             if active {
                                 response_state.update(cx, |resp, cx| {
-                                    resp.push_ws_message(frame, cx);
+                                    resp.push_frame(frame, cx);
                                 });
                             }
                         }
@@ -273,10 +278,14 @@ impl Runner {
                         session_state.update(cx, |ed, cx| {
                             ed.stop_sending(cx);
                         });
-                        response_state.update(cx, |resp, cx| {
-                            resp.set_ws_handshake_headers(response_headers, cx);
-                            resp.set_ws_status(WebSocketStatus::Connected, cx);
-                        });
+                        let active =
+                            session_state.read(cx).active_request_id() == request_id.as_str();
+                        if active {
+                            response_state.update(cx, |resp, cx| {
+                                resp.set_ws_handshake_headers(response_headers, cx);
+                                resp.set_ws_status(WebSocketStatus::Connected, cx);
+                            });
+                        }
                     }
                     SendEvent::HandshakeClosed {
                         request_id,
@@ -292,19 +301,35 @@ impl Runner {
                             });
                         }
                     }
-                    SendEvent::CallCompleted { summary, .. } => {
-                        response_state.update(cx, |resp, cx| {
-                            resp.set_grpc_last_call(Some(summary), cx);
-                        });
+                    SendEvent::CallCompleted {
+                        request_id,
+                        summary,
+                    } => {
+                        grpc_engine.register_last_call(&request_id, summary.clone());
+                        let active =
+                            session_state.read(cx).active_request_id() == request_id.as_str();
+                        if active {
+                            response_state.update(cx, |resp, cx| {
+                                resp.set_grpc_last_call(Some(summary), cx);
+                            });
+                        }
                         session_state.update(cx, |ed, cx| {
                             ed.stop_sending(cx);
                         });
                     }
-                    SendEvent::CallFailed { summary, .. } => {
+                    SendEvent::CallFailed {
+                        request_id,
+                        summary,
+                    } => {
                         let status_message = summary.status_message.clone().unwrap_or_default();
-                        response_state.update(cx, |resp, cx| {
-                            resp.set_grpc_last_call(Some(summary), cx);
-                        });
+                        grpc_engine.register_last_call(&request_id, summary.clone());
+                        let active =
+                            session_state.read(cx).active_request_id() == request_id.as_str();
+                        if active {
+                            response_state.update(cx, |resp, cx| {
+                                resp.set_grpc_last_call(Some(summary), cx);
+                            });
+                        }
                         session_state.update(cx, |ed, cx| {
                             ed.stop_sending(cx);
                         });
@@ -384,7 +409,7 @@ impl Runner {
         match self.engines.ws.send_text(&req_id, text) {
             Ok(message) => {
                 self.response_state.update(cx, |resp, cx| {
-                    resp.push_ws_message(message, cx);
+                    resp.push_frame(message, cx);
                 });
             }
             Err(err) => {

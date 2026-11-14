@@ -264,7 +264,7 @@ impl RenderOnce for ResponseInspector {
                 } else {
                     format!("{}", resp_s.console_logs.len())
                 };
-                let message_count = format!("{}", resp_s.ws_messages.len());
+                let message_count = format!("{}", resp_s.frames.len());
                 let rs_c = resp_state_clone.clone();
 
                 let mut bar = TabBar::new("response-inspector-tabs")

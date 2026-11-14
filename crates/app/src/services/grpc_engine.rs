@@ -13,6 +13,18 @@ use super::global_tokio_runtime;
 use super::pipeline::{merge_env_mutations, run_pre_request_stage};
 use super::send_event::SendEvent;
 
+/// Maximum frames retained per gRPC invocation log (oldest dropped).
+const MAX_GRPC_LOG_FRAMES: usize = 1000;
+
+/// Bounded per-request frame log + last call summary so a gRPC invocation
+/// history survives request switches, mirroring `WsService`'s session
+/// records.
+struct GrpcLog {
+    frames: Vec<TransportFrame>,
+    next_frame_id: u64,
+    last_call: Option<GrpcCallSummary>,
+}
+
 /// Schema summary delivered to the UI after a successful fetch. Carries the
 /// full descriptor pool so the editor can autocomplete and validate the JSON
 /// message against the actual schema.
@@ -28,6 +40,7 @@ pub struct GrpcSchemaSummary {
 pub struct GrpcEngine {
     tokio_rt: Arc<tokio::runtime::Runtime>,
     schema_cache: Arc<Mutex<HashMap<String, zest_core::grpc::DescriptorPool>>>,
+    logs: Mutex<HashMap<String, GrpcLog>>,
 }
 
 impl Default for GrpcEngine {
@@ -41,6 +54,7 @@ impl GrpcEngine {
         Self {
             tokio_rt: global_tokio_runtime(),
             schema_cache: Arc::new(Mutex::new(HashMap::new())),
+            logs: Mutex::new(HashMap::new()),
         }
     }
 
@@ -50,6 +64,56 @@ impl GrpcEngine {
         self.schema_cache
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn lock_logs(&self) -> std::sync::MutexGuard<'_, HashMap<String, GrpcLog>> {
+        self.logs
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// Appends a frame to the bounded per-request log (Runner pump).
+    pub fn register_frame(&self, request_id: &str, mut frame: TransportFrame) {
+        let mut logs = self.lock_logs();
+        let log = logs
+            .entry(request_id.to_string())
+            .or_insert_with(|| GrpcLog {
+                frames: Vec::new(),
+                next_frame_id: 0,
+                last_call: None,
+            });
+        frame.id = log.next_frame_id;
+        log.next_frame_id = log.next_frame_id.wrapping_add(1);
+        log.frames.push(frame);
+        if log.frames.len() > MAX_GRPC_LOG_FRAMES {
+            let overflow = log.frames.len() - MAX_GRPC_LOG_FRAMES;
+            log.frames.drain(..overflow);
+        }
+    }
+
+    /// Records the summary of a finished call (Runner pump).
+    pub fn register_last_call(&self, request_id: &str, summary: GrpcCallSummary) {
+        let mut logs = self.lock_logs();
+        let log = logs
+            .entry(request_id.to_string())
+            .or_insert_with(|| GrpcLog {
+                frames: Vec::new(),
+                next_frame_id: 0,
+                last_call: None,
+            });
+        log.last_call = Some(summary);
+    }
+
+    /// Copy of the per-request frame log for view restoration on switch.
+    pub fn snapshot_frames(&self, request_id: &str) -> Option<Vec<TransportFrame>> {
+        self.lock_logs().get(request_id).map(|l| l.frames.clone())
+    }
+
+    /// Copy of the last finished call summary for view restoration on switch.
+    pub fn snapshot_last_call(&self, request_id: &str) -> Option<GrpcCallSummary> {
+        self.lock_logs()
+            .get(request_id)
+            .and_then(|l| l.last_call.clone())
     }
 
     /// Starts the invoke pipeline on the tokio runtime; the Runner must pump
@@ -77,6 +141,17 @@ impl GrpcEngine {
 
             // 2. Merge pre-script env mutations
             let effective_env = merge_env_mutations(&env, &pre_output.env_mutations);
+
+            // 2b. Interpolate {{var}} in the authored gRPC message, mirroring
+            // HTTP body treatment (fake vars were resolved by stage 1).
+            if let Some(payload) = req_item.grpc.as_mut() {
+                let interpolated = zest_core::interpolation::interpolate_cow(
+                    &payload.message_json,
+                    effective_env.as_deref(),
+                )
+                .into_owned();
+                payload.message_json = interpolated;
+            }
 
             // 3. Resolve headers/auth; the URL keeps its grpc:// scheme
             let resolved = match ResolvedRequest::from_item(&req_item, effective_env.as_deref()) {

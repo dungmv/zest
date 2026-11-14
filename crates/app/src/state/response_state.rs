@@ -9,7 +9,7 @@ use zest_core::transport::TransportFrame;
 use zest_core::ws::WebSocketStatus;
 
 /// View-side cap for the live WS frame log (service keeps its own copy).
-const MAX_WS_VIEW_MESSAGES: usize = 1000;
+const MAX_VIEW_FRAMES: usize = 1000;
 use zest_core::storage::models::RequestExampleFile;
 use zest_core::storage::WorkspaceStore;
 
@@ -124,8 +124,9 @@ pub struct ResponseState {
     pub wrap_lines: bool,
     /// Live WebSocket connection status for the active request.
     pub ws_status: WebSocketStatus,
-    /// Live frame log for the active request (mirrored from `WsService`).
-    pub ws_messages: Vec<TransportFrame>,
+    /// Live frame log for the active request (mirrored from the WS/gRPC
+    /// engines; shared by both realtime protocols).
+    pub frames: Vec<TransportFrame>,
     /// Handshake response headers of the active WS session.
     pub ws_handshake_headers: Vec<(String, String)>,
     /// Summary of the most recent gRPC call (status, headers, duration).
@@ -151,7 +152,7 @@ impl ResponseState {
             scroll_handle: gpui_kit::UniformListScrollHandle::new(),
             wrap_lines: false,
             ws_status: WebSocketStatus::default(),
-            ws_messages: Vec::new(),
+            frames: Vec::new(),
             ws_handshake_headers: Vec::new(),
             grpc_last_call: None,
         }
@@ -201,6 +202,17 @@ impl ResponseState {
         self.show_timing_popover = false;
         self.active_example_name = None;
         self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
+        self.reset_realtime();
+    }
+
+    /// Clears the realtime protocol state (frame log, WS handshake headers,
+    /// gRPC call summary) so a fresh send starts from a clean view. The WS
+    /// status is deliberately left alone: the Runner sets `Connecting`
+    /// around the same moment for WebSocket requests.
+    fn reset_realtime(&mut self) {
+        self.frames.clear();
+        self.ws_handshake_headers.clear();
+        self.grpc_last_call = None;
     }
 
     pub fn start_sending(&mut self, req_id: Option<&str>, cx: &mut Context<Self>) {
@@ -459,11 +471,11 @@ impl ResponseState {
         cx.notify();
     }
 
-    pub fn push_ws_message(&mut self, message: TransportFrame, cx: &mut Context<Self>) {
-        self.ws_messages.push(message);
-        if self.ws_messages.len() > MAX_WS_VIEW_MESSAGES {
-            let overflow = self.ws_messages.len() - MAX_WS_VIEW_MESSAGES;
-            self.ws_messages.drain(..overflow);
+    pub fn push_frame(&mut self, message: TransportFrame, cx: &mut Context<Self>) {
+        self.frames.push(message);
+        if self.frames.len() > MAX_VIEW_FRAMES {
+            let overflow = self.frames.len() - MAX_VIEW_FRAMES;
+            self.frames.drain(..overflow);
         }
         self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
         cx.notify();
@@ -483,9 +495,11 @@ impl ResponseState {
         cx.notify();
     }
 
-    /// Restores the session view when switching back to a request that has a
-    /// live (or previously failed) connection in `WsService`.
-    pub fn restore_ws_session(
+    /// Restores the realtime view when switching back to a request that has
+    /// a live (or previously failed) connection / frame history in an
+    /// engine. Does not touch `grpc_last_call`; callers restore it per
+    /// protocol from the engine snapshot.
+    pub fn restore_realtime_session(
         &mut self,
         status: WebSocketStatus,
         messages: Vec<TransportFrame>,
@@ -493,9 +507,8 @@ impl ResponseState {
         cx: &mut Context<Self>,
     ) {
         self.ws_status = status;
-        self.ws_messages = messages;
+        self.frames = messages;
         self.ws_handshake_headers = handshake_headers;
-        self.grpc_last_call = None;
         self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
         cx.notify();
     }

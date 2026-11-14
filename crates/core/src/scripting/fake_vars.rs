@@ -102,6 +102,10 @@ pub fn resolve_fake_vars_in_request(req_item: &mut RequestItem) {
         }
         _ => {}
     }
+    // gRPC message payload (mirrors HTTP body treatment)
+    if let Some(payload) = req_item.grpc.as_mut() {
+        resolve_fake_vars_in_place(&mut payload.message_json);
+    }
     match &mut req_item.auth {
         Auth::Bearer { token } => resolve_fake_vars_in_place(token),
         Auth::Basic { username, password } => {

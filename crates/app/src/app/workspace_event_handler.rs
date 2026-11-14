@@ -210,20 +210,42 @@ pub fn handle_session_event(
                 }
             });
 
-            // Restore the WebSocket session view (status + frame log) for the
-            // incoming request, or an empty disconnected view.
-            let (ws_status, ws_messages, ws_headers) =
-                this.runner.engines.ws.snapshot(req_id).unwrap_or((
+            // Restore the realtime session view (WS status + shared frame
+            // log + gRPC call summary) for the incoming request, or an empty
+            // disconnected view.
+            let (realtime_status, frames, realtime_headers, grpc_last_call) = match protocol {
+                Protocol::WebSocket => {
+                    let (status, frames, headers) =
+                        this.runner.engines.ws.snapshot(req_id).unwrap_or((
+                            zest_core::ws::WebSocketStatus::Disconnected,
+                            Vec::new(),
+                            Vec::new(),
+                        ));
+                    (status, frames, headers, None)
+                }
+                Protocol::Grpc => {
+                    let engine = &this.runner.engines.grpc;
+                    (
+                        zest_core::ws::WebSocketStatus::Disconnected,
+                        engine.snapshot_frames(req_id).unwrap_or_default(),
+                        Vec::new(),
+                        engine.snapshot_last_call(req_id),
+                    )
+                }
+                _ => (
                     zest_core::ws::WebSocketStatus::Disconnected,
                     Vec::new(),
                     Vec::new(),
-                ));
+                    None,
+                ),
+            };
             this.state.response.update(cx, |resp, cx| {
                 let clamped_tab = ResponseTabKind::clamp_for(resp.active_tab, protocol);
                 if clamped_tab != resp.active_tab {
                     resp.set_active_tab(clamped_tab, cx);
                 }
-                resp.restore_ws_session(ws_status, ws_messages, ws_headers, cx);
+                resp.restore_realtime_session(realtime_status, frames, realtime_headers, cx);
+                resp.set_grpc_last_call(grpc_last_call, cx);
             });
 
             // Follow the restored editor content with fresh validation marks.

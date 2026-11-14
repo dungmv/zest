@@ -17,7 +17,7 @@ pub(super) fn render_messages_tab(
     let t = theme();
     let resp_s = ri.response_state.read(cx);
     let status = resp_s.ws_status.clone();
-    let messages = resp_s.ws_messages.clone();
+    let messages = resp_s.frames.clone();
 
     if is_sending_this_request {
         return div()
