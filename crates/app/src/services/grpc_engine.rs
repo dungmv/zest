@@ -287,6 +287,7 @@ impl GrpcEngine {
                     direction: FrameDirection::Outbound,
                     kind: FrameKind::Text,
                     payload: payload.message_json.clone().into_bytes(),
+                    label: None,
                 },
             });
 
@@ -465,6 +466,7 @@ fn log_message(json: &str) -> TransportFrame {
         direction: FrameDirection::Inbound,
         kind: FrameKind::Text,
         payload: json.as_bytes().to_vec(),
+        label: None,
     }
 }
 

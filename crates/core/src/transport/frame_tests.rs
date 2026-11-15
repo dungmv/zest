@@ -8,6 +8,7 @@ fn test_text_preview_truncates() {
         direction: FrameDirection::Inbound,
         kind: FrameKind::Text,
         payload: "hello".as_bytes().to_vec(),
+        label: None,
     };
     assert_eq!(msg.text_preview(10), "hello");
     assert_eq!(msg.size_bytes(), 5);
@@ -30,6 +31,7 @@ fn test_transport_frame_is_serde_round_trippable() {
         direction: FrameDirection::Outbound,
         kind: FrameKind::Binary,
         payload: vec![0u8, 1, 2],
+        label: None,
     };
     let json = serde_json::to_string(&msg).unwrap();
     let back: TransportFrame = serde_json::from_str(&json).unwrap();

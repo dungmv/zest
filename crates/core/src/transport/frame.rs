@@ -33,9 +33,31 @@ pub struct TransportFrame {
     pub direction: FrameDirection,
     pub kind: FrameKind,
     pub payload: Vec<u8>,
+    /// Optional human-readable label shown instead of the kind badge —
+    /// used by SSE for the event name (`None` for WebSocket/gRPC frames).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
 }
 
 impl TransportFrame {
+    /// Creates a frame with no label (the common WebSocket/gRPC case).
+    pub fn new(
+        id: u64,
+        timestamp_ms: i64,
+        direction: FrameDirection,
+        kind: FrameKind,
+        payload: Vec<u8>,
+    ) -> Self {
+        Self {
+            id,
+            timestamp_ms,
+            direction,
+            kind,
+            payload,
+            label: None,
+        }
+    }
+
     /// Payload decoded as UTF-8 when the frame is text-like, for previews.
     pub fn text_preview(&self, max_chars: usize) -> String {
         let text = String::from_utf8_lossy(&self.payload);

@@ -211,8 +211,8 @@ pub fn handle_session_event(
             });
 
             // Restore the realtime session view (WS status + shared frame
-            // log + gRPC call summary) for the incoming request, or an empty
-            // disconnected view.
+            // log + gRPC call summary + SSE event log) for the incoming
+            // request, or an empty disconnected view.
             let (realtime_status, frames, realtime_headers, grpc_last_call) = match protocol {
                 Protocol::WebSocket => {
                     let (status, frames, headers) =
@@ -230,6 +230,15 @@ pub fn handle_session_event(
                         engine.snapshot_frames(req_id).unwrap_or_default(),
                         Vec::new(),
                         engine.snapshot_last_call(req_id),
+                    )
+                }
+                Protocol::Sse => {
+                    let engine = &this.runner.engines.http;
+                    (
+                        zest_core::ws::WebSocketStatus::Disconnected,
+                        engine.snapshot_sse_frames(req_id).unwrap_or_default(),
+                        Vec::new(),
+                        None,
                     )
                 }
                 _ => (

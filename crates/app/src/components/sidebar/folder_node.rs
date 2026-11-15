@@ -235,6 +235,14 @@ pub fn render_folder_row(
                 let ed_ngrpc = ed_new.clone();
                 let sb_ngrpc = sb_menu.clone();
                 let f_id_ngrpc = f_id_new.clone();
+                let ws_ngql = ws_new.clone();
+                let ed_ngql = ed_new.clone();
+                let sb_ngql = sb_menu.clone();
+                let f_id_ngql = f_id_new.clone();
+                let ws_nsse = ws_new.clone();
+                let ed_nsse = ed_new.clone();
+                let sb_nsse = sb_menu.clone();
+                let f_id_nsse = f_id_new.clone();
 
                 let ws_ns = ws_new_sub.clone();
                 let sb_ns = sb_new_sub.clone();
@@ -301,6 +309,42 @@ pub fn render_folder_row(
                                 &ws_ngrpc,
                                 &ed_ngrpc,
                                 &sb_ngrpc,
+                                window,
+                                cx,
+                            );
+                        }),
+                )
+                .item(
+                    gpui_kit::component::menu::PopupMenuItem::new("New GraphQL")
+                        .icon(Icon::new(IconName::ChartNetwork))
+                        .on_click(move |_, window, cx| {
+                            sb_ngql.update(cx, |state, _| {
+                                state.collapsed_folders.remove(&f_id_ngql.clone());
+                            });
+                            super::item_actions::create_and_rename_request(
+                                Protocol::GraphQL,
+                                Some(f_id_ngql.clone()),
+                                &ws_ngql,
+                                &ed_ngql,
+                                &sb_ngql,
+                                window,
+                                cx,
+                            );
+                        }),
+                )
+                .item(
+                    gpui_kit::component::menu::PopupMenuItem::new("New SSE")
+                        .icon(Icon::new(IconName::Zap))
+                        .on_click(move |_, window, cx| {
+                            sb_nsse.update(cx, |state, _| {
+                                state.collapsed_folders.remove(&f_id_nsse.clone());
+                            });
+                            super::item_actions::create_and_rename_request(
+                                Protocol::Sse,
+                                Some(f_id_nsse.clone()),
+                                &ws_nsse,
+                                &ed_nsse,
+                                &sb_nsse,
                                 window,
                                 cx,
                             );

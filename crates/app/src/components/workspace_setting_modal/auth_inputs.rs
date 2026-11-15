@@ -1,7 +1,7 @@
 use crate::components::completion::env_autocomplete::{
     build_tokenized_content, detect_unclosed_env_var,
 };
-use crate::state::{EnvironmentState, WorkspaceSettingTarget, WorkspaceDataState};
+use crate::state::{EnvironmentState, WorkspaceDataState, WorkspaceSettingTarget};
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::{App, AppContext as _, Entity, Window};
 use zest_core::models::{ApiKeyLocation, Auth};

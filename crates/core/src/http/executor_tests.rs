@@ -193,3 +193,78 @@ fn test_stored_cookies_roundtrip_and_removal() {
     executor.clear_cookies();
     assert!(executor.get_stored_cookies().is_empty());
 }
+
+#[tokio::test]
+async fn test_send_streaming_sse_events_and_record() {
+    use crate::sse::SseOutput;
+    use tokio::io::AsyncWriteExt;
+    use tokio::net::TcpListener;
+    use tokio::sync::mpsc;
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server_url = format!("http://127.0.0.1:{}/stream", port);
+
+    // One-shot SSE server: keep-alive comment, then two events, then EOF.
+    tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let mut buf = [0u8; 1024];
+        let _ = tokio::io::AsyncReadExt::read(&mut socket, &mut buf).await;
+        let body = ": keep-alive\ndata: {\"n\":1}\n\nevent: add\ndata: two\ndata: more\n\n";
+        let resp = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n{body}"
+        );
+        let _ = socket.write_all(resp.as_bytes()).await;
+        let _ = socket.shutdown().await;
+    });
+
+    let executor = ReqwestExecutor::new();
+    let item = RequestItem::new("sse-1", "SSE", HttpMethod::Get, &server_url);
+    let resolved = ResolvedRequest::from_item(&item, None).unwrap();
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    let (_cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+
+    let record = executor
+        .send_streaming(resolved, None, tx, cancel_rx)
+        .await
+        .expect("streaming send should succeed");
+    assert_eq!(record.status_code, 200);
+    assert!(
+        String::from_utf8_lossy(&record.body).contains("data: {\"n\":1}"),
+        "raw body is captured for the Response tab"
+    );
+    assert!(record.size_bytes > 0);
+
+    // Comment first, then the two events in arrival order.
+    let mut outputs = Vec::new();
+    while let Ok(out) = rx.try_recv() {
+        outputs.push(out);
+    }
+    assert_eq!(outputs.len(), 3, "comment + 2 events, got {outputs:?}");
+    assert_eq!(outputs[0], SseOutput::Comment("keep-alive".to_string()));
+    let SseOutput::Event(first) = &outputs[1] else {
+        panic!("expected event");
+    };
+    assert_eq!(first.data, "{\"n\":1}");
+    assert_eq!(first.event, None);
+    let SseOutput::Event(second) = &outputs[2] else {
+        panic!("expected event");
+    };
+    assert_eq!(second.event.as_deref(), Some("add"));
+    assert_eq!(second.data, "two\nmore");
+}
+
+#[tokio::test]
+async fn test_send_streaming_cancelled_before_connect() {
+    use tokio::sync::mpsc;
+
+    let executor = ReqwestExecutor::new();
+    let item = RequestItem::new("sse-2", "SSE", HttpMethod::Get, "http://127.0.0.1:1/x");
+    let resolved = ResolvedRequest::from_item(&item, None).unwrap();
+    let (tx, _rx) = mpsc::unbounded_channel();
+    let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+    drop(cancel_tx); // cancel immediately
+
+    let result = executor.send_streaming(resolved, None, tx, cancel_rx).await;
+    assert!(matches!(result, Err(RequestError::Cancelled)));
+}

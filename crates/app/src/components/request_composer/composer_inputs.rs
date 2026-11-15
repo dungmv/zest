@@ -24,6 +24,22 @@ pub struct GrpcComposerFields {
     pub diagnostics_hover: Rc<std::cell::Cell<bool>>,
 }
 
+/// GraphQL composer inputs: the query/variables dual-pane editors plus the
+/// operation name input, all persisted into `GraphQLPayload`.
+pub struct GraphQLComposerFields {
+    /// GraphQL query/mutation document editor.
+    pub query_editor: Entity<CodeEditorState>,
+    /// Variables JSON editor.
+    pub variables_editor: Entity<CodeEditorState>,
+    /// Optional operation name for multi-operation documents.
+    pub operation_name_input: Entity<InputState>,
+    /// Red gutter marks for variables JSON validation errors.
+    pub variables_marks: GutterDecorationCollection,
+    /// Whether the pointer currently hovers the variables editor —
+    /// gates the in-editor diagnostic tooltip (hover-only by design).
+    pub diagnostics_hover: Rc<std::cell::Cell<bool>>,
+}
+
 pub struct ComposerInputs {
     pub url_input: Entity<InputState>,
     pub json_editor: Entity<CodeEditorState>,
@@ -37,6 +53,7 @@ pub struct ComposerInputs {
     pub apikey_key_input: Entity<InputState>,
     pub apikey_val_input: Entity<InputState>,
     pub grpc: GrpcComposerFields,
+    pub graphql: GraphQLComposerFields,
     /// WebSocket outgoing message box (session-only, never persisted).
     pub ws_message_textarea: Entity<TextareaState>,
     /// Request that currently owns `ws_message_textarea` content.
@@ -100,6 +117,37 @@ impl ComposerInputs {
 
         let ws_message_textarea = cx.new(|cx| TextareaState::new(window, cx));
 
+        // The GraphQL editors need their own env handle: `env_state` is
+        // moved into the script editors below.
+        let env_state_for_graphql = env_state.clone();
+        let graphql_query_editor = cx.new(|cx| {
+            let mut state = CodeEditorState::new(window, cx);
+            state.set_highlighter_factory(highlighter_factory.clone(), cx);
+            state.lsp_mut().completion_provider = Some(Rc::new(
+                crate::components::completion::graphql_query::GraphQLQueryCompletionProvider::new(
+                    env_state_for_graphql.clone(),
+                    session_state.clone(),
+                ),
+            ));
+            state.language("graphql").line_number(true).folding(true)
+        });
+        let graphql_variables_editor = cx.new(|cx| {
+            let mut state = CodeEditorState::new(window, cx);
+            state.set_highlighter_factory(highlighter_factory.clone(), cx);
+            state.lsp_mut().completion_provider = Some(Rc::new(
+                crate::components::completion::env_autocomplete::EnvCompletionProvider::new(
+                    env_state_for_graphql,
+                ),
+            ));
+            state.language("json").line_number(true).folding(true)
+        });
+        let graphql_variables_marks = graphql_variables_editor.update(cx, |state, cx| {
+            state.create_gutter_decorations_collection(vec![], cx)
+        });
+        let graphql_diagnostics_hover = std::rc::Rc::new(std::cell::Cell::new(false));
+        let graphql_operation_name_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Operation name (optional)"));
+
         let grpc_proto_path_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Path to .proto file…"));
 
@@ -148,6 +196,13 @@ impl ComposerInputs {
                 proto_path_input: grpc_proto_path_input,
                 error_marks: grpc_error_marks,
                 diagnostics_hover: grpc_diagnostics_hover,
+            },
+            graphql: GraphQLComposerFields {
+                query_editor: graphql_query_editor,
+                variables_editor: graphql_variables_editor,
+                operation_name_input: graphql_operation_name_input,
+                variables_marks: graphql_variables_marks,
+                diagnostics_hover: graphql_diagnostics_hover,
             },
             ws_message_textarea,
             ws_message_owner: None,
@@ -335,6 +390,31 @@ impl ComposerInputs {
         } else {
             self.grpc.message_editor.update(cx, |txt, cx| {
                 txt.set_value(String::new(), window, cx);
+            });
+        }
+
+        // GraphQL query/variables/operation name are persisted in the
+        // request file; other protocols clear the editors.
+        if req.protocol == Protocol::GraphQL {
+            let payload = req.graphql.clone().unwrap_or_default();
+            self.graphql.query_editor.update(cx, |txt, cx| {
+                txt.set_value(payload.query, window, cx);
+            });
+            self.graphql.variables_editor.update(cx, |txt, cx| {
+                txt.set_value(payload.variables, window, cx);
+            });
+            self.graphql.operation_name_input.update(cx, |inp, cx| {
+                inp.set_value(payload.operation_name.unwrap_or_default(), window, cx);
+            });
+        } else {
+            self.graphql.query_editor.update(cx, |txt, cx| {
+                txt.set_value(String::new(), window, cx);
+            });
+            self.graphql.variables_editor.update(cx, |txt, cx| {
+                txt.set_value(String::new(), window, cx);
+            });
+            self.graphql.operation_name_input.update(cx, |inp, cx| {
+                inp.set_value(String::new(), window, cx);
             });
         }
     }

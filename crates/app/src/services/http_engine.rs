@@ -1,31 +1,74 @@
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use tokio::sync::{mpsc, oneshot};
+use zest_core::graphql::{parse_introspection, GraphQLSchemaSummary, INTROSPECTION_QUERY};
 use zest_core::http::{HttpExecutor, HttpProgress, ReqwestExecutor};
-use zest_core::models::{Environment, RequestItem};
+use zest_core::models::{Environment, HttpMethod, Protocol, RequestBody, RequestItem};
 use zest_core::scripting::{PostResponseContext, PostResponseOutput, ScriptSandbox};
-use zest_core::transport::{RequestError, ResolvedRequest};
+use zest_core::sse::SseOutput;
+use zest_core::transport::{
+    FrameDirection, FrameKind, RequestError, ResolvedRequest, TransportFrame,
+};
 
 use super::pipeline::{merge_env_mutations, run_pre_request_stage};
 use super::send_event::SendEvent;
 
+/// Per-request SSE frames kept engine-side so the view survives request
+/// switches while a stream is still running (mirrors `GrpcEngine`).
+const MAX_SSE_LOG_FRAMES: usize = 1000;
+
 pub struct HttpEngine {
     executor: Arc<ReqwestExecutor>,
     tokio_rt: Arc<tokio::runtime::Runtime>,
+    /// Bounded per-request SSE frame log for live-stream restoration.
+    sse_logs: Mutex<HashMap<String, Vec<TransportFrame>>>,
 }
 
 impl HttpEngine {
     pub fn new(executor: Arc<ReqwestExecutor>, tokio_rt: Arc<tokio::runtime::Runtime>) -> Self {
-        Self { executor, tokio_rt }
+        Self {
+            executor,
+            tokio_rt,
+            sse_logs: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Appends one inbound SSE frame to the engine-side log.
+    pub fn register_sse_frame(&self, request_id: &str, frame: TransportFrame) {
+        let mut logs = self.sse_logs.lock().unwrap_or_else(|e| e.into_inner());
+        let log = logs.entry(request_id.to_string()).or_default();
+        log.push(frame);
+        if log.len() > MAX_SSE_LOG_FRAMES {
+            log.drain(..log.len() - MAX_SSE_LOG_FRAMES);
+        }
+    }
+
+    /// Snapshot of the SSE frames for a request (oldest first).
+    pub fn snapshot_sse_frames(&self, request_id: &str) -> Option<Vec<TransportFrame>> {
+        let logs = self.sse_logs.lock().unwrap_or_else(|e| e.into_inner());
+        logs.get(request_id).cloned()
+    }
+
+    /// Drops the SSE log of a request before a new stream starts.
+    pub fn clear_sse_frames(&self, request_id: &str) {
+        let mut logs = self.sse_logs.lock().unwrap_or_else(|e| e.into_inner());
+        logs.remove(request_id);
     }
 
     /// Starts the HTTP pipeline on the tokio runtime and returns the event
     /// receiver the Runner must pump. Cancel via the usual oneshot channel.
+    /// For SSE requests the response body is parsed into per-event
+    /// [`SendEvent::Frame`] items and the final record carries the capped
+    /// accumulated body.
     pub fn execute(
         &self,
         mut req_item: RequestItem,
         env: Option<Arc<Environment>>,
         cancel_rx: oneshot::Receiver<()>,
     ) -> mpsc::UnboundedReceiver<SendEvent> {
+        if req_item.protocol == Protocol::Sse {
+            self.clear_sse_frames(&req_item.id);
+        }
         let (event_tx, event_rx) = mpsc::unbounded_channel();
         let executor = self.executor.clone();
         let send_event_tx = event_tx.clone();
@@ -89,47 +132,164 @@ impl HttpEngine {
 
             let eff_env_for_post = effective_env.or(env);
             let pre_console_entries = pre_output.console_entries.clone();
+            let request_id = req_item.id.clone();
 
-            tokio::select! {
-                _ = cancel_rx => {
+            let result = if req_item.protocol == Protocol::Sse {
+                Self::run_sse_stream(
+                    executor,
+                    resolved,
+                    progress_tx,
+                    send_event_tx.clone(),
+                    cancel_rx,
+                )
+                .await
+            } else {
+                tokio::select! {
+                    _ = cancel_rx => Err(RequestError::Cancelled),
+                    res = executor.send(resolved, Some(progress_tx)) => res,
+                }
+            };
+
+            match result {
+                Ok(mut record) => {
+                    // 4. Post-response / Test Script
+                    let post_output = if let Some(code) = post_script_code {
+                        let post_ctx = PostResponseContext::from_response_and_env(
+                            &record,
+                            eff_env_for_post.as_deref(),
+                        );
+                        ScriptSandbox::run_post_response(&code, post_ctx)
+                    } else {
+                        PostResponseOutput::default()
+                    };
+
+                    record.test_results = post_output.test_results.clone();
+                    let mut combined_console_logs = pre_console_entries;
+                    combined_console_logs.extend(post_output.console_entries.clone());
+                    record.console_logs = combined_console_logs;
+
+                    let _ = send_event_tx.send(SendEvent::HttpSuccess {
+                        record: Arc::new(record),
+                        post_output: Box::new(post_output),
+                    });
+                }
+                Err(RequestError::Cancelled) => {
                     let _ = send_event_tx.send(SendEvent::Cancelled);
                 }
-                res = executor.send(resolved, Some(progress_tx)) => {
-                    match res {
-                        Ok(mut record) => {
-                            // 4. Post-response / Test Script
-                            let post_output = if let Some(code) = post_script_code {
-                                let post_ctx = PostResponseContext::from_response_and_env(&record, eff_env_for_post.as_deref());
-                                ScriptSandbox::run_post_response(&code, post_ctx)
-                            } else {
-                                PostResponseOutput::default()
-                            };
-
-                            record.test_results = post_output.test_results.clone();
-                            let mut combined_console_logs = pre_console_entries;
-                            combined_console_logs.extend(post_output.console_entries.clone());
-                            record.console_logs = combined_console_logs;
-
-                            let _ = send_event_tx.send(SendEvent::HttpSuccess {
-                                record: Arc::new(record),
-                                post_output: Box::new(post_output),
-                            });
-                        }
-                        Err(RequestError::Cancelled) => {
-                            let _ = send_event_tx.send(SendEvent::Cancelled);
-                        }
-                        Err(e) => {
-                            let _ = send_event_tx.send(SendEvent::Failed {
-                                request_id: req_item.id.clone(),
-                                error: e.to_string(),
-                            });
-                        }
-                    }
+                Err(e) => {
+                    let _ = send_event_tx.send(SendEvent::Failed {
+                        request_id,
+                        error: e.to_string(),
+                    });
                 }
             }
         });
 
         event_rx
+    }
+
+    /// Streams an SSE response: forwards every parsed event/keep-alive as
+    /// [`SendEvent::Frame`] (with periodic progress counts), then resolves
+    /// with the final record. Cancel is handled inside `send_streaming`.
+    async fn run_sse_stream(
+        executor: Arc<ReqwestExecutor>,
+        resolved: ResolvedRequest,
+        progress_tx: mpsc::UnboundedSender<HttpProgress>,
+        send_event_tx: mpsc::UnboundedSender<SendEvent>,
+        cancel_rx: oneshot::Receiver<()>,
+    ) -> Result<zest_core::models::HttpResponseRecord, RequestError> {
+        let (sse_tx, mut sse_rx) = mpsc::unbounded_channel::<SseOutput>();
+        let request_id = resolved.request_id.clone();
+
+        // Forward parsed SSE outputs to the unified channel as frames,
+        // assigning frame ids and emitting throttled progress updates.
+        let frame_pump = tokio::spawn(async move {
+            let mut next_id = 0u64;
+            let mut event_count = 0usize;
+            while let Some(out) = sse_rx.recv().await {
+                let (mut frame, event_name) = match out {
+                    SseOutput::Event(event) => {
+                        event_count += 1;
+                        (
+                            TransportFrame::new(
+                                next_id,
+                                chrono::Utc::now().timestamp_millis(),
+                                FrameDirection::Inbound,
+                                FrameKind::Text,
+                                event.data.into_bytes(),
+                            ),
+                            event.event,
+                        )
+                    }
+                    // Keep-alive comments surface as pings, like WS.
+                    SseOutput::Comment(text) => (
+                        TransportFrame::new(
+                            next_id,
+                            chrono::Utc::now().timestamp_millis(),
+                            FrameDirection::Inbound,
+                            FrameKind::Ping,
+                            text.into_bytes(),
+                        ),
+                        None,
+                    ),
+                };
+                frame.label = event_name;
+                next_id += 1;
+                let _ = send_event_tx.send(SendEvent::Frame {
+                    request_id: request_id.clone(),
+                    frame,
+                });
+                if event_count > 0 && event_count.is_multiple_of(10) {
+                    let _ = send_event_tx.send(SendEvent::Progress(format!(
+                        "Streaming... {event_count} events"
+                    )));
+                }
+            }
+        });
+
+        let result = executor
+            .send_streaming(resolved, Some(progress_tx), sse_tx, cancel_rx)
+            .await;
+        // sse_tx is dropped inside send_streaming; drain the pump so frame
+        // events are ordered before the terminal event.
+        let _ = frame_pump.await;
+        result
+    }
+
+    /// Fetches the GraphQL schema via an introspection query sent to the
+    /// request's endpoint (same URL, headers and auth; POST JSON body).
+    /// Runs on the tokio runtime; the result arrives on a oneshot channel.
+    pub fn fetch_graphql_schema(
+        &self,
+        mut req_item: RequestItem,
+        env: Option<Arc<Environment>>,
+    ) -> oneshot::Receiver<Result<GraphQLSchemaSummary, String>> {
+        let (tx, rx) = oneshot::channel();
+        let executor = self.executor.clone();
+        self.tokio_rt.spawn(async move {
+            let pre_output = run_pre_request_stage(&mut req_item, env.as_deref());
+            let effective_env = merge_env_mutations(&env, &pre_output.env_mutations);
+            req_item.method = HttpMethod::Post;
+            req_item.body =
+                RequestBody::json(serde_json::json!({ "query": INTROSPECTION_QUERY }).to_string());
+            req_item.update_content_type_header(Some("application/json"));
+            let resolved = match ResolvedRequest::from_item(&req_item, effective_env.as_deref()) {
+                Ok(r) => r,
+                Err(e) => {
+                    let _ = tx.send(Err(e.to_string()));
+                    return;
+                }
+            };
+            match executor.send(resolved, None).await {
+                Ok(record) => {
+                    let _ = tx.send(parse_introspection(&record.body));
+                }
+                Err(e) => {
+                    let _ = tx.send(Err(e.to_string()));
+                }
+            }
+        });
+        rx
     }
 }
 

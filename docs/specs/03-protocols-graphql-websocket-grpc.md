@@ -9,11 +9,11 @@ API hiện đại không còn chỉ là các endpoint REST tĩnh. Các kiến tr
 
 Tài liệu này xác định cách thiết kế và mở rộng kiến trúc Zest để hỗ trợ đầy đủ các giao thức trên.
 
-> **Tiến độ (2026-11-15):** WebSocket ✅ & gRPC ✅ đã triển khai qua send pipeline hợp nhất (`Runner` + `SendEvent`, máy móc trung lập giao thức tại `zest_core::transport`). GraphQL và SSE còn pending. Gap còn lại: WS binary message, gRPC client-streaming/bidi, SSE chưa có impl.
+> **Tiến độ (2026-11-15):** WebSocket ✅, gRPC ✅, GraphQL ✅ và SSE ✅ — cả 4 giao thức đã chạy trên send pipeline hợp nhất (`Runner` + `SendEvent`, máy móc trung lập giao thức tại `zest_core::transport`). Gap còn lại: WS binary message, gRPC client-streaming/bidi.
 
 ---
 
-## 2. GraphQL Client
+## 2. GraphQL Client — ✅ Đã hoàn thành (POST JSON + introspection + deep autocomplete)
 
 ### 2.1 Cấu trúc Dữ liệu Model
 ```rust
@@ -41,8 +41,10 @@ pub struct GraphQLPayload {
      }
      ```
    - Lưu trữ schema AST vào bộ nhớ đệm (cache) của request.
-3. **Gợi ý Trường & Tự Động Hoàn Thành (Autocomplete):**
-   - Đọc schema AST để gợi ý field name, subfield, argument types khi người dùng gõ phím.
+3. **Gợi ý Trường & Tự Động Hoàn Thành (Autocomplete) — ✅:**
+   - `GraphQLQueryCompletionProvider` (`components/completion/graphql_query.rs`) gọi resolver `zest_core::graphql::completions_at(text, caret, schema)`: lexer tự viết (block strings/comments/UTF-8 safe) + walker giữ stack type-context qua selection sets, argument lists, input object literals, inline fragments và `fragment ... on` definitions.
+   - Gợi ý theo vị trí: field (Object/Interface), argument name, enum value, input field, type condition (`... on`), fragment spread, directive (`@skip`/`@include`...). `{{env}}` span vẫn do EnvCompletionProvider xử lý.
+   - Schema introspect vào session-only `RequestSessionState.graphql_schema` (mirror gRPC); nút **Fetch Schema** nằm trên toolbar Query tab.
 
 ---
 
@@ -63,10 +65,11 @@ pub struct GraphQLPayload {
 ### 4.1 Ứng dụng Thực Tế
 Khi kiểm thử các endpoint AI streaming (như `POST https://api.openai.com/v1/chat/completions` với `{"stream": true}`), response trả về theo từng dòng `data: {"choices": [{"delta": {"content": "Hello"}}]}\n\n`.
 
-### 4.2 Thiết kế Bộ đệm Dòng (Streaming Buffer)
-- `ReqwestExecutor` sử dụng `response.bytes_stream()`.
-- Mỗi khi nhận một packet `Bytes`, decode chuỗi UTF-8 và bắn sự kiện `HttpSendEvent::StreamChunk(String)` về GPUI.
-- UI cập nhật liên tục nội dung vừa sinh ra, tự động cuộn xuống cuối (Auto-scroll), mang lại trải nghiệm như đang dùng ứng dụng chat AI.
+### 4.2 Kiến trúc đã triển khai
+- Parser SSE tự viết trong `zest_core::sse::SseParser` (đúng thuật toán WHATWG: `data`/`event`/`id`/`retry`, comment keep-alive, CRLF/CR/LF, BOM, multi-line data) — không thêm crate.
+- `ReqwestExecutor::send_streaming` (core) drive `bytes_stream()`, mỗi event bắn `SseOutput` → `HttpEngine` chuyển thành `SendEvent::Frame` (`TransportFrame` Text, event name trong `label`, comment → `FrameKind::Ping`).
+- Frame log engine-side bound 1000/request (restore khi switch request, mirror gRPC); body tích lũy cap 2 MB vào record → Response tab + `.loc` cache hoạt động như HTTP.
+- `timeout_ms` đóng vai trò **idle timeout giữa các chunk** (stream dài không bị chết ở 30s); response không phải `text/event-stream` fallback về HTTP thường. Request bar giữ Send/Cancel như HTTP (không Connect/Disconnect); response tabs: `[Messages, Response, Headers, Cookies, Console]`.
 
 ---
 
@@ -79,4 +82,4 @@ Khi kiểm thử các endpoint AI streaming (như `POST https://api.openai.com/v
 - Proto tab chỉ chọn schema source; frame log dùng chung `TransportFrame` và persist qua engine-side session log.
 
 ### 5.2 Gap còn lại
-- Client-streaming & bidi streaming chưa hỗ trợ; SSE (xem §4) chưa có impl.
+- Client-streaming & bidi streaming chưa hỗ trợ.

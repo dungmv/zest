@@ -191,6 +191,7 @@ impl WebSocketClient {
                             direction: FrameDirection::Inbound,
                             kind,
                             payload,
+                            label: None,
                         }));
                     }
                     Some(Err(e)) => {

@@ -58,6 +58,6 @@ pub(super) fn render_message_tab(
                 )
             })
             .into_any_element(),
-        Protocol::Http => div().into_any_element(),
+        Protocol::Http | Protocol::GraphQL | Protocol::Sse => div().into_any_element(),
     }
 }

@@ -25,11 +25,11 @@ pub fn edit_active_request(
 
 impl WorkspaceDataState {
     /// Conventional HTTP verb persisted for a request of the given protocol.
-    /// WS handshake is a GET; gRPC rides on HTTP/2 POST.
+    /// WS handshake is a GET; gRPC and GraphQL ride on HTTP POST.
     fn protocol_method(protocol: Protocol) -> HttpMethod {
         match protocol {
-            Protocol::Http | Protocol::WebSocket => HttpMethod::Get,
-            Protocol::Grpc => HttpMethod::Post,
+            Protocol::Http | Protocol::WebSocket | Protocol::Sse => HttpMethod::Get,
+            Protocol::Grpc | Protocol::GraphQL => HttpMethod::Post,
         }
     }
 

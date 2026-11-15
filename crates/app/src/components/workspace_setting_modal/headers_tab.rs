@@ -1,5 +1,5 @@
 use crate::components::kv_table::KvTable;
-use crate::state::{EnvironmentState, ModalState, WorkspaceSettingTarget, WorkspaceDataState};
+use crate::state::{EnvironmentState, ModalState, WorkspaceDataState, WorkspaceSettingTarget};
 use crate::theme::theme;
 use gpui_kit::{div, px, App, Entity, IntoElement, ParentElement, Styled, Window};
 use zest_core::models::{Auth, KeyValuePair};
@@ -187,8 +187,14 @@ pub fn render_headers_tab(
                 }),
         )
         .child(
-            KvTable::new("ws-setting-headers-table", pairs, on_update, on_add, on_remove)
-                .env_state(env_state.clone())
-                .modal_state(modal_state.clone()),
+            KvTable::new(
+                "ws-setting-headers-table",
+                pairs,
+                on_update,
+                on_add,
+                on_remove,
+            )
+            .env_state(env_state.clone())
+            .modal_state(modal_state.clone()),
         )
 }

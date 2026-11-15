@@ -1,7 +1,7 @@
 use crate::models::{
-    Auth, Environment, EnvironmentVariable, GrpcPayload, HttpMethod, HttpResponseRecord,
-    KeyValuePair, MultipartItem, Protocol, RequestBody, RequestItem, RequestSentInfo,
-    RequestSettings, ScriptConfig, TimingBreakdown, WsMessageFormat,
+    Auth, Environment, EnvironmentVariable, GraphQLPayload, GrpcPayload, HttpMethod,
+    HttpResponseRecord, KeyValuePair, MultipartItem, Protocol, RequestBody, RequestItem,
+    RequestSentInfo, RequestSettings, ScriptConfig, TimingBreakdown, WsMessageFormat,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -74,14 +74,15 @@ pub struct RequestExampleFile {
 /// 3. url
 /// 4. protocol (omitted for HTTP)
 /// 5. grpc (omitted unless protocol is gRPC)
-/// 6. ws_message_format (omitted for Text)
-/// 7. params
-/// 8. headers
-/// 9. auth
-/// 10. body
-/// 11. settings
-/// 12. script
-/// 13. examples (ALWAYS last)
+/// 6. graphql (omitted unless protocol is GraphQL)
+/// 7. ws_message_format (omitted for Text)
+/// 8. params
+/// 9. headers
+/// 10. auth
+/// 11. body
+/// 12. settings
+/// 13. script
+/// 14. examples (ALWAYS last)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RequestFile {
@@ -92,6 +93,9 @@ pub struct RequestFile {
     pub protocol: Protocol,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grpc: Option<GrpcPayload>,
+    /// GraphQL query payload (omitted unless protocol is GraphQL).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graphql: Option<GraphQLPayload>,
     /// Outgoing WebSocket message format (omitted for Text).
     #[serde(default, skip_serializing_if = "WsMessageFormat::is_text")]
     pub ws_message_format: WsMessageFormat,
@@ -119,6 +123,7 @@ impl Default for RequestFile {
             url: String::new(),
             protocol: Protocol::Http,
             grpc: None,
+            graphql: None,
             ws_message_format: WsMessageFormat::default(),
             params: Vec::new(),
             headers: Vec::new(),
@@ -145,6 +150,7 @@ impl RequestFile {
             url: item.url,
             protocol: item.protocol,
             grpc: item.grpc,
+            graphql: item.graphql,
             ws_message_format: item.ws_message_format,
             params: item.params,
             headers: item.headers,
@@ -171,6 +177,7 @@ impl RequestFile {
             url: self.url,
             protocol: self.protocol,
             grpc: self.grpc,
+            graphql: self.graphql,
             ws_message_format: self.ws_message_format,
             params: self.params,
             headers: self.headers,
@@ -199,6 +206,7 @@ impl RequestFile {
             url: self.url.clone(),
             protocol: self.protocol,
             grpc: self.grpc.clone(),
+            graphql: self.graphql.clone(),
             ws_message_format: self.ws_message_format,
             params: self.params.clone(),
             headers: self.headers.clone(),
@@ -218,6 +226,7 @@ impl RequestFile {
         self.url = item.url.clone();
         self.protocol = item.protocol;
         self.grpc = item.grpc.clone();
+        self.graphql = item.graphql.clone();
         self.ws_message_format = item.ws_message_format;
         self.params = item.params.clone();
         self.headers = item.headers.clone();

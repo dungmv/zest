@@ -2,6 +2,7 @@ mod auth_tab;
 mod banners;
 mod body_tab;
 pub(crate) mod composer_inputs;
+mod graphql_query_tab;
 mod grpc_message_tab;
 mod grpc_proto_tab;
 mod headers_tab;
@@ -99,6 +100,9 @@ impl AppView {
                         RequestTabKind::Body => body_tab::render_body_tab(self),
                         RequestTabKind::Message => {
                             message_tab::render_message_tab(self, window, cx)
+                        }
+                        RequestTabKind::Query => {
+                            graphql_query_tab::render_query_tab(self, window, cx)
                         }
                         RequestTabKind::Proto => proto_tab::render_proto_tab(self, window, cx),
                         RequestTabKind::Params => params_tab::render_params_tab(self, cx),

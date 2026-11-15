@@ -46,14 +46,23 @@ pub enum ResponseTabKind {
 
 impl ResponseTabKind {
     /// Response-area tab strip for a request of the given protocol:
-    /// - HTTP: Response, Request Sent, Headers, Cookies, Console
+    /// - HTTP/GraphQL: Response, Request Sent, Headers, Cookies, Console
+    /// - SSE: Messages (live event log), Response (accumulated), Headers,
+    ///   Cookies, Console
     /// - WebSocket: Messages (frame log), Headers (handshake), Console
     /// - gRPC: Messages (stream frames), Headers, Console
     pub fn tabs_for(protocol: Protocol) -> &'static [ResponseTabKind] {
         match protocol {
-            Protocol::Http => &[
+            Protocol::Http | Protocol::GraphQL => &[
                 ResponseTabKind::Response,
                 ResponseTabKind::Request,
+                ResponseTabKind::Headers,
+                ResponseTabKind::Cookies,
+                ResponseTabKind::Console,
+            ],
+            Protocol::Sse => &[
+                ResponseTabKind::Messages,
+                ResponseTabKind::Response,
                 ResponseTabKind::Headers,
                 ResponseTabKind::Cookies,
                 ResponseTabKind::Console,

@@ -61,3 +61,11 @@ Toàn bộ **28 bản kế hoạch của Cycle 2** đã hoàn tất 100%. Kiến
 - **Protocol source cleanup** (2026-11-15): umbrella `zest_core::transport` (ResolvedRequest, hierarchy, `TransportFrame`), MỘT send pipeline (`Runner::send_current_request` + `SendEvent` + `services/pipeline.rs`), gRPC interpolation + frame-log persistence.
 - **Watcher typing race** (2026-11-03): `DiskFingerprints` + `AtomicWriter` thay time-based suppression; dirty-aware reload (`reload_tree_preserving`, `apply_disk_changes`, conflict banner).
 - Nền tảng mới: `zest_core::updater` (GitHub Releases), `version.rs` + `build.rs` version injection, AppSettings test isolation, about modal/update checker.
+
+---
+
+## 🚧 Vòng 3 (đang triển khai — 2026-11-15 →)
+
+| Plan | Trạng thái |
+| :--- | :--- |
+| [`2026111501-graphql-sse-protocols.md`](./2026111501-graphql-sse-protocols.md) | ✅ Đã triển khai: GraphQL (POST pipeline + introspection + deep autocomplete) & SSE (streaming frame log). Plan sẽ được squash vào skills + specs khi kết thúc vòng như Cycle 1/2. |

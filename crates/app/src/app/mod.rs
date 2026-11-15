@@ -241,6 +241,10 @@ impl AppView {
         self.runner.fetch_grpc_schema(cx);
     }
 
+    pub fn fetch_graphql_schema(&self, cx: &mut App) {
+        self.runner.fetch_graphql_schema(cx);
+    }
+
     /// Revalidates the gRPC message editor content and refreshes the error
     /// diagnostics + gutter mark. Called when the active request changes so
     /// the marks follow the editor's restored content.

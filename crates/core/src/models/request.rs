@@ -59,6 +59,8 @@ pub enum Protocol {
     Http,
     WebSocket,
     Grpc,
+    GraphQL,
+    Sse,
 }
 
 impl Protocol {
@@ -66,11 +68,25 @@ impl Protocol {
         matches!(self, Self::Http)
     }
 
+    /// True for protocols whose exchange is a plain HTTP request/response
+    /// (GraphQL rides the HTTP executor; SSE streams its HTTP response).
+    pub fn uses_http_transport(&self) -> bool {
+        matches!(self, Self::Http | Self::GraphQL | Self::Sse)
+    }
+
+    /// True for long-lived connection protocols (WS) or streamed calls (gRPC)
+    /// that render the realtime Connect/Disconnect affordances.
+    pub fn is_realtime(&self) -> bool {
+        matches!(self, Self::WebSocket | Self::Grpc)
+    }
+
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Http => "HTTP",
             Self::WebSocket => "WS",
             Self::Grpc => "gRPC",
+            Self::GraphQL => "GraphQL",
+            Self::Sse => "SSE",
         }
     }
 }
@@ -123,6 +139,24 @@ pub struct GrpcPayload {
     /// JSON object; the editor content is verbatim (not parsed at rest).
     #[serde(default)]
     pub message_json: String,
+}
+
+/// GraphQL-specific request payload, present only when `protocol == GraphQL`.
+/// The query is sent as an HTTP POST with a JSON body built by
+/// [`RequestItem::to_graphql_http_item`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct GraphQLPayload {
+    /// The GraphQL query or mutation document (verbatim, not parsed at rest).
+    #[serde(default)]
+    pub query: String,
+    /// Variables as raw JSON (object literal). Empty string means "no
+    /// variables"; invalid JSON fails the send.
+    #[serde(default)]
+    pub variables: String,
+    /// Operation name for documents containing multiple operations.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation_name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -399,6 +433,9 @@ pub struct RequestItem {
     pub protocol: Protocol,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grpc: Option<GrpcPayload>,
+    /// GraphQL query payload, present only when `protocol == GraphQL`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graphql: Option<GraphQLPayload>,
     /// Outgoing message format for WebSocket requests (omitted for Text).
     #[serde(default, skip_serializing_if = "WsMessageFormat::is_text")]
     pub ws_message_format: WsMessageFormat,
@@ -448,6 +485,7 @@ impl RequestItem {
             url: url.into(),
             protocol,
             grpc: None,
+            graphql: None,
             ws_message_format: WsMessageFormat::default(),
             params: Vec::new(),
             headers: Vec::new(),
@@ -494,6 +532,61 @@ impl RequestItem {
     /// Mutable view of the gRPC payload, created on demand.
     pub fn grpc_mut(&mut self) -> &mut GrpcPayload {
         self.grpc.get_or_insert_with(GrpcPayload::default)
+    }
+
+    /// Mutable view of the GraphQL payload, created on demand.
+    pub fn graphql_mut(&mut self) -> &mut GraphQLPayload {
+        self.graphql.get_or_insert_with(GraphQLPayload::default)
+    }
+
+    /// Converts a GraphQL request into the equivalent HTTP POST item that
+    /// goes over the wire: method POST, JSON body
+    /// `{query, variables?, operationName?}`, `Content-Type: application/json`.
+    /// Query params, headers, auth, settings and scripts are carried over
+    /// unchanged so the whole HTTP pipeline (cancel, progress, response
+    /// cache, tests) applies verbatim.
+    ///
+    /// Fails when the query is empty or `variables` is not a JSON object.
+    pub fn to_graphql_http_item(&self) -> Result<RequestItem, String> {
+        const EMPTY_QUERY: &str =
+            "GraphQL query is empty — open the Query tab and write a query first.";
+        let payload = self.graphql.as_ref().ok_or(EMPTY_QUERY)?;
+        if payload.query.trim().is_empty() {
+            return Err(EMPTY_QUERY.to_string());
+        }
+        let variables = if payload.variables.trim().is_empty() {
+            None
+        } else {
+            let parsed: serde_json::Value = serde_json::from_str(&payload.variables)
+                .map_err(|e| format!("Variables is not valid JSON: {e}"))?;
+            if !parsed.is_object() {
+                return Err("Variables must be a JSON object.".to_string());
+            }
+            Some(parsed)
+        };
+
+        let mut body = serde_json::Map::new();
+        body.insert(
+            "query".to_string(),
+            serde_json::Value::String(payload.query.clone()),
+        );
+        if let Some(vars) = variables {
+            body.insert("variables".to_string(), vars);
+        }
+        if let Some(op) = &payload.operation_name {
+            if !op.trim().is_empty() {
+                body.insert(
+                    "operationName".to_string(),
+                    serde_json::Value::String(op.clone()),
+                );
+            }
+        }
+
+        let mut item = self.clone();
+        item.method = HttpMethod::Post;
+        item.body = RequestBody::json(serde_json::Value::Object(body).to_string());
+        item.update_content_type_header(Some("application/json"));
+        Ok(item)
     }
 
     /// Sets the outgoing WebSocket message format (Text or JSON).

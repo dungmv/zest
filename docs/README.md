@@ -46,8 +46,8 @@ Thư mục `docs/` này bao gồm toàn bộ thiết kế chi tiết, kiến tr�
 | **Code Generator** | 15+ languages | 12+ languages | cURL | **16+ languages & frameworks** |
 | **Pre-request & Test Scripts** | JavaScript sandbox | JavaScript sandbox | **Embedded QuickJS (`rquickjs`) Sandbox** | **Embedded QuickJS (`rquickjs`) Sandbox** |
 | **Request Chaining** | `pm.environment.set` | Tag filters | **Tự động qua `z.environment.set`** | **Tự động qua Test Script** |
-| **GraphQL Client** | Có (Schema explorer) | Có | Gửi qua POST JSON | **Dedicated GraphQL IDE** |
-| **WebSocket / SSE** | Có | Có | Chưa có | **Realtime Messages Frame Log** |
+| **GraphQL Client** | Có (Schema explorer) | Có | **Dual-pane Query/Variables + Introspection + Deep Autocomplete** | **Dedicated GraphQL IDE** |
+| **WebSocket / SSE** | Có | Có | **WS + gRPC + SSE với Unified Frame Log** | **Realtime Messages Frame Log** |
 | **OAuth 2.0 PKCE / Auto-Refresh** | Có | Có | Bearer / Basic / API Key + Kế thừa Folder/Workspace | **Tự động lấy & refresh token** |
 | **Collection Runner (Testing)** | Có | Inso CLI | Chưa có | **UI Runner + Headless CLI** |
 | **In-app Git Client** | Fork/PR Cloud | Insomnia Git sync | **Đầy đủ (Branch, Commit, Diff, Push/Pull, Remotes)** | **Branch switch, Diff, Commit** |

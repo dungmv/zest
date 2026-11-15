@@ -2,6 +2,7 @@ use super::{ComposerSyncScope, SessionEvent};
 use crate::services::GrpcSchemaSummary;
 use gpui_kit::{Context, Task};
 use tokio::sync::oneshot;
+use zest_core::graphql::GraphQLSchemaSummary;
 use zest_core::models::{Protocol, RequestItem};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -9,6 +10,8 @@ pub enum RequestTabKind {
     #[default]
     Body,
     Message,
+    /// GraphQL query + variables dual-pane editor.
+    Query,
     Params,
     Headers,
     Auth,
@@ -19,12 +22,13 @@ pub enum RequestTabKind {
 
 impl RequestTabKind {
     /// Tab strip for a request of the given protocol:
-    /// - HTTP: Body, Params, Headers, Auth, scripts
+    /// - HTTP/SSE: Body, Params, Headers, Auth, scripts
     /// - WebSocket: Message (outgoing frame), Params, Headers, Auth, pre-request
-    /// - gRPC: Message (JSON payload), Headers (metadata), Auth, pre-request
+    /// - gRPC: Message (JSON payload), Proto (schema source), Headers, Auth, pre-request
+    /// - GraphQL: Query (query + variables), Params, Headers, Auth, scripts
     pub fn tabs_for(protocol: Protocol) -> &'static [RequestTabKind] {
         match protocol {
-            Protocol::Http => &[
+            Protocol::Http | Protocol::Sse => &[
                 RequestTabKind::Body,
                 RequestTabKind::Params,
                 RequestTabKind::Headers,
@@ -46,6 +50,14 @@ impl RequestTabKind {
                 RequestTabKind::Auth,
                 RequestTabKind::PreRequestScript,
             ],
+            Protocol::GraphQL => &[
+                RequestTabKind::Query,
+                RequestTabKind::Params,
+                RequestTabKind::Headers,
+                RequestTabKind::Auth,
+                RequestTabKind::PreRequestScript,
+                RequestTabKind::Tests,
+            ],
         }
     }
 
@@ -53,6 +65,7 @@ impl RequestTabKind {
         match self {
             RequestTabKind::Body => "Body",
             RequestTabKind::Message => "Message",
+            RequestTabKind::Query => "Query",
             RequestTabKind::Params => "Params",
             RequestTabKind::Headers => "Headers",
             RequestTabKind::Auth => "Auth",
@@ -83,6 +96,8 @@ pub struct RequestSessionState {
     pub script_error: Option<String>,
     /// Resolved gRPC schema for the service/method picker (session-only).
     pub grpc_schema: Option<GrpcSchemaSummary>,
+    /// Resolved GraphQL schema for the completion provider (session-only).
+    pub graphql_schema: Option<GraphQLSchemaSummary>,
     input_refresh_task: Option<Task<()>>,
 }
 
@@ -97,6 +112,7 @@ impl RequestSessionState {
             cancel_tx: None,
             script_error: None,
             grpc_schema: None,
+            graphql_schema: None,
             input_refresh_task: None,
         }
     }
@@ -194,6 +210,17 @@ impl RequestSessionState {
 
     pub fn set_grpc_schema(&mut self, schema: Option<GrpcSchemaSummary>, cx: &mut Context<Self>) {
         self.grpc_schema = schema;
+        cx.notify();
+    }
+
+    /// Resolved GraphQL schema for the deep autocomplete provider
+    /// (session-only, like the gRPC one).
+    pub fn set_graphql_schema(
+        &mut self,
+        schema: Option<GraphQLSchemaSummary>,
+        cx: &mut Context<Self>,
+    ) {
+        self.graphql_schema = schema;
         cx.notify();
     }
 

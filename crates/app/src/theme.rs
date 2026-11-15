@@ -633,12 +633,16 @@ impl AppTheme {
         }
     }
 
-    /// Badge color for non-HTTP transport protocols.
+    /// Badge color for non-HTTP transport protocols. GraphQL/SSE map to a
+    /// neutral muted tone — the monochrome direction forbids new colored
+    /// accents; existing WS/gRPC hues stay until the user asks for a
+    /// monochrome refactor of the legacy badges.
     pub fn protocol_color(&self, protocol: Protocol) -> Hsla {
         match protocol {
             Protocol::Http => self.method_get,
             Protocol::WebSocket => self.method_websocket,
             Protocol::Grpc => self.method_grpc,
+            Protocol::GraphQL | Protocol::Sse => self.text_muted,
         }
     }
 

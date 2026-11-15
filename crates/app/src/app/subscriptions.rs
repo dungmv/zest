@@ -227,6 +227,78 @@ pub fn setup_app_subscriptions(
         }
     }));
 
+    // 2d. Subscribe to GraphQL query editor change (persisted into GraphQLPayload)
+    let ed_gql = editor_state.clone();
+    let ws_gql = workspace_state.clone();
+    subscriptions.push(cx.subscribe(
+        &targets.composer_inputs.graphql.query_editor,
+        move |_, txt, event, cx| {
+            if let InputEvent::Change = event {
+                let val = txt.read(cx).value().to_string();
+                let active_id = ed_gql.read(cx).active_request_id().to_string();
+                ws_gql.update(cx, |ws, _| {
+                    ws.update_active_request(&active_id, |r| {
+                        r.graphql_mut().query = val;
+                    });
+                });
+                ed_gql.update(cx, |ed, cx| ed.mark_dirty(cx));
+            }
+        },
+    ));
+
+    // 2e. Subscribe to GraphQL variables editor change (+ JSON validation)
+    let ed_gvar = editor_state.clone();
+    let ws_gvar = workspace_state.clone();
+    let gvar_marks = targets.composer_inputs.graphql.variables_marks.clone();
+    let gvar_hover = targets.composer_inputs.graphql.diagnostics_hover.clone();
+    subscriptions.push(cx.subscribe(
+        &targets.composer_inputs.graphql.variables_editor,
+        move |_, txt, event, cx| {
+            if let InputEvent::Change = event {
+                let val = txt.read(cx).value().to_string();
+                let active_id = ed_gvar.read(cx).active_request_id().to_string();
+                ws_gvar.update(cx, |ws, _| {
+                    ws.update_active_request(&active_id, |r| {
+                        r.graphql_mut().variables = val.clone();
+                    });
+                });
+                crate::components::completion::graphql_query::refresh_variables_validation(
+                    &txt,
+                    &gvar_marks,
+                    gvar_hover.get(),
+                    &val,
+                    crate::theme::theme().status_5xx,
+                    cx,
+                );
+                ed_gvar.update(cx, |ed, cx| ed.mark_dirty(cx));
+            }
+        },
+    ));
+
+    // 2f. Subscribe to GraphQL operation name input (persisted)
+    let ed_gop = editor_state.clone();
+    let ws_gop = workspace_state.clone();
+    subscriptions.push(cx.subscribe(
+        &targets.composer_inputs.graphql.operation_name_input,
+        move |_, inp, event, cx| {
+            if let InputEvent::Change = event {
+                let val = inp.read(cx).value().to_string();
+                let active_id = ed_gop.read(cx).active_request_id().to_string();
+                ws_gop.update(cx, |ws, _| {
+                    ws.update_active_request(&active_id, |r| {
+                        let name = if val.trim().is_empty() {
+                            None
+                        } else {
+                            Some(val.clone())
+                        };
+                        r.graphql_mut().operation_name = name;
+                    });
+                });
+                ed_gop.update(cx, |ed, cx| ed.mark_dirty(cx));
+            }
+        },
+    ));
+
     // 3. Subscribe to Raw textarea change
     let ed_raw = editor_state.clone();
     let ws_raw = workspace_state.clone();

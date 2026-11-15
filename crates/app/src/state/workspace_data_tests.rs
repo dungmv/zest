@@ -2,7 +2,7 @@
 mod tests {
     use crate::state::{
         EnvironmentState, GitActiveModal, GitState, GitTab, ModalState, PersistenceState,
-        WorkspaceSettingTarget, SettingsTab, SidebarState, WorkspaceDataState,
+        SettingsTab, SidebarState, WorkspaceDataState, WorkspaceSettingTarget,
     };
     use std::sync::Arc;
     use zest_core::models::{

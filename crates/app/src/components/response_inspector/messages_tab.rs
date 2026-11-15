@@ -5,10 +5,11 @@ use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::spinner::Spinner;
 use gpui_kit::component::Sizable as _;
 use gpui_kit::{div, px, AnyElement, App, IntoElement, ParentElement, Styled};
+use zest_core::models::Protocol;
 use zest_core::transport::{FrameDirection, FrameKind, TransportFrame};
 use zest_core::ws::WebSocketStatus;
 
-/// Frame log for WebSocket/gRPC requests (Messages tab).
+/// Frame log for WebSocket/gRPC/SSE requests (Messages tab).
 pub(super) fn render_messages_tab(
     ri: &ResponseInspector,
     cx: &App,
@@ -18,6 +19,13 @@ pub(super) fn render_messages_tab(
     let resp_s = ri.response_state.read(cx);
     let status = resp_s.ws_status.clone();
     let messages = resp_s.frames.clone();
+    let protocol = ri
+        .workspace_state
+        .read(cx)
+        .find_request(ri.editor_state.read(cx).active_request_id())
+        .map(|r| r.protocol)
+        .unwrap_or(Protocol::Http);
+    let is_sse = protocol == Protocol::Sse;
 
     if is_sending_this_request {
         return div()
@@ -32,7 +40,11 @@ pub(super) fn render_messages_tab(
                 div()
                     .text_xs()
                     .text_color(t.text_secondary)
-                    .child("Connecting…"),
+                    .child(if is_sse {
+                        "Streaming…"
+                    } else {
+                        "Connecting…"
+                    }),
             )
             .into_any_element();
     }
@@ -44,7 +56,7 @@ pub(super) fn render_messages_tab(
         .bg(t.bg_response)
         .child(div().flex_1().overflow_y_scrollbar().p(px(12.)).child({
             if messages.is_empty() {
-                render_messages_empty_state(&status)
+                render_messages_empty_state(&status, is_sse)
             } else {
                 div()
                     .flex()
@@ -57,12 +69,16 @@ pub(super) fn render_messages_tab(
         .into_any_element()
 }
 
-fn render_messages_empty_state(status: &WebSocketStatus) -> AnyElement {
-    let hint = match status {
-        WebSocketStatus::Connected => "Connected — no messages yet",
-        WebSocketStatus::Connecting => "Connecting…",
-        WebSocketStatus::Disconnected => "Not connected",
-        WebSocketStatus::Failed(_) => "Connection failed",
+fn render_messages_empty_state(status: &WebSocketStatus, is_sse: bool) -> AnyElement {
+    let hint = if is_sse {
+        "Send to start streaming events"
+    } else {
+        match status {
+            WebSocketStatus::Connected => "Connected — no messages yet",
+            WebSocketStatus::Connecting => "Connecting…",
+            WebSocketStatus::Disconnected => "Not connected",
+            WebSocketStatus::Failed(_) => "Connection failed",
+        }
     };
     div()
         .size_full()
@@ -83,13 +99,13 @@ fn render_message_card(msg: TransportFrame) -> AnyElement {
         (false, FrameKind::Ping) | (false, FrameKind::Pong) => ("→", t.text_muted),
         (false, _) => ("→", t.method_websocket),
     };
-    let kind_label = match msg.kind {
-        FrameKind::Text => "TEXT",
-        FrameKind::Binary => "BIN",
-        FrameKind::Ping => "PING",
-        FrameKind::Pong => "PONG",
-        FrameKind::Close => "CLOSE",
-    };
+    let kind_label: String = msg.label.clone().unwrap_or_else(|| match msg.kind {
+        FrameKind::Text => "TEXT".to_string(),
+        FrameKind::Binary => "BIN".to_string(),
+        FrameKind::Ping => "PING".to_string(),
+        FrameKind::Pong => "PONG".to_string(),
+        FrameKind::Close => "CLOSE".to_string(),
+    });
 
     let time = chrono::DateTime::from_timestamp_millis(msg.timestamp_ms)
         .map(|dt| {

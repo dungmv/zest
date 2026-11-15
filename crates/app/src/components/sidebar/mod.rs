@@ -423,6 +423,12 @@ impl RenderOnce for SidebarTree {
                                     let ws_grpc = ws_menu.clone();
                                     let ed_grpc = ed_menu.clone();
                                     let sb_grpc = sb_menu.clone();
+                                    let ws_gql = ws_menu.clone();
+                                    let ed_gql = ed_menu.clone();
+                                    let sb_gql = sb_menu.clone();
+                                    let ws_sse = ws_menu.clone();
+                                    let ed_sse = ed_menu.clone();
+                                    let sb_sse = sb_menu.clone();
 
                                     menu.item(
                                         PopupMenuItem::new("New HTTP")
@@ -469,6 +475,36 @@ impl RenderOnce for SidebarTree {
                                                     &ws_grpc,
                                                     &ed_grpc,
                                                     &sb_grpc,
+                                                    window,
+                                                    cx,
+                                                );
+                                            }),
+                                    )
+                                    .item(
+                                        PopupMenuItem::new("New GraphQL")
+                                            .icon(Icon::new(IconName::ChartNetwork))
+                                            .on_click(move |_, window, cx| {
+                                                super::item_actions::create_and_rename_request(
+                                                    Protocol::GraphQL,
+                                                    None,
+                                                    &ws_gql,
+                                                    &ed_gql,
+                                                    &sb_gql,
+                                                    window,
+                                                    cx,
+                                                );
+                                            }),
+                                    )
+                                    .item(
+                                        PopupMenuItem::new("New SSE")
+                                            .icon(Icon::new(IconName::Zap))
+                                            .on_click(move |_, window, cx| {
+                                                super::item_actions::create_and_rename_request(
+                                                    Protocol::Sse,
+                                                    None,
+                                                    &ws_sse,
+                                                    &ed_sse,
+                                                    &sb_sse,
                                                     window,
                                                     cx,
                                                 );

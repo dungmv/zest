@@ -69,7 +69,9 @@ impl RenderOnce for ResponseInspector {
             .and_then(|id| self.workspace_state.read(cx).find_request(id))
             .map(|r| r.protocol)
             .unwrap_or(Protocol::Http);
-        let is_realtime = protocol != Protocol::Http;
+        // Only WS/gRPC render realtime pills and the handshake headers tab;
+        // GraphQL is a plain exchange and SSE keeps normal HTTP headers.
+        let is_realtime = protocol.is_realtime();
 
         let current_resp = resp_s.current_response.clone();
         let active_tab = resp_s.active_tab;

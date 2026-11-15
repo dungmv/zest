@@ -1,4 +1,4 @@
-use crate::state::{EnvironmentState, ModalState, WorkspaceSettingTarget, WorkspaceDataState};
+use crate::state::{EnvironmentState, ModalState, WorkspaceDataState, WorkspaceSettingTarget};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};

@@ -80,6 +80,7 @@ fn test_grpc_frame_log_survives_and_caps() {
                 direction: FrameDirection::Inbound,
                 kind: FrameKind::Text,
                 payload: format!("m{i}").into_bytes(),
+                label: None,
             },
         );
     }

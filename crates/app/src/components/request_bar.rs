@@ -77,7 +77,9 @@ impl RenderOnce for RequestBar {
             (method, ed.is_sending, protocol, ws_connected)
         };
         let is_ws = protocol == Protocol::WebSocket;
-        let is_realtime = protocol != Protocol::Http;
+        // Only WS/gRPC render the realtime Connect/Disconnect affordances;
+        // GraphQL and SSE keep the plain Send/cancel request/response flow.
+        let is_realtime = protocol.is_realtime();
         let url = self.url_input.read(cx).value().to_string();
 
         let ws_clone = self.env_state.clone();
@@ -212,7 +214,8 @@ impl RenderOnce for RequestBar {
                             );
                         })
                     })
-                    // Method dropdown trigger (HTTP only); WS/gRPC show a static badge
+                    // Method dropdown trigger (HTTP/SSE); realtime protocols
+                    // show a static protocol badge, GraphQL a locked POST.
                     .child(if is_realtime {
                         div()
                             .h(px(22.))
@@ -220,6 +223,14 @@ impl RenderOnce for RequestBar {
                             .flex()
                             .items_center()
                             .child(ProtocolBadge::new(protocol))
+                            .into_any_element()
+                    } else if protocol == Protocol::GraphQL {
+                        div()
+                            .h(px(22.))
+                            .px(px(4.))
+                            .flex()
+                            .items_center()
+                            .child(MethodBadge::new(HttpMethod::Post))
                             .into_any_element()
                     } else {
                         let ws_s = self.workspace_state.clone();

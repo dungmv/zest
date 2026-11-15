@@ -67,20 +67,20 @@ Tài liệu này xác định lộ trình phát triển toàn diện của **Zes
 
 ## 🎯 Giai đoạn 2: Mở rộng Đa Giao thức (Protocols: GraphQL, WebSocket, SSE, gRPC)
 *Mục tiêu: Đưa Zest trở thành API client toàn diện không chỉ giới hạn ở REST thông thường.*
-*Tiến độ: WebSocket ✅ & gRPC ✅ (2/4) — GraphQL và SSE còn pending.*
+*Tiến độ: 4/4 — WebSocket ✅, gRPC ✅, GraphQL ✅ (introspection + deep autocomplete), SSE ✅ (streaming frame log).*
 
-1. **GraphQL Client Chuyên Dụng:**
-   - Editor GraphQL 2 pane: Query/Mutation bên trái, Variables JSON bên phải.
-   - Nút **Introspect Schema**: Gửi introspection query tới server để tải schema về.
-   - Gợi ý từ khóa (Autocomplete) query, fields, types, directives dựa trên schema đã introspect.
+1. **GraphQL Client Chuyên Dụng — ✅ Đã hoàn thành:**
+   - Editor GraphQL 2 pane: Query (trên) + Variables JSON (dưới), Operation name input, Format JSON.
+   - Nút **Fetch Schema**: gửi introspection query chuẩn, parse thành `GraphQLSchemaSummary` (session-only).
+   - Deep autocomplete theo type-context lồng nhau (field/argument/enum/input/type/fragment/directive) từ resolver `zest_core::graphql::completions_at`; execution đi qua HTTP POST pipeline (cancel/.loc cache/scripts/tests giữ nguyên).
 2. **WebSocket Client — ✅ Đã hoàn thành (ws/wss + frame log; Binary message chưa hỗ trợ):**
    - Khởi tạo kết nối WebSocket trực tiếp (`ws://` và `wss://`).
    - Quản lý trạng thái: Connecting, Connected, Disconnected.
    - Khung gửi tin nhắn: Text, JSON (Binary chưa hỗ trợ).
    - Message Stream Viewer: Lịch sử tin nhắn Real-time (inbound/outbound) kèm timestamp, lọc tin nhắn, clear log; frame log được persist cùng request.
-3. **Server-Sent Events (SSE) & Streaming Responses:**
-   - Hỗ trợ nhận stream HTTP (chunked transfer encoding, SSE `text/event-stream`).
-   - Hiển thị từng event nhận được theo thời gian thực (rất quan trọng khi test các LLM API như OpenAI, Anthropic, Gemini).
+3. **Server-Sent Events (SSE) & Streaming Responses — ✅ Đã hoàn thành:**
+   - Nhận stream HTTP (`text/event-stream`) qua `ReqwestExecutor::send_streaming` + parser `zest_core::sse` (WHATWG-compliant).
+   - Hiển thị từng event nhận được theo thời gian thực trong Messages tab (unified frame log, keep-alive comment → Ping), rất quan trọng khi test các LLM API như OpenAI, Anthropic, Gemini; idle timeout = `timeout_ms`.
 4. **gRPC Client (Unary & Server Streaming) — ✅ Đã hoàn thành (client-streaming/bidi chưa hỗ trợ):**
    - Hỗ trợ nạp file `.proto` hoặc Server Reflection (schema tự động tải khi gửi, tồn tại song song với editor `{{var}}` interpolation).
    - Chọn Service và RPC Method từ dropdown (Message tab với Body-style toolbar + Format JSON).

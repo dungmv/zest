@@ -9,7 +9,7 @@ pub use general_tab::*;
 pub use headers_tab::*;
 
 use crate::components::ModalDialog;
-use crate::state::{EnvironmentState, ModalState, WorkspaceSettingTarget, WorkspaceDataState};
+use crate::state::{EnvironmentState, ModalState, WorkspaceDataState, WorkspaceSettingTarget};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement as _;

@@ -203,6 +203,7 @@ impl WsService {
             direction: FrameDirection::Outbound,
             kind: FrameKind::Text,
             payload: text.clone().into_bytes(),
+            label: None,
         };
         session
             .outgoing

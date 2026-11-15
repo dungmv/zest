@@ -1,12 +1,14 @@
 pub mod cache;
 pub mod curl;
 pub mod git;
+pub mod graphql;
 pub mod grpc;
 pub mod http;
 pub mod importers;
 pub mod interpolation;
 pub mod models;
 pub mod scripting;
+pub mod sse;
 pub mod storage;
 pub mod transport;
 pub mod updater;

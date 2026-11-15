@@ -1,4 +1,5 @@
 use crate::models::{HttpMethod, HttpResponseRecord, ParsedCookie, StoredCookie, TimingBreakdown};
+use crate::sse::{SseOutput, SseParser};
 use crate::transport::{RequestError, ResolvedRequest};
 use chrono::Utc;
 use cookie_store::CookieStore;
@@ -10,6 +11,12 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::oneshot;
+
+/// Body bytes captured into the final record for streamed responses. The
+/// byte count keeps growing (so size/progress stay accurate) but memory is
+/// bounded for hours-long streams.
+const MAX_STREAMED_BODY_CAPTURE: usize = 2 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
 pub enum HttpProgress {
@@ -216,18 +223,15 @@ impl Default for ReqwestExecutor {
     }
 }
 
-impl HttpExecutor for ReqwestExecutor {
-    async fn send(
+impl ReqwestExecutor {
+    /// Builds the reqwest request for a resolved request. `streaming` skips
+    /// the total request timeout so long-lived SSE streams are not killed
+    /// mid-flight; per-chunk idle timeouts apply there instead.
+    fn build_request_builder(
         &self,
-        req: ResolvedRequest,
-        progress_tx: Option<UnboundedSender<HttpProgress>>,
-    ) -> Result<HttpResponseRecord, RequestError> {
-        if let Some(tx) = &progress_tx {
-            let _ = tx.send(HttpProgress::Connecting);
-        }
-
-        let start_time = Instant::now();
-
+        req: &ResolvedRequest,
+        streaming: bool,
+    ) -> Result<reqwest::RequestBuilder, RequestError> {
         let reqwest_method = match req.method {
             HttpMethod::Get => reqwest::Method::GET,
             HttpMethod::Post => reqwest::Method::POST,
@@ -239,10 +243,9 @@ impl HttpExecutor for ReqwestExecutor {
         };
 
         let client = self.get_client(req.settings.follow_redirects, req.settings.validate_tls)?;
-
         let mut request_builder = client.request(reqwest_method, &req.url);
 
-        if req.settings.timeout_secs() > 0 {
+        if !streaming && req.settings.timeout_secs() > 0 {
             request_builder =
                 request_builder.timeout(Duration::from_secs(req.settings.timeout_secs()));
         }
@@ -255,7 +258,7 @@ impl HttpExecutor for ReqwestExecutor {
         }
         request_builder = request_builder.headers(header_map);
 
-        if let Some(multipart_items) = req.multipart {
+        if let Some(multipart_items) = &req.multipart {
             let mut form = reqwest::multipart::Form::new();
             for item in multipart_items {
                 if item.is_file {
@@ -276,25 +279,240 @@ impl HttpExecutor for ReqwestExecutor {
                 }
             }
             request_builder = request_builder.multipart(form);
-        } else if let Some(body_data) = req.body {
-            request_builder = request_builder.body(body_data);
+        } else if let Some(body_data) = &req.body {
+            request_builder = request_builder.body(body_data.clone());
         }
+
+        Ok(request_builder)
+    }
+
+    fn check_host_reuse(
+        active_hosts: &Mutex<HashMap<String, Instant>>,
+        host_key: Option<&str>,
+    ) -> bool {
+        host_key
+            .and_then(|key| {
+                let hosts = active_hosts.lock().unwrap_or_else(|e| e.into_inner());
+                hosts
+                    .get(key)
+                    .map(|last_seen| last_seen.elapsed() < Duration::from_secs(60))
+            })
+            .unwrap_or(false)
+    }
+
+    fn update_host_activity(
+        active_hosts: &Mutex<HashMap<String, Instant>>,
+        host_key: Option<&str>,
+        connection_closed: bool,
+    ) {
+        if let Some(key) = host_key {
+            let mut hosts = active_hosts.lock().unwrap_or_else(|e| e.into_inner());
+            if connection_closed {
+                hosts.remove(key);
+            } else {
+                hosts.insert(key.to_string(), Instant::now());
+            }
+        }
+    }
+
+    /// Timing heuristic shared by the plain and streaming send paths: a
+    /// reused connection has zero handshake cost, a cold one splits the
+    /// TTFB into estimated DNS/TCP/TLS/wait segments.
+    fn build_timing(
+        total_ms: u64,
+        ttfb_ms: u64,
+        download_ms: u64,
+        is_reused: bool,
+        is_https: bool,
+    ) -> TimingBreakdown {
+        if is_reused {
+            return TimingBreakdown {
+                dns_ms: Some(0),
+                connect_ms: Some(0),
+                tls_ms: if is_https { Some(0) } else { None },
+                ttfb_ms: Some(ttfb_ms),
+                download_ms: Some(download_ms),
+                total_ms,
+                connection_reused: true,
+            };
+        }
+        // Cold connection: ttfb_ms includes handshake + server wait
+        let handshake_est = (ttfb_ms / 2).max(1);
+        let dns = handshake_est / 4;
+        let tcp = handshake_est / 3;
+        let tls = if is_https {
+            Some(handshake_est.saturating_sub(dns + tcp).max(1))
+        } else {
+            None
+        };
+        let wait = ttfb_ms.saturating_sub(dns + tcp + tls.unwrap_or(0));
+        TimingBreakdown {
+            dns_ms: Some(dns),
+            connect_ms: Some(tcp),
+            tls_ms: tls,
+            ttfb_ms: Some(wait),
+            download_ms: Some(download_ms),
+            total_ms,
+            connection_reused: false,
+        }
+    }
+
+    /// Executes a request as a server-sent-events stream: every parsed
+    /// event or keep-alive comment is forwarded over `sse_tx` as it
+    /// arrives, and the final record carries the (capped) accumulated body
+    /// so the usual response views and cache still apply. `cancel_rx`
+    /// aborts both the connect and the streaming phase. `timeout_ms` acts
+    /// as an idle timeout between chunks — a stream that goes silent ends
+    /// gracefully with whatever was received. Responses whose content type
+    /// is not `text/event-stream` fall back to plain accumulation.
+    pub async fn send_streaming(
+        &self,
+        req: ResolvedRequest,
+        progress_tx: Option<UnboundedSender<HttpProgress>>,
+        sse_tx: UnboundedSender<SseOutput>,
+        cancel_rx: oneshot::Receiver<()>,
+    ) -> Result<HttpResponseRecord, RequestError> {
+        if let Some(tx) = &progress_tx {
+            let _ = tx.send(HttpProgress::Connecting);
+        }
+
+        let start_time = Instant::now();
+        let request_builder = self.build_request_builder(&req, true)?;
 
         if let Some(tx) = &progress_tx {
             let _ = tx.send(HttpProgress::Sending);
         }
 
         let host_key = extract_host_key(&req.url);
-        let is_reused = if let Some(key) = &host_key {
-            let hosts = self.active_hosts.lock().unwrap_or_else(|e| e.into_inner());
-            if let Some(last_seen) = hosts.get(key) {
-                last_seen.elapsed() < Duration::from_secs(60)
-            } else {
-                false
-            }
-        } else {
-            false
+        let is_reused = Self::check_host_reuse(&self.active_hosts, host_key.as_deref());
+
+        let ttfb_start = Instant::now();
+        let mut cancel_rx = cancel_rx;
+        let response = tokio::select! {
+            _ = &mut cancel_rx => return Err(RequestError::Cancelled),
+            res = request_builder.send() => res.map_err(|e| {
+                if e.is_timeout() {
+                    RequestError::Timeout(req.settings.timeout_secs())
+                } else {
+                    RequestError::Network(e.to_string())
+                }
+            })?,
         };
+        let ttfb_ms = ttfb_start.elapsed().as_millis() as u64;
+
+        if let Some(tx) = &progress_tx {
+            let _ = tx.send(HttpProgress::WaitingResponse);
+        }
+
+        let status = response.status();
+        let status_code = status.as_u16();
+        let status_text = status.canonical_reason().unwrap_or("").to_string();
+
+        let mut resp_headers = Vec::new();
+        for (name, val) in response.headers() {
+            if let Ok(v_str) = val.to_str() {
+                resp_headers.push((name.as_str().to_string(), v_str.to_string()));
+            }
+        }
+        let is_event_stream = resp_headers.iter().any(|(k, v)| {
+            k.eq_ignore_ascii_case("content-type")
+                && v.to_ascii_lowercase().contains("text/event-stream")
+        });
+
+        Self::update_host_activity(
+            &self.active_hosts,
+            host_key.as_deref(),
+            resp_headers.iter().any(|(k, v)| {
+                k.eq_ignore_ascii_case("connection") && v.eq_ignore_ascii_case("close")
+            }),
+        );
+
+        let idle = Duration::from_millis(req.settings.timeout_ms);
+        let mut parser = SseParser::new();
+        let mut body_bytes: Vec<u8> = Vec::new();
+        let mut total_received = 0usize;
+        let mut stream = response.bytes_stream();
+
+        let download_start = Instant::now();
+        loop {
+            let next = tokio::select! {
+                _ = &mut cancel_rx => return Err(RequestError::Cancelled),
+                next = tokio::time::timeout(idle, stream.next()) => match next {
+                    // Idle timeout on a silent connection ends the stream.
+                    Err(_) => break,
+                    Ok(None) => break,
+                    Ok(Some(chunk_res)) => chunk_res,
+                },
+            };
+            let chunk = next.map_err(|e| RequestError::Network(e.to_string()))?;
+            total_received += chunk.len();
+            if body_bytes.len() < MAX_STREAMED_BODY_CAPTURE {
+                let room = MAX_STREAMED_BODY_CAPTURE - body_bytes.len();
+                body_bytes.extend_from_slice(&chunk[..chunk.len().min(room)]);
+            }
+            if is_event_stream {
+                for out in parser.feed(&chunk) {
+                    let _ = sse_tx.send(out);
+                }
+            }
+            if let Some(tx) = &progress_tx {
+                let _ = tx.send(HttpProgress::Downloading {
+                    received_bytes: total_received,
+                    total_bytes: None,
+                });
+            }
+        }
+        let download_ms = download_start.elapsed().as_millis() as u64;
+
+        if is_event_stream {
+            for out in parser.finish() {
+                let _ = sse_tx.send(out);
+            }
+        }
+
+        let total_ms = start_time.elapsed().as_millis() as u64;
+        let is_https = req.url.starts_with("https://");
+        let timing = Self::build_timing(total_ms, ttfb_ms, download_ms, is_reused, is_https);
+        let cookies = self.get_cookies_for_url(&req.url);
+
+        Ok(HttpResponseRecord {
+            id: uuid::Uuid::new_v4().to_string(),
+            request_id: req.request_id,
+            status_code,
+            status_text,
+            duration_ms: total_ms,
+            size_bytes: total_received,
+            headers: resp_headers,
+            cookies,
+            body: body_bytes,
+            timing,
+            request_sent: Some(req.sent_info),
+            test_results: Vec::new(),
+            console_logs: Vec::new(),
+            created_at: Utc::now(),
+        })
+    }
+}
+
+impl HttpExecutor for ReqwestExecutor {
+    async fn send(
+        &self,
+        req: ResolvedRequest,
+        progress_tx: Option<UnboundedSender<HttpProgress>>,
+    ) -> Result<HttpResponseRecord, RequestError> {
+        if let Some(tx) = &progress_tx {
+            let _ = tx.send(HttpProgress::Connecting);
+        }
+
+        let start_time = Instant::now();
+        let request_builder = self.build_request_builder(&req, false)?;
+
+        if let Some(tx) = &progress_tx {
+            let _ = tx.send(HttpProgress::Sending);
+        }
+
+        let host_key = extract_host_key(&req.url);
+        let is_reused = Self::check_host_reuse(&self.active_hosts, host_key.as_deref());
 
         let ttfb_start = Instant::now();
         let response = request_builder.send().await.map_err(|e| {
@@ -326,14 +544,7 @@ impl HttpExecutor for ReqwestExecutor {
             .iter()
             .any(|(k, v)| k.eq_ignore_ascii_case("connection") && v.eq_ignore_ascii_case("close"));
 
-        if let Some(key) = host_key {
-            let mut hosts = self.active_hosts.lock().unwrap_or_else(|e| e.into_inner());
-            if connection_closed {
-                hosts.remove(&key);
-            } else {
-                hosts.insert(key, Instant::now());
-            }
-        }
+        Self::update_host_activity(&self.active_hosts, host_key.as_deref(), connection_closed);
 
         let total_size = response.content_length().map(|s| s as usize);
 
@@ -356,37 +567,7 @@ impl HttpExecutor for ReqwestExecutor {
         let total_ms = start_time.elapsed().as_millis() as u64;
 
         let is_https = req.url.starts_with("https://");
-        let (dns_ms, connect_ms, tls_ms, effective_ttfb_ms, connection_reused) = if is_reused {
-            (
-                Some(0),
-                Some(0),
-                if is_https { Some(0) } else { None },
-                Some(ttfb_ms),
-                true,
-            )
-        } else {
-            // Cold connection: ttfb_ms includes handshake + server wait
-            let handshake_est = (ttfb_ms / 2).max(1);
-            let dns = handshake_est / 4;
-            let tcp = handshake_est / 3;
-            let tls = if is_https {
-                Some(handshake_est.saturating_sub(dns + tcp).max(1))
-            } else {
-                None
-            };
-            let wait = ttfb_ms.saturating_sub(dns + tcp + tls.unwrap_or(0));
-            (Some(dns), Some(tcp), tls, Some(wait), false)
-        };
-
-        let timing = TimingBreakdown {
-            dns_ms,
-            connect_ms,
-            tls_ms,
-            ttfb_ms: effective_ttfb_ms,
-            download_ms: Some(download_ms),
-            total_ms,
-            connection_reused,
-        };
+        let timing = Self::build_timing(total_ms, ttfb_ms, download_ms, is_reused, is_https);
 
         // Extract cookies
         let cookies = self.get_cookies_for_url(&req.url);

@@ -10,6 +10,7 @@ fn test_byte_identical_roundtrip_request() {
         url: "{{base_url}}/api/auth/login".to_string(),
         protocol: Protocol::Http,
         grpc: None,
+        graphql: None,
         ws_message_format: Default::default(),
         params: vec![RequestKvItem {
             key: "debug".to_string(),
@@ -914,4 +915,44 @@ fn test_benchmark_yaml_and_clone() {
     let _ = (parse_time, ser_time, clone_time);
 
     let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn test_graphql_payload_yaml_roundtrip() {
+    use crate::models::{Protocol, RequestItem};
+
+    let mut item = RequestItem::new_with_protocol(
+        "ws1",
+        "Countries",
+        HttpMethod::Post,
+        "https://countries.trevorblades.com/graphql",
+        Protocol::GraphQL,
+    );
+    item.graphql_mut().query = "query { country(code: \"VN\") { name } }".to_string();
+    item.graphql_mut().variables = "{\"filter\": \"asia\"}".to_string();
+    item.graphql_mut().operation_name = Some("Countries".to_string());
+
+    let file = RequestFile::from_item(&item);
+    let yaml = to_yaml_string(&file).unwrap();
+    assert!(
+        yaml.contains("protocol: graphql"),
+        "protocol key serialized: {yaml}"
+    );
+    assert!(yaml.contains("graphql:"));
+
+    let parsed: RequestFile = serde_yaml::from_str(&yaml).unwrap();
+    let back = parsed.to_item("speedt.yaml", "ws1", None);
+    assert_eq!(back.protocol, Protocol::GraphQL);
+    assert_eq!(back.graphql, item.graphql);
+}
+
+#[test]
+fn test_http_yaml_omits_graphql_key() {
+    use crate::models::RequestItem;
+
+    let item = RequestItem::new("ws1", "Plain", HttpMethod::Get, "https://x.dev");
+    let file = RequestFile::from_item(&item);
+    let yaml = to_yaml_string(&file).unwrap();
+    assert!(!yaml.contains("graphql:"), "omitted for HTTP: {yaml}");
+    assert!(!yaml.contains("protocol:"), "omitted for HTTP: {yaml}");
 }

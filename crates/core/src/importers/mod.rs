@@ -168,6 +168,7 @@ pub fn apply_import_to_workspace(
             url: req.url.clone(),
             protocol: req.protocol,
             grpc: None,
+            graphql: None,
             ws_message_format: WsMessageFormat::default(),
             params: req.params.clone(),
             headers: req.headers.clone(),

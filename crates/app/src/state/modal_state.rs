@@ -233,7 +233,11 @@ impl ModalState {
         cx.notify();
     }
 
-    pub fn open_workspace_setting(&mut self, target: WorkspaceSettingTarget, cx: &mut Context<Self>) {
+    pub fn open_workspace_setting(
+        &mut self,
+        target: WorkspaceSettingTarget,
+        cx: &mut Context<Self>,
+    ) {
         self.workspace_setting_target = Some(target);
         cx.notify();
     }

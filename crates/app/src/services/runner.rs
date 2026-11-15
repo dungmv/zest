@@ -70,16 +70,34 @@ impl Runner {
 
     /// Primary send action for the active request, whatever its protocol:
     /// HTTP executes a request/response exchange, WebSocket opens a realtime
-    /// connection, gRPC invokes a unary or server-streaming call. All three
-    /// share one preamble ([`Runner::gather_send_context`] + [`Runner::begin_send`])
-    /// and one event pump ([`Runner::spawn_send_pump`]).
+    /// connection, gRPC invokes a unary or server-streaming call, GraphQL is
+    /// converted to its HTTP POST equivalent and SSE streams the response.
+    /// All of them share one preamble ([`Runner::gather_send_context`] +
+    /// [`Runner::begin_send`]) and one event pump ([`Runner::spawn_send_pump`]).
     pub fn send_current_request(&self, cx: &mut App) {
-        let Some(ctx) = self.gather_send_context(cx) else {
-            return;
+        let mut ctx = match self.gather_send_context(cx) {
+            Some(ctx) => ctx,
+            None => return,
         };
         let protocol = ctx.req_item.protocol;
         if protocol == Protocol::WebSocket && self.engines.ws.is_connected(&ctx.req_id) {
             return;
+        }
+        // GraphQL validation happens before the sending state flashes so a
+        // bad query/variables never starts the pipeline.
+        if protocol == Protocol::GraphQL {
+            match ctx.req_item.to_graphql_http_item() {
+                Ok(http_item) => ctx.req_item = http_item,
+                Err(err) => {
+                    self.toast_state.update(cx, |ts, cx| {
+                        ts.push_error("GraphQL Failed", err, cx);
+                    });
+                    return;
+                }
+            }
+        }
+        if protocol == Protocol::Sse {
+            self.engines.http.clear_sse_frames(&ctx.req_id);
         }
 
         let PreparedSend { ctx, cancel_rx } = self.begin_send(cx, ctx);
@@ -91,9 +109,12 @@ impl Runner {
 
         let SendContext { req_item, env, .. } = ctx;
         let event_rx = match protocol {
-            Protocol::Http => self.engines.http.execute(req_item, env, cancel_rx),
+            Protocol::Http | Protocol::GraphQL => {
+                self.engines.http.execute(req_item, env, cancel_rx)
+            }
             Protocol::WebSocket => self.engines.ws.connect(req_item, env, cancel_rx),
             Protocol::Grpc => self.engines.grpc.invoke(req_item, env, cancel_rx),
+            Protocol::Sse => self.engines.http.execute(req_item, env, cancel_rx),
         };
         self.spawn_send_pump(cx, protocol, event_rx);
     }
@@ -167,6 +188,7 @@ impl Runner {
         let toast_state = self.toast_state.clone();
         let ws_service = self.engines.ws.clone();
         let grpc_engine = self.engines.grpc.clone();
+        let http_engine = self.engines.http.clone();
 
         cx.spawn(async move |cx| {
             while let Some(event) = event_rx.recv().await {
@@ -221,7 +243,17 @@ impl Runner {
                                 });
                             }
                         }
-                        Protocol::Http => {}
+                        Protocol::Sse => {
+                            http_engine.register_sse_frame(&request_id, frame.clone());
+                            let active =
+                                session_state.read(cx).active_request_id() == request_id.as_str();
+                            if active {
+                                response_state.update(cx, |resp, cx| {
+                                    resp.push_frame(frame, cx);
+                                });
+                            }
+                        }
+                        Protocol::Http | Protocol::GraphQL => {}
                     },
                     SendEvent::HttpSuccess {
                         record,
@@ -390,7 +422,7 @@ impl Runner {
                                     ts.push_error("gRPC Failed", error, cx);
                                 });
                             }
-                            Protocol::Http => {
+                            Protocol::Http | Protocol::GraphQL | Protocol::Sse => {
                                 toast_state.update(cx, |ts, cx| {
                                     ts.push_error("Send Failed", error, cx);
                                 });
@@ -468,6 +500,43 @@ impl Runner {
                 Ok(summary) => {
                     session_state.update(cx, |ed, cx| {
                         ed.set_grpc_schema(Some(summary), cx);
+                    });
+                }
+                Err(err) => {
+                    toast_state.update(cx, |ts, cx| {
+                        ts.push_error("Schema Fetch Failed", err, cx);
+                    });
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// Fetches the GraphQL schema via an introspection query for the
+    /// autocomplete provider. Uses the request's URL/headers/auth; runs on
+    /// the tokio runtime and lands the parsed summary on the session.
+    pub fn fetch_graphql_schema(&self, cx: &mut App) {
+        let req_id = self.session_state.read(cx).active_request_id().to_string();
+        let Some(req) = self.workspace_state.read(cx).find_request(&req_id).cloned() else {
+            return;
+        };
+        if req.protocol != Protocol::GraphQL {
+            return;
+        }
+        let env = Some(self.env_state.read(cx).effective_environment());
+
+        let session_state = self.session_state.clone();
+        let toast_state = self.toast_state.clone();
+
+        let rx = self.engines.http.fetch_graphql_schema(req, env);
+        cx.spawn(async move |cx| {
+            let result = rx
+                .await
+                .unwrap_or_else(|_| Err("Schema fetch task dropped".to_string()));
+            cx.update(|cx| match result {
+                Ok(summary) => {
+                    session_state.update(cx, |ed, cx| {
+                        ed.set_graphql_schema(Some(summary), cx);
                     });
                 }
                 Err(err) => {
