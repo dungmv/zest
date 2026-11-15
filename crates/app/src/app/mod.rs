@@ -106,6 +106,15 @@ impl AppView {
         if let Some(req) = &initial_req {
             state.session.update(cx, |ed, cx| {
                 ed.set_active_request_id(&req.id, cx);
+                // The `ActiveRequestChanged` event emitted above has no
+                // subscriber yet (subscriptions are installed below), so the
+                // protocol clamp in `workspace_event_handler` never runs on
+                // startup. Clamp here as well or a restored gRPC/WS request
+                // renders the HTTP Body tab (default kind) under its strip.
+                let clamped = RequestTabKind::clamp_for(ed.active_tab_kind, req.protocol);
+                if clamped != ed.active_tab_kind {
+                    ed.set_active_tab_kind(clamped, cx);
+                }
             });
             composer_inputs.sync_inputs(
                 &req.id,
@@ -118,6 +127,13 @@ impl AppView {
             let req_id = req.id.clone();
             state.response.update(cx, |resp, cx| {
                 resp.load_for_request(&req_id, ws_store.as_ref(), cx);
+                // Same pre-subscription clamp as above, for the response
+                // strip: the runtime clamp lives in the
+                // `ActiveRequestChanged` handler which startup bypasses.
+                let clamped_tab = ResponseTabKind::clamp_for(resp.active_tab, req.protocol);
+                if clamped_tab != resp.active_tab {
+                    resp.set_active_tab(clamped_tab, cx);
+                }
             });
             inspector_displays.sync_response_editor(&state.response, window, cx);
             inspector_displays.sync_sent_request_preview(&state.response, window, cx);
