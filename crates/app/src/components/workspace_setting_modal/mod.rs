@@ -9,7 +9,7 @@ pub use general_tab::*;
 pub use headers_tab::*;
 
 use crate::components::ModalDialog;
-use crate::state::{EnvironmentState, ModalState, ScopeSettingsTarget, WorkspaceDataState};
+use crate::state::{EnvironmentState, ModalState, WorkspaceSettingTarget, WorkspaceDataState};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement as _;
@@ -20,7 +20,7 @@ use gpui_kit::{
 use zest_core::models::Auth;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ScopeSettingsTab {
+pub enum WorkspaceSettingTab {
     #[default]
     General,
     Headers,
@@ -28,13 +28,13 @@ pub enum ScopeSettingsTab {
 }
 
 #[derive(IntoElement)]
-pub struct ScopeSettingsModal {
+pub struct WorkspaceSettingModal {
     workspace_state: Entity<WorkspaceDataState>,
     env_state: Entity<EnvironmentState>,
     modal_state: Entity<ModalState>,
 }
 
-impl ScopeSettingsModal {
+impl WorkspaceSettingModal {
     pub fn new(
         workspace_state: Entity<WorkspaceDataState>,
         env_state: Entity<EnvironmentState>,
@@ -48,12 +48,12 @@ impl ScopeSettingsModal {
     }
 }
 
-impl RenderOnce for ScopeSettingsModal {
+impl RenderOnce for WorkspaceSettingModal {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let ws_clone = self.workspace_state.clone();
         let modal_clone = self.modal_state.clone();
         let env_clone = self.env_state.clone();
-        let target = match &modal_clone.read(cx).scope_settings_target {
+        let target = match &modal_clone.read(cx).workspace_setting_target {
             Some(target) => target.clone(),
             None => return div().into_any_element(),
         };
@@ -62,7 +62,7 @@ impl RenderOnce for ScopeSettingsModal {
         let (title, folder_id_opt, current_headers, current_auth) = {
             let ws = ws_clone.read(cx);
             match &target {
-                ScopeSettingsTarget::Workspace => {
+                WorkspaceSettingTarget::Workspace => {
                     let name = ws
                         .active_workspace
                         .as_ref()
@@ -80,7 +80,7 @@ impl RenderOnce for ScopeSettingsModal {
                         .unwrap_or(Auth::None);
                     (format!("Workspace Settings: {}", name), None, headers, auth)
                 }
-                ScopeSettingsTarget::Folder(f_id) => {
+                WorkspaceSettingTarget::Folder(f_id) => {
                     let folder = ws.folders.iter().find(|f| &f.id == f_id).cloned();
                     let name = folder
                         .as_ref()
@@ -106,28 +106,28 @@ impl RenderOnce for ScopeSettingsModal {
 
         // Tab state: General (for Workspace) vs Headers vs Auth
         let is_folder = folder_id_opt.is_some();
-        let tab_state = window.use_state(cx, |_, _| ScopeSettingsTab::General);
+        let tab_state = window.use_state(cx, |_, _| WorkspaceSettingTab::General);
         let raw_tab = *tab_state.read(cx);
-        let active_tab = if is_folder && raw_tab == ScopeSettingsTab::General {
-            ScopeSettingsTab::Headers
+        let active_tab = if is_folder && raw_tab == WorkspaceSettingTab::General {
+            WorkspaceSettingTab::Headers
         } else {
             raw_tab
         };
         // Visible tabs in display order; General is hidden for folders (they inherit
         // workspace-level general settings, so only Headers/Auth apply).
-        let visible_tabs: Vec<(ScopeSettingsTab, String)> = [
-            (ScopeSettingsTab::General, "General".to_string()),
+        let visible_tabs: Vec<(WorkspaceSettingTab, String)> = [
+            (WorkspaceSettingTab::General, "General".to_string()),
             (
-                ScopeSettingsTab::Headers,
+                WorkspaceSettingTab::Headers,
                 format!("Headers ({})", current_headers.len()),
             ),
             (
-                ScopeSettingsTab::Auth,
+                WorkspaceSettingTab::Auth,
                 format!("Auth ({})", auth_type_label(&current_auth)),
             ),
         ]
         .into_iter()
-        .filter(|(tab, _)| !is_folder || *tab != ScopeSettingsTab::General)
+        .filter(|(tab, _)| !is_folder || *tab != WorkspaceSettingTab::General)
         .collect();
         let selected_index = visible_tabs
             .iter()
@@ -146,7 +146,7 @@ impl RenderOnce for ScopeSettingsModal {
         };
 
         let ws_name_holder = window.use_keyed_state(
-            gpui_kit::SharedString::from(format!("scope-ws-name-{}", workspace_path_str)),
+            gpui_kit::SharedString::from(format!("ws-setting-name-{}", workspace_path_str)),
             cx,
             |window, cx| {
                 let input =
@@ -172,7 +172,7 @@ impl RenderOnce for ScopeSettingsModal {
         let auth_inputs =
             use_scope_auth_inputs(window, cx, &target, &current_auth, &ws_clone, &env_clone);
 
-        ModalDialog::new("scope-settings-modal")
+        ModalDialog::new("workspace-setting-modal")
             .w(px(580.))
             .h(px(320.))
             .title(title)
@@ -180,14 +180,14 @@ impl RenderOnce for ScopeSettingsModal {
             .on_close({
                 let modal_c = modal_clone.clone();
                 move |_, cx| {
-                    modal_c.update(cx, |m, cx| m.close_scope_settings(cx));
+                    modal_c.update(cx, |m, cx| m.close_workspace_setting(cx));
                 }
             })
             // Tab Bar
             .child({
-                let kinds: Vec<ScopeSettingsTab> =
+                let kinds: Vec<WorkspaceSettingTab> =
                     visible_tabs.iter().map(|(tab, _)| *tab).collect();
-                TabBar::new("scope-settings-tabs")
+                TabBar::new("workspace-setting-tabs")
                     .underline()
                     .px(px(16.))
                     .selected_index(selected_index)
@@ -212,7 +212,7 @@ impl RenderOnce for ScopeSettingsModal {
                     .p(px(16.))
                     .overflow_y_scrollbar()
                     .child(match active_tab {
-                        ScopeSettingsTab::General => render_general_tab(
+                        WorkspaceSettingTab::General => render_general_tab(
                             &ws_clone,
                             &ws_name_input,
                             &workspace_name,
@@ -220,7 +220,7 @@ impl RenderOnce for ScopeSettingsModal {
                             cx,
                         )
                         .into_any_element(),
-                        ScopeSettingsTab::Headers => render_headers_tab(
+                        WorkspaceSettingTab::Headers => render_headers_tab(
                             &ws_clone,
                             &self.env_state,
                             &modal_clone,
@@ -229,7 +229,7 @@ impl RenderOnce for ScopeSettingsModal {
                             is_folder,
                         )
                         .into_any_element(),
-                        ScopeSettingsTab::Auth => render_auth_tab(
+                        WorkspaceSettingTab::Auth => render_auth_tab(
                             AuthTabContext {
                                 ws_state: &ws_clone,
                                 env_state: &self.env_state,

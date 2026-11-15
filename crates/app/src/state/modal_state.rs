@@ -3,7 +3,7 @@ use crate::settings::AppSettings;
 use gpui_kit::Context;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ScopeSettingsTarget {
+pub enum WorkspaceSettingTarget {
     Workspace,
     Folder(String),
 }
@@ -78,7 +78,7 @@ pub struct ModalState {
     pub update_status: UpdateStatus,
     pub settings_tab: SettingsTab,
     pub cookie_filter_query: String,
-    pub scope_settings_target: Option<ScopeSettingsTarget>,
+    pub workspace_setting_target: Option<WorkspaceSettingTarget>,
     pub import_modal: ImportModalUi,
     pub theme_preference: crate::theme::ThemePreference,
     pub split_layout_vertical: bool,
@@ -95,7 +95,7 @@ impl Default for ModalState {
             update_status: UpdateStatus::Idle,
             settings_tab: SettingsTab::General,
             cookie_filter_query: String::new(),
-            scope_settings_target: None,
+            workspace_setting_target: None,
             import_modal: ImportModalUi::default(),
             theme_preference: crate::theme::ThemePreference::System,
             split_layout_vertical: false,
@@ -233,23 +233,13 @@ impl ModalState {
         cx.notify();
     }
 
-    pub fn open_scope_settings(&mut self, target: ScopeSettingsTarget, cx: &mut Context<Self>) {
-        self.scope_settings_target = Some(target);
+    pub fn open_workspace_setting(&mut self, target: WorkspaceSettingTarget, cx: &mut Context<Self>) {
+        self.workspace_setting_target = Some(target);
         cx.notify();
     }
 
-    pub fn open_workspace_settings(&mut self, cx: &mut Context<Self>) {
-        self.scope_settings_target = Some(ScopeSettingsTarget::Workspace);
-        cx.notify();
-    }
-
-    pub fn open_folder_settings(&mut self, folder_id: String, cx: &mut Context<Self>) {
-        self.scope_settings_target = Some(ScopeSettingsTarget::Folder(folder_id));
-        cx.notify();
-    }
-
-    pub fn close_scope_settings(&mut self, cx: &mut Context<Self>) {
-        self.scope_settings_target = None;
+    pub fn close_workspace_setting(&mut self, cx: &mut Context<Self>) {
+        self.workspace_setting_target = None;
         cx.notify();
     }
 
@@ -368,8 +358,8 @@ impl ModalState {
             cx.notify();
             return true;
         }
-        if self.scope_settings_target.is_some() {
-            self.scope_settings_target = None;
+        if self.workspace_setting_target.is_some() {
+            self.workspace_setting_target = None;
             cx.notify();
             return true;
         }
@@ -386,7 +376,7 @@ impl ModalState {
             || self.show_command_palette
             || self.import_modal.is_open
             || self.show_settings_modal
-            || self.scope_settings_target.is_some()
+            || self.workspace_setting_target.is_some()
             || self.env_modal.is_open
     }
 }

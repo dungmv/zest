@@ -413,7 +413,7 @@ impl WorkspaceDataState {
         let _ = self.mutate_request(req_id, f);
     }
 
-    pub fn save_workspace_scope_settings(
+    pub fn save_workspace_settings(
         &mut self,
         headers: Vec<KeyValuePair>,
         auth: Auth,
@@ -430,7 +430,7 @@ impl WorkspaceDataState {
         cx.notify();
     }
 
-    pub fn save_folder_scope_settings(
+    pub fn save_folder_settings(
         &mut self,
         folder_id: &str,
         headers: Vec<KeyValuePair>,

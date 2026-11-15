@@ -3,7 +3,7 @@ use super::git_status::SidebarGitStatus;
 use super::item_actions::delete_multi_selected_items;
 use super::{SidebarRenderContext, SIDEBAR_ROW_HEIGHT};
 use crate::app::actions::DismissModal;
-use crate::state::ScopeSettingsTarget;
+use crate::state::WorkspaceSettingTarget;
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::menu::ContextMenuExt as _;
@@ -353,8 +353,8 @@ pub fn render_folder_row(
                         .icon(IconName::Settings)
                         .on_click(move |_, _, cx| {
                             modal_set.update(cx, |state, cx| {
-                                state.open_scope_settings(
-                                    ScopeSettingsTarget::Folder(f_id_set.clone()),
+                                state.open_workspace_setting(
+                                    WorkspaceSettingTarget::Folder(f_id_set.clone()),
                                     cx,
                                 );
                             });

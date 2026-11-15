@@ -2,7 +2,7 @@
 mod tests {
     use crate::state::{
         EnvironmentState, GitActiveModal, GitState, GitTab, ModalState, PersistenceState,
-        ScopeSettingsTarget, SettingsTab, SidebarState, WorkspaceDataState,
+        WorkspaceSettingTarget, SettingsTab, SidebarState, WorkspaceDataState,
     };
     use std::sync::Arc;
     use zest_core::models::{
@@ -56,12 +56,12 @@ mod tests {
 
         modals.show_settings_modal = true;
         modals.settings_tab = SettingsTab::Cookies;
-        modals.scope_settings_target = Some(ScopeSettingsTarget::Workspace);
+        modals.workspace_setting_target = Some(WorkspaceSettingTarget::Workspace);
         assert!(modals.show_settings_modal);
         assert_eq!(modals.settings_tab, SettingsTab::Cookies);
         assert_eq!(
-            modals.scope_settings_target,
-            Some(ScopeSettingsTarget::Workspace)
+            modals.workspace_setting_target,
+            Some(WorkspaceSettingTarget::Workspace)
         );
     }
 

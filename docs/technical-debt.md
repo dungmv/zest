@@ -11,7 +11,7 @@ Toàn bộ **31/31 khoản nợ kỹ thuật của Vòng 1 (Cycle 1)** và **6/6
 | ID | Vấn đề / Khoản nợ | Kết quả |
 | :--- | :--- | :--- |
 | **TD-201** | Module-wide `#![allow(dead_code)]` / `#![allow(unused_imports)]` | ✅ Đã xoá ở `state/mod.rs`, `components/mod.rs`; alias cũ (`WorkspaceState`, `response_viewer`) dọn sạch; `#[allow(dead_code)]` scope hẹp có chú thích chỉ còn ở helper/barrier thật sự |
-| **TD-202** | `scope_settings_modal.rs` ~1.515 LOC | ✅ Tách thành `components/scope_settings_modal/` (`mod.rs`, `general_tab.rs`, `headers_tab.rs`, `auth_tab.rs`, `auth_inputs.rs`) |
+| **TD-202** | `workspace_setting_modal.rs` ~1.515 LOC | ✅ Tách thành `components/workspace_setting_modal/` (`mod.rs`, `general_tab.rs`, `headers_tab.rs`, `auth_tab.rs`, `auth_inputs.rs`) |
 | **TD-203** | `script_editor.rs` ~1.443 LOC | ✅ Tách thành `components/script_editor/` (`mod.rs`, `highlighter.rs`, `completion.rs`, `editor.rs`, `tests.rs`) |
 | **TD-204** | `response_inspector.rs` ~1.334 LOC | ✅ Tách thành `components/response_inspector/` (`mod.rs`, `body_tab.rs`, `headers_tab.rs`, `cookies_tab.rs`, `console_tab.rs`, `request_sent_tab.rs`, `timing_popover.rs`, `json_highlight.rs`) |
 | **TD-205** | Các component 650–875 LOC (`titlebar`, `import_modal`, `body_editor/multipart`, `git/diff_view`) | ✅ `titlebar/` (mod+menus+breadcrumb), `import_modal/` (mod+preview), `body_editor/multipart/` (mod+state+row), `git/diff_view.rs` + `git/diff_parser.rs` |

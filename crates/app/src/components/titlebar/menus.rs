@@ -1,4 +1,4 @@
-use crate::state::{EnvironmentState, ModalState, ScopeSettingsTarget, WorkspaceDataState};
+use crate::state::{EnvironmentState, ModalState, WorkspaceSettingTarget, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -69,7 +69,7 @@ pub(super) fn render_workspace_switcher(
                         .icon(IconName::Settings)
                         .on_click(move |_, _, cx| {
                             modal_settings.update(cx, |state, cx| {
-                                state.open_scope_settings(ScopeSettingsTarget::Workspace, cx);
+                                state.open_workspace_setting(WorkspaceSettingTarget::Workspace, cx);
                             });
                         }),
                 )

@@ -38,7 +38,7 @@ pub fn attach_modal_overlays(
     let modal = modal_state.read(cx);
     let show_env_modal = modal.env_modal.is_open;
     let show_settings_modal = modal.show_settings_modal;
-    let show_scope_settings_modal = modal.scope_settings_target.is_some();
+    let show_workspace_setting_modal = modal.workspace_setting_target.is_some();
     let show_import_modal = modal.import_modal.is_open;
     let show_command_palette = modal.show_command_palette;
     let show_about_modal = modal.show_about_modal;
@@ -67,8 +67,8 @@ pub fn attach_modal_overlays(
     .when(show_settings_modal, |this| {
         this.child(SettingsModal::new(ws_entity.clone(), modal_entity.clone()))
     })
-    .when(show_scope_settings_modal, |this| {
-        this.child(ScopeSettingsModal::new(
+    .when(show_workspace_setting_modal, |this| {
+        this.child(WorkspaceSettingModal::new(
             ws_entity.clone(),
             env_entity.clone(),
             modal_entity.clone(),

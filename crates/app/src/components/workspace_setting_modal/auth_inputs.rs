@@ -1,7 +1,7 @@
 use crate::components::completion::env_autocomplete::{
     build_tokenized_content, detect_unclosed_env_var,
 };
-use crate::state::{EnvironmentState, ScopeSettingsTarget, WorkspaceDataState};
+use crate::state::{EnvironmentState, WorkspaceSettingTarget, WorkspaceDataState};
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::{App, AppContext as _, Entity, Window};
 use zest_core::models::{ApiKeyLocation, Auth};
@@ -17,7 +17,7 @@ pub struct ScopeAuthInputs {
 pub fn use_scope_auth_inputs(
     window: &mut Window,
     cx: &mut App,
-    target: &ScopeSettingsTarget,
+    target: &WorkspaceSettingTarget,
     current_auth: &Auth,
     ws_state: &Entity<WorkspaceDataState>,
     env_state: &Entity<EnvironmentState>,
@@ -27,7 +27,7 @@ pub fn use_scope_auth_inputs(
 
     // 1. Bearer Token Input
     let bearer_token_holder = window.use_keyed_state(
-        gpui_kit::SharedString::from(format!("scope-auth-bearer-{:?}", target)),
+        gpui_kit::SharedString::from(format!("ws-setting-auth-bearer-{:?}", target)),
         cx,
         |window, cx| {
             let init_val = match current_auth {
@@ -48,7 +48,7 @@ pub fn use_scope_auth_inputs(
                         token: token.clone(),
                     };
                     match &tgt {
-                        ScopeSettingsTarget::Workspace => {
+                        WorkspaceSettingTarget::Workspace => {
                             let cur_h = ws_s
                                 .read(cx)
                                 .active_workspace
@@ -56,10 +56,10 @@ pub fn use_scope_auth_inputs(
                                 .map(|w| w.headers.clone())
                                 .unwrap_or_default();
                             ws_s.update(cx, |state, cx| {
-                                state.save_workspace_scope_settings(cur_h, new_auth, cx)
+                                state.save_workspace_settings(cur_h, new_auth, cx)
                             });
                         }
-                        ScopeSettingsTarget::Folder(fid) => {
+                        WorkspaceSettingTarget::Folder(fid) => {
                             let cur_h = ws_s
                                 .read(cx)
                                 .folders
@@ -68,7 +68,7 @@ pub fn use_scope_auth_inputs(
                                 .map(|f| f.headers.clone())
                                 .unwrap_or_default();
                             ws_s.update(cx, |state, cx| {
-                                state.save_folder_scope_settings(fid, cur_h, new_auth, cx)
+                                state.save_folder_settings(fid, cur_h, new_auth, cx)
                             });
                         }
                     }
@@ -85,7 +85,7 @@ pub fn use_scope_auth_inputs(
 
     // 2. Basic User Input
     let basic_user_holder = window.use_keyed_state(
-        gpui_kit::SharedString::from(format!("scope-auth-basic-u-{:?}", target)),
+        gpui_kit::SharedString::from(format!("ws-setting-auth-basic-u-{:?}", target)),
         cx,
         |window, cx| {
             let init_val = match current_auth {
@@ -103,13 +103,13 @@ pub fn use_scope_auth_inputs(
                 if let InputEvent::Change = ev {
                     let u = inp.read(cx).value().to_string();
                     let p = match &tgt {
-                        ScopeSettingsTarget::Workspace => {
+                        WorkspaceSettingTarget::Workspace => {
                             match &ws_s.read(cx).workspace_meta.auth {
                                 Auth::Basic { password, .. } => password.clone(),
                                 _ => String::new(),
                             }
                         }
-                        ScopeSettingsTarget::Folder(fid) => {
+                        WorkspaceSettingTarget::Folder(fid) => {
                             match ws_s
                                 .read(cx)
                                 .folders
@@ -127,7 +127,7 @@ pub fn use_scope_auth_inputs(
                         password: p,
                     };
                     match &tgt {
-                        ScopeSettingsTarget::Workspace => {
+                        WorkspaceSettingTarget::Workspace => {
                             let cur_h = ws_s
                                 .read(cx)
                                 .active_workspace
@@ -135,10 +135,10 @@ pub fn use_scope_auth_inputs(
                                 .map(|w| w.headers.clone())
                                 .unwrap_or_default();
                             ws_s.update(cx, |state, cx| {
-                                state.save_workspace_scope_settings(cur_h, new_auth, cx)
+                                state.save_workspace_settings(cur_h, new_auth, cx)
                             });
                         }
-                        ScopeSettingsTarget::Folder(fid) => {
+                        WorkspaceSettingTarget::Folder(fid) => {
                             let cur_h = ws_s
                                 .read(cx)
                                 .folders
@@ -147,7 +147,7 @@ pub fn use_scope_auth_inputs(
                                 .map(|f| f.headers.clone())
                                 .unwrap_or_default();
                             ws_s.update(cx, |state, cx| {
-                                state.save_folder_scope_settings(fid, cur_h, new_auth, cx)
+                                state.save_folder_settings(fid, cur_h, new_auth, cx)
                             });
                         }
                     }
@@ -164,7 +164,7 @@ pub fn use_scope_auth_inputs(
 
     // 3. Basic Password Input
     let basic_pass_holder = window.use_keyed_state(
-        gpui_kit::SharedString::from(format!("scope-auth-basic-p-{:?}", target)),
+        gpui_kit::SharedString::from(format!("ws-setting-auth-basic-p-{:?}", target)),
         cx,
         |window, cx| {
             let init_val = match current_auth {
@@ -182,13 +182,13 @@ pub fn use_scope_auth_inputs(
                 if let InputEvent::Change = ev {
                     let p = inp.read(cx).value().to_string();
                     let u = match &tgt {
-                        ScopeSettingsTarget::Workspace => {
+                        WorkspaceSettingTarget::Workspace => {
                             match &ws_s.read(cx).workspace_meta.auth {
                                 Auth::Basic { username, .. } => username.clone(),
                                 _ => String::new(),
                             }
                         }
-                        ScopeSettingsTarget::Folder(fid) => {
+                        WorkspaceSettingTarget::Folder(fid) => {
                             match ws_s
                                 .read(cx)
                                 .folders
@@ -206,7 +206,7 @@ pub fn use_scope_auth_inputs(
                         password: p.clone(),
                     };
                     match &tgt {
-                        ScopeSettingsTarget::Workspace => {
+                        WorkspaceSettingTarget::Workspace => {
                             let cur_h = ws_s
                                 .read(cx)
                                 .active_workspace
@@ -214,10 +214,10 @@ pub fn use_scope_auth_inputs(
                                 .map(|w| w.headers.clone())
                                 .unwrap_or_default();
                             ws_s.update(cx, |state, cx| {
-                                state.save_workspace_scope_settings(cur_h, new_auth, cx)
+                                state.save_workspace_settings(cur_h, new_auth, cx)
                             });
                         }
-                        ScopeSettingsTarget::Folder(fid) => {
+                        WorkspaceSettingTarget::Folder(fid) => {
                             let cur_h = ws_s
                                 .read(cx)
                                 .folders
@@ -226,7 +226,7 @@ pub fn use_scope_auth_inputs(
                                 .map(|f| f.headers.clone())
                                 .unwrap_or_default();
                             ws_s.update(cx, |state, cx| {
-                                state.save_folder_scope_settings(fid, cur_h, new_auth, cx)
+                                state.save_folder_settings(fid, cur_h, new_auth, cx)
                             });
                         }
                     }
@@ -243,7 +243,7 @@ pub fn use_scope_auth_inputs(
 
     // 4. API Key Header/Param Name
     let api_key_holder = window.use_keyed_state(
-        gpui_kit::SharedString::from(format!("scope-auth-apikey-k-{:?}", target)),
+        gpui_kit::SharedString::from(format!("ws-setting-auth-apikey-k-{:?}", target)),
         cx,
         |window, cx| {
             let init_val = match current_auth {
@@ -261,13 +261,13 @@ pub fn use_scope_auth_inputs(
                 if let InputEvent::Change = ev {
                     let k = inp.read(cx).value().to_string();
                     let (v, cur_loc) = match &tgt {
-                        ScopeSettingsTarget::Workspace => {
+                        WorkspaceSettingTarget::Workspace => {
                             match &ws_s.read(cx).workspace_meta.auth {
                                 Auth::ApiKey { value, add_to, .. } => (value.clone(), *add_to),
                                 _ => (String::new(), ApiKeyLocation::Header),
                             }
                         }
-                        ScopeSettingsTarget::Folder(fid) => {
+                        WorkspaceSettingTarget::Folder(fid) => {
                             match ws_s
                                 .read(cx)
                                 .folders
@@ -288,7 +288,7 @@ pub fn use_scope_auth_inputs(
                         add_to: cur_loc,
                     };
                     match &tgt {
-                        ScopeSettingsTarget::Workspace => {
+                        WorkspaceSettingTarget::Workspace => {
                             let cur_h = ws_s
                                 .read(cx)
                                 .active_workspace
@@ -296,10 +296,10 @@ pub fn use_scope_auth_inputs(
                                 .map(|w| w.headers.clone())
                                 .unwrap_or_default();
                             ws_s.update(cx, |state, cx| {
-                                state.save_workspace_scope_settings(cur_h, new_auth, cx)
+                                state.save_workspace_settings(cur_h, new_auth, cx)
                             });
                         }
-                        ScopeSettingsTarget::Folder(fid) => {
+                        WorkspaceSettingTarget::Folder(fid) => {
                             let cur_h = ws_s
                                 .read(cx)
                                 .folders
@@ -308,7 +308,7 @@ pub fn use_scope_auth_inputs(
                                 .map(|f| f.headers.clone())
                                 .unwrap_or_default();
                             ws_s.update(cx, |state, cx| {
-                                state.save_folder_scope_settings(fid, cur_h, new_auth, cx)
+                                state.save_folder_settings(fid, cur_h, new_auth, cx)
                             });
                         }
                     }
@@ -325,7 +325,7 @@ pub fn use_scope_auth_inputs(
 
     // 5. API Key Value
     let api_val_holder = window.use_keyed_state(
-        gpui_kit::SharedString::from(format!("scope-auth-apikey-v-{:?}", target)),
+        gpui_kit::SharedString::from(format!("ws-setting-auth-apikey-v-{:?}", target)),
         cx,
         |window, cx| {
             let init_val = match current_auth {
@@ -343,13 +343,13 @@ pub fn use_scope_auth_inputs(
                 if let InputEvent::Change = ev {
                     let v = inp.read(cx).value().to_string();
                     let (k, cur_loc) = match &tgt {
-                        ScopeSettingsTarget::Workspace => {
+                        WorkspaceSettingTarget::Workspace => {
                             match &ws_s.read(cx).workspace_meta.auth {
                                 Auth::ApiKey { key, add_to, .. } => (key.clone(), *add_to),
                                 _ => ("X-API-Key".to_string(), ApiKeyLocation::Header),
                             }
                         }
-                        ScopeSettingsTarget::Folder(fid) => {
+                        WorkspaceSettingTarget::Folder(fid) => {
                             match ws_s
                                 .read(cx)
                                 .folders
@@ -368,7 +368,7 @@ pub fn use_scope_auth_inputs(
                         add_to: cur_loc,
                     };
                     match &tgt {
-                        ScopeSettingsTarget::Workspace => {
+                        WorkspaceSettingTarget::Workspace => {
                             let cur_h = ws_s
                                 .read(cx)
                                 .active_workspace
@@ -376,10 +376,10 @@ pub fn use_scope_auth_inputs(
                                 .map(|w| w.headers.clone())
                                 .unwrap_or_default();
                             ws_s.update(cx, |state, cx| {
-                                state.save_workspace_scope_settings(cur_h, new_auth, cx)
+                                state.save_workspace_settings(cur_h, new_auth, cx)
                             });
                         }
-                        ScopeSettingsTarget::Folder(fid) => {
+                        WorkspaceSettingTarget::Folder(fid) => {
                             let cur_h = ws_s
                                 .read(cx)
                                 .folders
@@ -388,7 +388,7 @@ pub fn use_scope_auth_inputs(
                                 .map(|f| f.headers.clone())
                                 .unwrap_or_default();
                             ws_s.update(cx, |state, cx| {
-                                state.save_folder_scope_settings(fid, cur_h, new_auth, cx)
+                                state.save_folder_settings(fid, cur_h, new_auth, cx)
                             });
                         }
                     }

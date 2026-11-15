@@ -1,5 +1,5 @@
 use crate::components::kv_table::KvTable;
-use crate::state::{EnvironmentState, ModalState, ScopeSettingsTarget, WorkspaceDataState};
+use crate::state::{EnvironmentState, ModalState, WorkspaceSettingTarget, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::{div, px, App, Entity, IntoElement, ParentElement, Styled, Window};
 use zest_core::models::{Auth, KeyValuePair};
@@ -8,7 +8,7 @@ pub fn render_headers_tab(
     ws_state: &Entity<WorkspaceDataState>,
     env_state: &Entity<EnvironmentState>,
     modal_state: &Entity<ModalState>,
-    target: &ScopeSettingsTarget,
+    target: &WorkspaceSettingTarget,
     current_headers: &[KeyValuePair],
     is_folder: bool,
 ) -> impl IntoElement {
@@ -27,13 +27,13 @@ pub fn render_headers_tab(
               _window: &mut Window,
               cx: &mut App| {
             let mut cur_headers = match &tgt {
-                ScopeSettingsTarget::Workspace => ws_s
+                WorkspaceSettingTarget::Workspace => ws_s
                     .read(cx)
                     .active_workspace
                     .as_ref()
                     .map(|w| w.headers.clone())
                     .unwrap_or_default(),
-                ScopeSettingsTarget::Folder(fid) => ws_s
+                WorkspaceSettingTarget::Folder(fid) => ws_s
                     .read(cx)
                     .folders
                     .iter()
@@ -46,7 +46,7 @@ pub fn render_headers_tab(
                 cur_headers[idx].value = val;
                 cur_headers[idx].enabled = enabled;
                 match &tgt {
-                    ScopeSettingsTarget::Workspace => {
+                    WorkspaceSettingTarget::Workspace => {
                         let a = ws_s
                             .read(cx)
                             .active_workspace
@@ -54,10 +54,10 @@ pub fn render_headers_tab(
                             .map(|w| w.auth.clone())
                             .unwrap_or(Auth::None);
                         ws_s.update(cx, |state, cx| {
-                            state.save_workspace_scope_settings(cur_headers, a, cx)
+                            state.save_workspace_settings(cur_headers, a, cx)
                         });
                     }
-                    ScopeSettingsTarget::Folder(fid) => {
+                    WorkspaceSettingTarget::Folder(fid) => {
                         let a = ws_s
                             .read(cx)
                             .folders
@@ -66,7 +66,7 @@ pub fn render_headers_tab(
                             .map(|f| f.auth.clone())
                             .unwrap_or(Auth::Inherit);
                         ws_s.update(cx, |state, cx| {
-                            state.save_folder_scope_settings(fid, cur_headers, a, cx)
+                            state.save_folder_settings(fid, cur_headers, a, cx)
                         });
                     }
                 }
@@ -79,13 +79,13 @@ pub fn render_headers_tab(
         let tgt = tgt.clone();
         move |_window: &mut Window, cx: &mut App| {
             let mut cur_headers = match &tgt {
-                ScopeSettingsTarget::Workspace => ws_s
+                WorkspaceSettingTarget::Workspace => ws_s
                     .read(cx)
                     .active_workspace
                     .as_ref()
                     .map(|w| w.headers.clone())
                     .unwrap_or_default(),
-                ScopeSettingsTarget::Folder(fid) => ws_s
+                WorkspaceSettingTarget::Folder(fid) => ws_s
                     .read(cx)
                     .folders
                     .iter()
@@ -95,7 +95,7 @@ pub fn render_headers_tab(
             };
             cur_headers.push(KeyValuePair::new("", ""));
             match &tgt {
-                ScopeSettingsTarget::Workspace => {
+                WorkspaceSettingTarget::Workspace => {
                     let a = ws_s
                         .read(cx)
                         .active_workspace
@@ -103,10 +103,10 @@ pub fn render_headers_tab(
                         .map(|w| w.auth.clone())
                         .unwrap_or(Auth::None);
                     ws_s.update(cx, |state, cx| {
-                        state.save_workspace_scope_settings(cur_headers, a, cx)
+                        state.save_workspace_settings(cur_headers, a, cx)
                     });
                 }
-                ScopeSettingsTarget::Folder(fid) => {
+                WorkspaceSettingTarget::Folder(fid) => {
                     let a = ws_s
                         .read(cx)
                         .folders
@@ -115,7 +115,7 @@ pub fn render_headers_tab(
                         .map(|f| f.auth.clone())
                         .unwrap_or(Auth::Inherit);
                     ws_s.update(cx, |state, cx| {
-                        state.save_folder_scope_settings(fid, cur_headers, a, cx)
+                        state.save_folder_settings(fid, cur_headers, a, cx)
                     });
                 }
             }
@@ -127,13 +127,13 @@ pub fn render_headers_tab(
         let tgt = tgt.clone();
         move |idx: usize, _window: &mut Window, cx: &mut App| {
             let mut cur_headers = match &tgt {
-                ScopeSettingsTarget::Workspace => ws_s
+                WorkspaceSettingTarget::Workspace => ws_s
                     .read(cx)
                     .active_workspace
                     .as_ref()
                     .map(|w| w.headers.clone())
                     .unwrap_or_default(),
-                ScopeSettingsTarget::Folder(fid) => ws_s
+                WorkspaceSettingTarget::Folder(fid) => ws_s
                     .read(cx)
                     .folders
                     .iter()
@@ -144,7 +144,7 @@ pub fn render_headers_tab(
             if idx < cur_headers.len() {
                 cur_headers.remove(idx);
                 match &tgt {
-                    ScopeSettingsTarget::Workspace => {
+                    WorkspaceSettingTarget::Workspace => {
                         let a = ws_s
                             .read(cx)
                             .active_workspace
@@ -152,10 +152,10 @@ pub fn render_headers_tab(
                             .map(|w| w.auth.clone())
                             .unwrap_or(Auth::None);
                         ws_s.update(cx, |state, cx| {
-                            state.save_workspace_scope_settings(cur_headers, a, cx)
+                            state.save_workspace_settings(cur_headers, a, cx)
                         });
                     }
-                    ScopeSettingsTarget::Folder(fid) => {
+                    WorkspaceSettingTarget::Folder(fid) => {
                         let a = ws_s
                             .read(cx)
                             .folders
@@ -164,7 +164,7 @@ pub fn render_headers_tab(
                             .map(|f| f.auth.clone())
                             .unwrap_or(Auth::Inherit);
                         ws_s.update(cx, |state, cx| {
-                            state.save_folder_scope_settings(fid, cur_headers, a, cx)
+                            state.save_folder_settings(fid, cur_headers, a, cx)
                         });
                     }
                 }
@@ -187,7 +187,7 @@ pub fn render_headers_tab(
                 }),
         )
         .child(
-            KvTable::new("scope-headers-table", pairs, on_update, on_add, on_remove)
+            KvTable::new("ws-setting-headers-table", pairs, on_update, on_add, on_remove)
                 .env_state(env_state.clone())
                 .modal_state(modal_state.clone()),
         )
