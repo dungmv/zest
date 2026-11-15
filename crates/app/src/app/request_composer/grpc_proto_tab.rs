@@ -9,7 +9,7 @@ use gpui_kit::{div, px, App, Entity, IntoElement, ParentElement, Styled, Window}
 use zest_core::models::GrpcPayload;
 
 /// Inputs for the gRPC Proto tab.
-pub struct GrpcProtoTabContext<'a> {
+pub(super) struct GrpcProtoTabContext<'a> {
     pub workspace_state: &'a Entity<WorkspaceDataState>,
     pub editor_state: &'a Entity<RequestSessionState>,
     /// Invokes `Runner::fetch_grpc_schema` for the active request.
@@ -19,7 +19,7 @@ pub struct GrpcProtoTabContext<'a> {
 
 /// Schema source tab for gRPC requests: reflection vs .proto file, plus the
 /// Service/Method picker fed by a resolved schema.
-pub fn render_grpc_proto_tab(
+pub(super) fn render_grpc_proto_tab(
     payload: &GrpcPayload,
     ctx: GrpcProtoTabContext,
     window: &mut Window,

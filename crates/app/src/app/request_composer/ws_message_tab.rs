@@ -14,7 +14,7 @@ use zest_core::models::WsMessageFormat;
 /// textarea after a successful send.
 type SendMessageCallback = Rc<dyn Fn(&mut gpui_kit::Window, &mut App)>;
 
-pub struct WsMessageTabContext<'a> {
+pub(super) struct WsMessageTabContext<'a> {
     pub workspace_state: &'a Entity<WorkspaceDataState>,
     pub editor_state: &'a Entity<RequestSessionState>,
     /// Session-only outgoing message box (never persisted).
@@ -26,7 +26,7 @@ pub struct WsMessageTabContext<'a> {
 /// WebSocket Message tab, styled after the HTTP Body tab: a Format
 /// (Text/JSON) dropdown on the left and Ping/Send on the right, above the
 /// outgoing message textarea.
-pub fn render_ws_message_tab(
+pub(super) fn render_ws_message_tab(
     msg_format: WsMessageFormat,
     ctx: WsMessageTabContext,
     cx: &mut App,

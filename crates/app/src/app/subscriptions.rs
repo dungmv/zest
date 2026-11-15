@@ -1,4 +1,4 @@
-use super::composer_inputs::ComposerInputs;
+use super::request_composer::composer_inputs::ComposerInputs;
 use super::workspace_event_handler::{
     handle_environment_event, handle_response_event, handle_session_event, handle_workspace_event,
 };

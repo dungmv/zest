@@ -1,19 +1,14 @@
 pub mod actions;
-pub mod auth_tab;
-pub mod composer_inputs;
-pub mod grpc_message_tab;
-pub mod grpc_proto_tab;
 pub mod inspector_displays;
 pub mod modals;
 pub mod request_composer;
 pub mod subscriptions;
 pub mod workspace_event_handler;
-pub mod ws_message_tab;
 
 pub use actions::*;
-pub use composer_inputs::*;
 pub use inspector_displays::*;
 pub use modals::*;
+pub use request_composer::composer_inputs::*;
 pub use subscriptions::*;
 
 use crate::components::*;

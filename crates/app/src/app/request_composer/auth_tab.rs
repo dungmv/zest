@@ -12,7 +12,7 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{div, px, App, Div, Entity, ParentElement, Styled, Window};
 use zest_core::models::{ApiKeyLocation, Auth};
 
-pub struct AuthTabInputs<'a> {
+pub(super) struct AuthTabInputs<'a> {
     pub bearer_token_input: &'a Entity<InputState>,
     pub basic_user_input: &'a Entity<InputState>,
     pub basic_pass_input: &'a Entity<InputState>,
@@ -20,14 +20,14 @@ pub struct AuthTabInputs<'a> {
     pub apikey_val_input: &'a Entity<InputState>,
 }
 
-pub struct AuthTabContext<'a> {
+pub(super) struct AuthTabContext<'a> {
     pub workspace_state: &'a Entity<WorkspaceDataState>,
     pub env_state: &'a Entity<EnvironmentState>,
     pub modal_state: &'a Entity<ModalState>,
     pub editor_state: &'a Entity<RequestSessionState>,
 }
 
-pub fn render_auth_tab(
+pub(super) fn render_auth_tab(
     auth: &Auth,
     folder_id: Option<&str>,
     ctx: AuthTabContext,

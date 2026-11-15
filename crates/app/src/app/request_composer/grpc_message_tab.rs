@@ -15,7 +15,7 @@ use gpui_kit::{
 };
 use zest_core::models::GrpcPayload;
 
-pub struct GrpcMessageTabContext<'a> {
+pub(super) struct GrpcMessageTabContext<'a> {
     pub workspace_state: &'a Entity<WorkspaceDataState>,
     pub editor_state: &'a Entity<RequestSessionState>,
     pub toast_state: &'a Entity<ToastState>,
@@ -27,7 +27,7 @@ pub struct GrpcMessageTabContext<'a> {
 /// gRPC Message tab, styled after the HTTP Body tab: a toolbar with the
 /// Service/Method picker on the left and a JSON formatter on the right,
 /// above the JSON message editor.
-pub fn render_grpc_message_tab(
+pub(super) fn render_grpc_message_tab(
     payload: &GrpcPayload,
     ctx: GrpcMessageTabContext,
     window: &mut Window,
