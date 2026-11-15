@@ -48,7 +48,16 @@ ResponseState, and saves the .loc cache (HTTP only)
 
 ---
 
-## 2. Connection Pooling & Socket Reuse (PERF-001, PERF-002)
+## 2. Tokio Runtime Bridge (`services/runtime.rs`)
+
+GPUI `cx.spawn` threads run on the GPUI background executor **without a Tokio reactor**, but `reqwest` (and any tokio-dependent future) requires one. Rule:
+- All async network futures (engines, `zest_core::updater::check_github_release`) are dispatched to the centralized `global_tokio_runtime()`.
+- Results return to GPUI via `tokio::sync::oneshot`, with the UI-state mutation happening in the GPUI-side callback — never share a `MutexGuard` or entity borrow across the boundary.
+- Never `block_on` on the UI thread and never spawn tokio futures directly from `cx.spawn` closures.
+
+---
+
+## 3. Connection Pooling & Socket Reuse (PERF-001, PERF-002)
 
 In `crates/core/src/http/executor.rs`, `ReqwestExecutor` manages persistent HTTP connection pools:
 
@@ -60,7 +69,7 @@ In `crates/core/src/http/executor.rs`, `ReqwestExecutor` manages persistent HTTP
 
 ---
 
-## 3. Hierarchy & Variable Resolution
+## 4. Hierarchy & Variable Resolution
 
 ### 3.1 Shared Header & Auth Inheritance (`crates/core/src/transport/hierarchy.rs`)
 Both send-time resolution (`resolve_hierarchical_headers_and_auth`) and the read-only composer projection (`resolve_inherited_headers` -> `Vec<InheritedHeader>`) use the same `HeaderMerger`:
@@ -75,7 +84,7 @@ Both send-time resolution (`resolve_hierarchical_headers_and_auth`) and the read
 
 ---
 
-## 4. Multi-Protocol Extensions (Spec 03)
+## 5. Multi-Protocol Extensions (Spec 03)
 
 Refer to [`docs/specs/03-protocols-graphql-websocket-grpc.md`](docs/specs/03-protocols-graphql-websocket-grpc.md) when implementing protocol extensions:
 - **GraphQL**: Dedicated query + variables split editor and schema introspection via `__schema`.
@@ -85,7 +94,7 @@ Refer to [`docs/specs/03-protocols-graphql-websocket-grpc.md`](docs/specs/03-pro
 
 ---
 
-## 5. Verification & Testing
+## 6. Verification & Testing
 
 ```bash
 # 1. Run core HTTP executor and hierarchy unit tests

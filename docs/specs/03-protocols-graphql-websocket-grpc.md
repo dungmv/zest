@@ -9,6 +9,8 @@ API hiện đại không còn chỉ là các endpoint REST tĩnh. Các kiến tr
 
 Tài liệu này xác định cách thiết kế và mở rộng kiến trúc Zest để hỗ trợ đầy đủ các giao thức trên.
 
+> **Tiến độ (2026-11-15):** WebSocket ✅ & gRPC ✅ đã triển khai qua send pipeline hợp nhất (`Runner` + `SendEvent`, máy móc trung lập giao thức tại `zest_core::transport`). GraphQL và SSE còn pending. Gap còn lại: WS binary message, gRPC client-streaming/bidi, SSE chưa có impl.
+
 ---
 
 ## 2. GraphQL Client
@@ -44,33 +46,15 @@ pub struct GraphQLPayload {
 
 ---
 
-## 3. WebSocket Client
+## 3. WebSocket Client — ✅ Đã hoàn thành (ws/wss + frame log; Binary message chưa hỗ trợ)
 
-### 3.1 Luồng Kết nối & Quản lý State
-WebSocket đòi hỏi một kết nối bền vững (persistent connection), khác biệt hoàn toàn với HTTP Request/Response ngắn hạn.
+### 3.1 Kiến trúc đã triển khai
+- Kết nối `ws://` / `wss://` bất đồng bộ qua `WsService` (`services/ws_service.rs`) trên Tokio runtime; sự kiện frame về UI qua kênh `SendEvent` hợp nhất.
+- Frame log trung lập giao thức `zest_core::transport::TransportFrame` (inbound/outbound, timestamp, kind) — dùng chung với gRPC; frame log được persist theo request và **giữ nguyên khi switch request**.
+- Message tab trong composer: gửi Text/JSON, lịch sử tin nhắn real-time, filter, clear log. Status: Disconnected/Connecting/Connected (handshake headers hiển thị ở response state).
 
-```rust
-pub enum WebSocketStatus {
-    Disconnected,
-    Connecting,
-    Connected,
-    Reconnecting,
-    Failed(String),
-}
-
-pub struct WebSocketMessage {
-    pub id: String,
-    pub timestamp: i64,
-    pub is_inbound: bool, // true: server -> client, false: client -> server
-    pub message_type: WsMessageType, // Text, Binary, Ping, Pong
-    pub payload: Vec<u8>,
-}
-```
-
-### 3.2 Tầng Network (Tokio `tokio-tungstenite`)
-- Tạo background task duy trì connection loop.
-- Gửi sự kiện message mới qua channel `tokio::sync::mpsc::unbounded_channel()` về GPUI UI thread.
-- Cho phép người dùng gửi tin nhắn nhanh dạng Text, JSON, hoặc Ping heartbeat.
+### 3.2 Gap còn lại
+- Binary message chưa hỗ trợ (chỉ Text/JSON); auto-reconnect/heartbeat chưa có.
 
 ---
 
@@ -86,10 +70,13 @@ Khi kiểm thử các endpoint AI streaming (như `POST https://api.openai.com/v
 
 ---
 
-## 5. gRPC Client (Lộ trình Phase 3+)
+## 5. gRPC Client — ✅ Đã hoàn thành (unary & server-streaming; client-streaming/bidi chưa hỗ trợ)
 
-### 5.1 Kiến trúc Thực thi
-- Sử dụng crate **`tonic`** (gRPC trên nền Rust và Tokio).
-- Hỗ trợ nạp file `.proto` hoặc **gRPC Server Reflection Protocol** (`grpc.reflection.v1alpha.ServerReflection`).
-- Tự động sinh danh sách Service và Phương thức (RPC Method).
-- Người dùng nhập dữ liệu dưới dạng JSON thân thiện, tầng core tự động mã hóa sang Protobuf binary bytes để gửi đi qua HTTP/2.
+### 5.1 Kiến trúc đã triển khai
+- Engine `GrpcEngine` + `GrpcClient` (HTTP/2, `prost-reflect`) chạy trên Tokio runtime, tham gia chung send pipeline (`Runner::send_current_request` → `SendEvent::CallCompleted`).
+- Schema nguồn: nạp file `.proto` hoặc **Server Reflection** (`grpc.reflection`) — tự động fetch khi gửi; filter service nội bộ theo `grpc.reflection` ONLY (không dùng bare `grpc.` — tránh ẩn health service).
+- Message tab soạn JSON thân thiện với autocomplete key từ `GrpcSchemaSummary.pool`; `{{var}}` interpolation + fake vars chạy trên `message_json` như HTTP body; validation JSON/protobuf hiển thị inline editor diagnostics + red gutter mark (không toolbar check).
+- Proto tab chỉ chọn schema source; frame log dùng chung `TransportFrame` và persist qua engine-side session log.
+
+### 5.2 Gap còn lại
+- Client-streaming & bidi streaming chưa hỗ trợ; SSE (xem §4) chưa có impl.

@@ -7,7 +7,9 @@
 
 ---
 
-## 2. Kế thừa Xác thực (Auth Inheritance Hierarchy)
+## 2. Kế thừa Xác thực (Auth Inheritance Hierarchy) — ✅ Đã hoàn thành (Cycle 2)
+
+> Workspace/Folder auth + headers inheritance đã ship: cấu hình tại `WorkspaceSettingModal` (workspace/folder settings), resolution qua `zest_core::transport::hierarchy` (`resolve_hierarchical_headers_and_auth` khi gửi, `resolve_inherited_headers` cho read-only projection trong composer).
 
 ### 2.1 Cây Kế thừa Quyền
 Mọi request có thể chọn sử dụng cấu hình Auth riêng hoặc thừa kế từ cấp cha:
@@ -33,7 +35,17 @@ pub enum Auth {
     OAuth2(OAuth2Config),
     AwsSigV4(AwsSigV4Config),
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ApiKeyLocation {
+    #[default]
+    Header,
+    Query,
+}
 ```
+
+> **YAML serialization:** `Auth::ApiKey` lưu `add_to: header` hoặc `add_to: query` (không còn `in_header: bool` — field legacy đã bị bỏ, không có migration). Executor chèn vào query params khi `is_query()`, header khi `is_header()`; cURL exporter và importers (OpenAPI/Postman `in`) map cùng enum này.
 
 ---
 

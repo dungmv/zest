@@ -18,7 +18,7 @@ All 31 Cycle 1 technical debt items (`SL-001..007`, `PERF-001..013`, `CC-001..00
 | ID | Issue | Resolved As |
 | :--- | :--- | :--- |
 | **TD-201** | Module-wide `#![allow(dead_code)]` / `#![allow(unused_imports)]` | ✅ Removed; `#[allow]` only at narrowly-scoped, commented items |
-| **TD-202** | `scope_settings_modal.rs` ~1,515 LOC | ✅ `components/scope_settings_modal/` (`mod`, `general_tab`, `headers_tab`, `auth_tab`, `auth_inputs`) |
+| **TD-202** | `scope_settings_modal.rs` ~1,515 LOC | ✅ `components/workspace_setting_modal/` (`mod`, `general_tab`, `headers_tab`, `auth_tab`, `auth_inputs`) — module later renamed from scope_settings (2026-11-15; "scope" is reserved for variable scopes) |
 | **TD-203** | `script_editor.rs` ~1,443 LOC | ✅ `components/script_editor/` (`mod`, `highlighter`, `completion`, `editor`, `tests`) |
 | **TD-204** | `response_inspector.rs` ~1,334 LOC | ✅ `components/response_inspector/` (`mod`, `body_tab`, `headers_tab`, `cookies_tab`, `console_tab`, `request_sent_tab`, `timing_popover`, `json_highlight`) |
 | **TD-205** | 650–875 LOC components (`titlebar`, `import_modal`, `body_editor/multipart`, `git/diff_view`) | ✅ `titlebar/` (mod+menus+breadcrumb), `import_modal/` (mod+preview), `body_editor/multipart/` (mod+state+row), `git/diff_view.rs` + `git/diff_parser.rs` |
@@ -86,3 +86,27 @@ find crates/ -type f -name "*.rs" -exec wc -l {} + | awk '$1 > 650 && $2 != "tot
 When resolving or recording any technical debt item:
 1. Update [`docs/technical-debt.md`](docs/technical-debt.md) directly (never create secondary files like `technical-debt-02.md`).
 2. Accompany every resolution with a regression unit test.
+
+---
+
+## 5. Refactor & Test Hygiene Playbook (Cycle 2 lessons)
+
+Rules forged during the 2026-11-13 audit remediation and subsequent module splits — apply them to every future refactor:
+
+### 5.1 Rust File-Splitting Rules
+- **Inherent `impl` blocks may be split across files** (same crate); **trait `impl` blocks cannot** (E0119 conflicting implementations) — e.g. `fs_store.rs` (inherent) + `fs_store_ops.rs` (`impl WorkspaceStore`).
+- A submodule of a **non-`mod.rs`** parent file needs `#[path = "..."]` attribute declaration.
+- In `use` paths the first segment only resolves within the current module's scope — cross-tree paths need the `crate::` prefix (`crate::components::...`), the shorthand only works for items of the current module.
+- Prefer umbrella modules over minimal in-place splits when extracting a feature family (e.g. `completion/`, `common/`); re-export selectively from `mod.rs`, never glob re-export internals.
+- **Move code verbatim, never restyle**: a structural refactor's `git diff` should show only imports/module docs changing. Compare style calls against `git show <commit>^` when in doubt.
+- Slim orchestrator pattern: convert one giant `render()` into a thin `mod.rs` + per-tab/per-section free functions that take the owning view (`&AppView` / `&ResponseInspector`) and re-derive state snapshots locally — no borrows across function boundaries, no extra structs.
+
+### 5.2 Test Extraction Rules
+- Extract `#[cfg(test)] mod tests` blocks to sibling `*_tests.rs` files to keep production files < 650 LOC.
+- **Dedent must be raw-string-aware**: blindly dedenting extracted test blocks corrupts indentation inside `raw_string!`/YAML/diff literals — re-extract from git history if corrupted.
+- Tests that `use super::*` require `mod.rs` to retain the imports/re-exports they rely on (e.g. `MessageDescriptor`, `json_field_candidates`).
+
+### 5.3 Test Isolation From Real User Config
+- `AppSettings::config_file_path()` honors `ZEST_CONFIG_DIR` and, under `#[cfg(test)]`, routes to a process-unique temp file — **unit tests must never read or write the real user `settings.json`** (a past regression let `cargo test` wipe the user's recent workspaces and theme preference).
+- New settings-persistence tests must assert on the isolated path; workspace recents are canonicalized (`path.canonicalize()`) before being stored to avoid duplicate entries.
+

@@ -19,12 +19,16 @@ crates/core/src/
 ├── curl/
 │   └── mod.rs            # cURL parser (is_curl_command, curl_to_request) & exporter (request_to_curl)
 └── importers/
-    ├── mod.rs            # Trait CollectionImporter, CollectionExporter
+    ├── mod.rs            # Trait CollectionImporter, CollectionExporter + apply_import_to_workspace
+    ├── models.rs         # ImportedData, ImportedFolder, ImportError
     ├── postman.rs        # Postman v2.0 & v2.1 JSON parser & converter
-    ├── insomnia.rs       # Insomnia v4 YAML/JSON parser
-    ├── openapi.rs        # OpenAPI 3.0, 3.1 & Swagger 2.0 parser
-    ├── har.rs            # HAR 1.2 log parser
-    └── bruno.rs          # Bruno .bru parser
+    ├── openapi/          # OpenAPI 3.0, 3.1 & Swagger 2.0 parser
+    │   ├── mod.rs
+    │   ├── body.rs       # Form/multipart body extraction (normalize_mime_type, collect_schema_form_fields)
+    │   └── tests.rs
+    ├── insomnia.rs       # Insomnia v4 YAML/JSON parser (planned)
+    ├── har.rs            # HAR 1.2 log parser (planned)
+    └── bruno.rs          # Bruno .bru parser (planned)
 ```
 
 ### 2.1 Trait Định Nghĩa Core
@@ -113,7 +117,12 @@ Postman v2.1 có cấu trúc lồng nhau dạng đệ quy (`item` có thể là 
 
 ---
 
-## 4. Chi tiết chuyển đổi OpenAPI 3.0 / 3.1 (`openapi.rs`)
+## 4. Chi tiết chuyển đổi OpenAPI 3.0 / 3.1 & Swagger 2.0 (`openapi/`)
+
+### 4.0 Trạng thái triển khai — ✅ Đã hoàn thành (Cycle 2):
+1. **Form body import (multipart & urlencoded)** — xác định media type chuẩn hóa (split `;`, trim, lowercase), thu thập properties đệ quy qua `allOf`/`anyOf`/`oneOf` + `$ref` (chống vòng lặp), fallback sang `example`/`examples`, nhận diện file upload (`type: "file"`, `format: "binary"|"byte"` → `is_file: true`), và hỗ trợ Swagger 2.0 `in: "formData"` (chọn Multipart/FormUrlEncoded theo kiểu tham số + `consumes`).
+2. **Slug ASCII & tách cây thư mục lồng nhau** — tên folder chứa `/` (vd `merchant/Thông quan`) được tách thành chuỗi folder lồng nhau (`split_folder_segments` + `push_folder_chain`); slug trên đĩa transliterate toàn Unicode → ASCII qua `deunicode`; tên hiển thị gốc giữ nguyên trong `_folder.yaml`.
+3. **ApiKey mapping** — `in: "query" | "header"` map sang `Auth::ApiKey.add_to: ApiKeyLocation::Query | Header`.
 
 ### 4.1 Quy tắc sinh cây Request:
 1. **Phân nhóm theo Tags:**

@@ -69,4 +69,25 @@ Trong tab Response, bên cạnh chế độ xem `Pretty` (JSON thụt lề có m
 3. **Inline Environment Variable Tokens & Autocomplete:**
    - Khi gõ `{{`, hiển thị popup gợi ý biến môi trường (kèm scope Global / Active Environment, giá trị hiện tại).
    - Render biến dưới dạng token màu trực quan (xanh lá cho biến hợp lệ, cam/đỏ cho biến chưa được định nghĩa).
-   - Di chuột lên token để xem popover giá trị giải mã; click vào token để mở nhanh modal cấu hình Environment.
+   - Di chuột lên token để xem popover giá trị giải mã (native `Tooltip`); click vào token để mở nhanh modal cấu hình Environment.
+
+---
+
+## 6. Tính Năng UI Đã Ship Trong Cycle 2 (2026-10-27 → 2026-11-15)
+
+Tổng hợp các nâng cấp giao diện đã hoàn tất và được chuẩn hóa qua migration `gpui-kit` (toàn bộ 24 nhóm component):
+
+1. **Sidebar:**
+   - Section **Pinned** trở thành folder thu gọn được (chevron disclosure, ẩn hiện khi không có pin, indentation cấp 1).
+   - **Multi-select** Ctrl/Cmd-click cho request + folder; kéo-thả nhiều item cùng lúc (`DragMultiItem`); context menu khi multi-select chỉ còn "Delete".
+   - Tạo mới request/folder đều kích hoạt **inline rename** ngay (text được select sẵn) và tự mở rộng folder cha đang thu gọn.
+   - Context menu 100% chuẩn hóa `PopupMenuItem` kèm icon; menu New HTTP/WebSocket/gRPC.
+2. **Command Palette (Ctrl/Cmd+K):** chỉ còn 2 nhóm Switch Request & Switch Environment; mỗi request hiển thị full path `Folder / Sub / Name`; hoạt động ổn định trên Windows kể cả khi input đang focus (intercept `root.on_key_down`).
+3. **Titlebar:** breadcrumb phân cấp với Smart Head Truncation (`… › Folder › Request`), ngắt theo char-budget; tooltip đa nền tảng (⌘/Ctrl); hitbox Windows cho các nút dưới drag region.
+4. **Modals:** toàn bộ 8 modal chuẩn `ModalDialog` semantics; fixed-height chống nhảy card khi chuyển tab (import 640×520, workspace settings 580×320); env modal tách module (`env_modal/`) với `EnvVarTable` đồng bộ thuần qua event (chữa triệt để bug typing race do watcher self-echo).
+5. **Environment:** danh sách env sort alphabetically (case-insensitive) tại state layer; modal env không còn hiển thị trạng thái active.
+6. **Response Inspector:** spinner/progress/skeleton chuẩn gpui-kit cho trạng thái in-flight; line-wrap toggle ghost + icon tint; waterfall timing popover theo token theme.
+7. **Git:** history modal 2 hàng (message / author + hash badge + relative time); Collapsible cho diff commit; diff view Split/Unified qua `Diff` component + `diff_parser`.
+8. **Body editor:** multipart type selector dropdown (Text/File), file input hợp nhất full-width, "Add Part"/"Add Row" đưa lên toolbar, tự động đồng bộ header `Content-Type` theo body type.
+9. **Script editor:** snippets panel đáp ứng layout split (dọc → hàng ngang scroll phía trên; ngang → cột phải 200px).
+10. **About & Update:** About modal + tab Settings → About; version resolve từ GitHub Actions build (`ZEST_APP_VERSION`/`ZEST_COMMIT_HASH` qua `build.rs`: env → `GITHUB_REF_NAME` → `git describe` → `CARGO_PKG_VERSION`); update checker GitHub Releases (`zest_core::updater`) chạy trên `global_tokio_runtime` + oneshot bridge.

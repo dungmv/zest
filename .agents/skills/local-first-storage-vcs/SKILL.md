@@ -39,6 +39,13 @@ my-workspace/
         └── get-profile.loc        # Sidecar JSON response cache (truncated at 512KB)
 ```
 
+### 1.1 Slugification & ASCII Disk Names (`storage/slug.rs`)
+
+- `slugify` transliterates **all** Unicode to ASCII via the `deunicode` crate (`Thông quan` → `thong-quan`, `Straße` → `strasse`, `日本語` → safe ASCII), then lowercases, maps every non-`[a-z0-9]` char to `-`, collapses repeats, trims, and falls back to `"request"`. Unmapped codepoints (`[?]` output) are filtered, never emitted.
+- **Display names are never slugified**: the original name (`Thông quan`) stays in `_folder.yaml` / request YAML; only disk directory/file names are ASCII slugs.
+- Slugs are applied to **one segment** at a time — `/` in a folder *name* is split into a nested folder chain at the **importer layer** (`split_folder_segments` + `push_folder_chain` in `importers/mod.rs`), not inside `slugify` (see the `interop-spec-converters` skill).
+- Renaming/dedup rules: `unique_slug` auto-suffixes on collision (`Đăng nhập` vs `Dang nhap` → `-2`); existing files on disk are never re-slugified retroactively.
+
 ---
 
 ## 2. Strict Schema Validation & Move Semantics (SL-005, PERF-008)
