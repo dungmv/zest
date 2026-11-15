@@ -72,3 +72,11 @@ cargo clippy --all-targets -- -D warnings
 
 - LOC mỗi file < 650.
 - Smoke test (cargo run): đủ 8 tab render đúng, badge counts đúng, 3 banner hiện đúng, WS/gRPC Message + Proto tab hoạt động.
+
+## Follow-up (20261115): relocate module sang `components/`
+
+Theo yêu cầu sau review, toàn bộ module được di chuyển từ `crates/app/src/app/request_composer/` sang `crates/app/src/components/request_composer/` để nằm cùng thư mục với `response_inspector` (commit `a0a9594` giữ lịch sử rename 98–100%).
+
+- `impl AppView` (inherent impl) hợp lệ ở bất kỳ module nào cùng crate → call site `self.render_request_composer(...)` trong `app/mod.rs` không đổi; các field `pub(crate)` vẫn truy cập được từ `components`.
+- Rewire 4 đường dẫn: `components/mod.rs` (+`pub mod request_composer;`), `app/mod.rs` (bỏ `pub mod request_composer;`, re-export → `pub use crate::components::request_composer::composer_inputs::*;`), `subscriptions.rs`, `request_composer/mod.rs` (`use super::AppView` → `use crate::app::AppView`).
+- Lưu ý Rust: trong `use` path, segment đầu chỉ resolve được item trong scope module hiện tại — `components` là crate-root module nên phải viết `crate::components::...` (dạng rút gọn `components::...` chỉ hoạt động khi segment là item con của module hiện tại).

@@ -1,14 +1,13 @@
 pub mod actions;
 pub mod inspector_displays;
 pub mod modals;
-pub mod request_composer;
 pub mod subscriptions;
 pub mod workspace_event_handler;
 
+pub use crate::components::request_composer::composer_inputs::*;
 pub use actions::*;
 pub use inspector_displays::*;
 pub use modals::*;
-pub use request_composer::composer_inputs::*;
 pub use subscriptions::*;
 
 use crate::components::*;

@@ -1,9 +1,9 @@
-use super::request_composer::composer_inputs::ComposerInputs;
 use super::workspace_event_handler::{
     handle_environment_event, handle_response_event, handle_session_event, handle_workspace_event,
 };
 use super::AppView;
 use crate::components::completion::env_autocomplete::{attach_missing_var_tokens, RetokenizeGuard};
+use crate::components::request_composer::composer_inputs::ComposerInputs;
 use crate::state::{
     EnvironmentEvent, EnvironmentState, GitState, ModalState, PersistenceState,
     RequestSessionState, ResponseEvent, ResponseState, SessionEvent, SidebarState, ToastState,

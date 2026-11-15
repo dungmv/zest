@@ -12,6 +12,7 @@ pub mod inherited_headers;
 pub mod kv_table;
 pub mod modal_dialog;
 pub mod request_bar;
+pub mod request_composer;
 pub mod response_inspector;
 pub mod scope_settings_modal;
 pub mod script_editor;

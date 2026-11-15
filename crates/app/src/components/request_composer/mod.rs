@@ -12,7 +12,7 @@ mod scripts_tab;
 mod tab_strip;
 mod ws_message_tab;
 
-use super::AppView;
+use crate::app::AppView;
 use crate::components::*;
 use crate::state::*;
 use crate::theme::theme;
