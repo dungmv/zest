@@ -16,6 +16,7 @@ Targeted for **macOS** and **Windows** with real HTTP request execution from the
 - 💾 **100% Filesystem-First:** Workspace data lives as clean, human-readable YAML files. No hidden SQLite database or proprietary locks.
 - 🐙 **Built-in Git Source Control GUI:** Staging, diff viewer, commit history, branch switcher, and remote sync (`push`/`pull`/`fetch`) right inside the app (`Cmd+Shift+G`).
 - 📥 **Universal Importers:** Direct support for OpenAPI 3.0/3.1 (JSON & YAML), Postman Collection v2.1, and bidirectional cURL CLI command translation (`Cmd+I`).
+- 🔌 **Multi-Protocol Client:** Native WebSocket (`ws`/`wss`) with a unified real-time frame log, and gRPC (unary & server streaming) with server reflection or `.proto` schema source.
 - 🖱️ **Fluid Drag-and-Drop Organization:** Drag requests and folders with live dropzone indicators, folder nesting, and root un-nesting.
 - 📜 **QuickJS Scripting Sandbox:** Embedded ECMAScript engine with `z.*` APIs, crypto helpers, Faker dynamic variables (`{{$guid}}`, `{{$randomEmail}}`), and test assertion runners.
 - 🔒 **Zero-Leak Secret Separation:** Environment files only commit variable definitions; actual secret values remain strictly local in `.local/secrets/`.
@@ -206,9 +207,9 @@ cargo clippy --workspace --all-targets -- -D warnings
 1. **AST Code-Folding in Response Viewer:**
    - *Current status:* High-performance code editor view with syntax coloring, line numbers, and automatic fallback to a 120 FPS virtualized list (`uniform_list`) for large payloads (>2,000 lines).
    - *Next step:* Full recursive AST syntax folding on brace blocks when `gpui-component` editor AST folding stabilizes.
-2. **WebSocket & Server-Sent Events (SSE) Streaming:**
-   - *Current status:* Complete support for HTTP/1.1 and HTTP/2 REST requests with timing breakdowns.
-   - *Planned:* Real-time bidirectional streaming connections for WebSockets and SSE event feeds.
+2. **Server-Sent Events (SSE) Streaming:**
+   - *Current status:* Multi-protocol support has shipped — WebSocket (`ws`/`wss`) with a unified frame log and gRPC (unary & server streaming, server reflection or `.proto` schema) now live alongside HTTP/1.1 + HTTP/2 REST with timing breakdowns.
+   - *Planned:* Real-time SSE (`text/event-stream`) event feeds for streaming APIs (OpenAI, Anthropic, Gemini).
 3. **GraphQL Visual Query Builder:**
    - *Current status:* GraphQL queries can be executed via standard POST JSON requests.
    - *Planned:* Schema introspection, autocomplete, and a visual query/variables builder.

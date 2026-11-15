@@ -67,23 +67,25 @@ Tài liệu này xác định lộ trình phát triển toàn diện của **Zes
 
 ## 🎯 Giai đoạn 2: Mở rộng Đa Giao thức (Protocols: GraphQL, WebSocket, SSE, gRPC)
 *Mục tiêu: Đưa Zest trở thành API client toàn diện không chỉ giới hạn ở REST thông thường.*
+*Tiến độ: WebSocket ✅ & gRPC ✅ (2/4) — GraphQL và SSE còn pending.*
 
 1. **GraphQL Client Chuyên Dụng:**
    - Editor GraphQL 2 pane: Query/Mutation bên trái, Variables JSON bên phải.
    - Nút **Introspect Schema**: Gửi introspection query tới server để tải schema về.
    - Gợi ý từ khóa (Autocomplete) query, fields, types, directives dựa trên schema đã introspect.
-2. **WebSocket Client:**
+2. **WebSocket Client — ✅ Đã hoàn thành (ws/wss + frame log; Binary message chưa hỗ trợ):**
    - Khởi tạo kết nối WebSocket trực tiếp (`ws://` và `wss://`).
    - Quản lý trạng thái: Connecting, Connected, Disconnected.
-   - Khung gửi tin nhắn: Text, JSON, Binary.
-   - Message Stream Viewer: Lịch sử tin nhắn Real-time (inbound/outbound) kèm timestamp, lọc tin nhắn, clear log.
+   - Khung gửi tin nhắn: Text, JSON (Binary chưa hỗ trợ).
+   - Message Stream Viewer: Lịch sử tin nhắn Real-time (inbound/outbound) kèm timestamp, lọc tin nhắn, clear log; frame log được persist cùng request.
 3. **Server-Sent Events (SSE) & Streaming Responses:**
    - Hỗ trợ nhận stream HTTP (chunked transfer encoding, SSE `text/event-stream`).
    - Hiển thị từng event nhận được theo thời gian thực (rất quan trọng khi test các LLM API như OpenAI, Anthropic, Gemini).
-4. **gRPC Client (Unary & Streaming):**
-   - Hỗ trợ nạp file `.proto` hoặc Server Reflection.
-   - Chọn Service và RPC Method từ dropdown.
-   - Sinh payload JSON tương ứng với protobuf message.
+4. **gRPC Client (Unary & Server Streaming) — ✅ Đã hoàn thành (client-streaming/bidi chưa hỗ trợ):**
+   - Hỗ trợ nạp file `.proto` hoặc Server Reflection (schema tự động tải khi gửi, tồn tại song song với editor `{{var}}` interpolation).
+   - Chọn Service và RPC Method từ dropdown (Message tab với Body-style toolbar + Format JSON).
+   - Sinh payload JSON tương ứng với protobuf message; validation lỗi hiển thị inline diagnostics trên editor.
+   - Unified frame log đa giao thức (`zest_core::transport`) dùng chung một send pipeline với HTTP/WebSocket.
 
 ---
 
