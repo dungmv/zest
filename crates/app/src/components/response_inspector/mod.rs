@@ -53,7 +53,7 @@ impl ResponseInspector {
 }
 
 impl RenderOnce for ResponseInspector {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let t = theme();
         let resp_s = self.response_state.read(cx);
         let ed_s = self.editor_state.read(cx);
@@ -296,9 +296,13 @@ impl RenderOnce for ResponseInspector {
                 ResponseTabKind::Messages => {
                     messages_tab::render_messages_tab(&self, cx, is_sending_this_request)
                 }
-                ResponseTabKind::Response => {
-                    body_tab::render_body_tab(&self, cx, is_sending_this_request, &current_resp)
-                }
+                ResponseTabKind::Response => body_tab::render_body_tab(
+                    &self,
+                    window,
+                    cx,
+                    is_sending_this_request,
+                    &current_resp,
+                ),
                 ResponseTabKind::Request => request_sent_tab::render_request_sent_tab(
                     &self,
                     cx,

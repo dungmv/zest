@@ -6,6 +6,7 @@ pub mod grpc;
 pub mod http;
 pub mod importers;
 pub mod interpolation;
+pub mod json_path;
 pub mod models;
 pub mod scripting;
 pub mod sse;

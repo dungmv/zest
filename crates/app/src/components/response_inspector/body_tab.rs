@@ -3,14 +3,15 @@ use crate::state::ResponseViewMode;
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::input::Editor;
+use gpui_kit::component::input::{Editor, Input, InputState};
 use gpui_kit::component::progress::Progress;
 use gpui_kit::component::skeleton::Skeleton;
 use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::AppContext as _;
 use gpui_kit::{
     div, px, uniform_list, AnyElement, App, InteractiveElement as _, IntoElement, ParentElement,
-    StatefulInteractiveElement as _, Styled,
+    StatefulInteractiveElement as _, Styled, Window,
 };
 use std::sync::Arc;
 use zest_core::models::HttpResponseRecord;
@@ -18,16 +19,14 @@ use zest_core::storage::models::{RequestExampleFile, RequestKvItem};
 
 pub(super) fn render_body_tab(
     ri: &ResponseInspector,
-    cx: &App,
+    window: &mut Window,
+    cx: &mut App,
     is_sending_this_request: bool,
     current_resp: &Option<Arc<HttpResponseRecord>>,
 ) -> AnyElement {
     let t = theme();
-    let resp_s = ri.response_state.read(cx);
     let ed_s = ri.editor_state.read(cx);
     let active_id = ed_s.active_request_id.clone();
-    let is_viewing_example = resp_s.active_example_name.is_some();
-    let view_mode = resp_s.view_mode;
     let resp_state_clone = ri.response_state.clone();
     let current_resp = current_resp.clone();
     if is_sending_this_request {
@@ -125,6 +124,48 @@ pub(super) fn render_body_tab(
             )
             .into_any_element()
     } else {
+        // JSONPath query input for the response Body toolbar. `ResponseState`
+        // owns the query text; this input mirrors it (created once, keyed) and
+        // pushes edits back live on every keystroke.
+        let resp_state_for_input = resp_state_clone.clone();
+        let jsonpath_input = window
+            .use_keyed_state(
+                gpui_kit::SharedString::from("response-jsonpath-input-holder"),
+                cx,
+                |window, cx| {
+                    let query_input = cx.new(|cx| {
+                        InputState::new(window, cx)
+                            .placeholder("JSONPath (e.g. $.data.items[*].id)")
+                    });
+                    let q_in = query_input.clone();
+                    let rs_c = resp_state_for_input;
+                    let sub = cx.subscribe_in(&query_input, window, move |_, _, event, _, cx| {
+                        if let gpui_kit::component::input::InputEvent::Change = event {
+                            let q = q_in.read(cx).value().to_string();
+                            rs_c.update(cx, |state, cx| {
+                                state.set_jsonpath_query(q, cx);
+                            });
+                        }
+                    });
+                    (query_input, sub)
+                },
+            )
+            .read(cx)
+            .0
+            .clone();
+
+        // Two-way sync: state-side resets (cleared on response switch) are
+        // mirrored back into the input.
+        let state_query = ri.response_state.read(cx).jsonpath_query.clone();
+        if jsonpath_input.read(cx).value().as_str() != state_query.as_str() {
+            jsonpath_input.update(cx, |inp, cx| {
+                inp.set_value(state_query.clone(), window, cx);
+            });
+        }
+
+        let resp_s = ri.response_state.read(cx);
+        let is_viewing_example = resp_s.active_example_name.is_some();
+        let view_mode = resp_s.view_mode;
         let body_len = current_resp.as_ref().map(|r| r.body.len()).unwrap_or(0);
 
         let (_display_text, lines, is_json) = if let Some(fmt) = &resp_s.formatted_body {
@@ -172,6 +213,36 @@ pub(super) fn render_body_tab(
         });
         let req_id_opt = active_id.clone();
         let wrap_lines = resp_s.wrap_lines;
+
+        // Query bar is offered only when the body parsed as JSON (the
+        // retained parsed value in CachedResponseFormat is what gets queried).
+        let jsonpath_active = resp_s
+            .formatted_body
+            .as_ref()
+            .and_then(|f| f.cached_format.as_ref())
+            .is_some_and(|cf| cf.parsed_json.is_some());
+        let (jsonpath_matches, jsonpath_error) = resp_s
+            .formatted_body
+            .as_ref()
+            .map_or((None, None), |f| (f.match_count, f.jsonpath_error.clone()));
+        let jsonpath_hint = jsonpath_error
+            .map(|err| {
+                div()
+                    .text_xs()
+                    .max_w(px(260.))
+                    .truncate()
+                    .text_color(t.danger)
+                    .child(err)
+            })
+            .or_else(|| {
+                jsonpath_matches.map(|n| {
+                    div().text_xs().text_color(t.text_muted).child(if n == 1 {
+                        "1 match".to_string()
+                    } else {
+                        format!("{n} matches")
+                    })
+                })
+            });
 
         div()
                                     .size_full()
@@ -242,6 +313,41 @@ pub(super) fn render_body_tab(
                                                             .child("Raw")
                                                     })
                                             )
+                                            // JSONPath query bar (JSON bodies only)
+                                            .when(jsonpath_active, |this| {
+                                                this.child(
+                                                    div()
+                                                        .flex_1()
+                                                        .mx(px(8.))
+                                                        .flex()
+                                                        .items_center()
+                                                        .gap(px(8.))
+                                                        .child(
+                                                            div()
+                                                                .flex_1()
+                                                                .max_w(px(420.))
+                                                                .h(px(24.))
+                                                                .px(px(6.))
+                                                                .rounded(px(6.))
+                                                                .bg(t.bg_input)
+                                                                .border_1()
+                                                                .border_color(t.border_subtle)
+                                                                .flex()
+                                                                .items_center()
+                                                                .child(
+                                                                    div().flex_1().child(
+                                                                        Input::new(&jsonpath_input)
+                                                                            .id("response-jsonpath-input")
+                                                                            .appearance(false)
+                                                                            .bordered(false)
+                                                                            .focus_bordered(false)
+                                                                            .cleanable(true),
+                                                                    ),
+                                                                ),
+                                                        )
+                                                        .children(jsonpath_hint),
+                                                )
+                                            })
                                             .child(
                                                 div()
                                                     .flex()

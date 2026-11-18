@@ -20,6 +20,9 @@ pub(crate) struct CachedResponseFormat {
     pub(crate) raw_lines: Arc<Vec<String>>,
     pub(crate) pretty_text: Arc<String>,
     pub(crate) pretty_lines: Arc<Vec<String>>,
+    /// Parsed JSON body, retained for JSONPath query evaluation (kept only
+    /// for the active response, so memory stays bounded).
+    pub(crate) parsed_json: Option<Arc<serde_json::Value>>,
     pub(crate) is_json: bool,
     pub(crate) is_xml: bool,
 }
@@ -30,6 +33,10 @@ pub struct FormattedResponseBody {
     pub lines: Arc<Vec<String>>,
     pub is_json: bool,
     pub is_xml: bool,
+    /// Number of JSONPath query matches when a query is active, else `None`.
+    pub match_count: Option<usize>,
+    /// JSONPath query error (invalid syntax or non-JSON body) to show inline.
+    pub jsonpath_error: Option<String>,
     pub(crate) cached_format: Option<Arc<CachedResponseFormat>>,
 }
 
@@ -121,8 +128,8 @@ pub struct ResponseState {
     pub active_example_name: Option<String>,
     pub active_tab: ResponseTabKind,
     pub view_mode: ResponseViewMode,
-    pub search_query: String,
-    pub is_searching: bool,
+    /// Active JSONPath query for the response Body tab (empty = no filter).
+    pub jsonpath_query: String,
     pub show_examples_dropdown: bool,
     pub show_timing_popover: bool,
     pub test_results: Vec<TestResult>,
@@ -150,8 +157,7 @@ impl ResponseState {
             active_example_name: None,
             active_tab: ResponseTabKind::Response,
             view_mode: ResponseViewMode::Pretty,
-            search_query: String::new(),
-            is_searching: false,
+            jsonpath_query: String::new(),
             show_examples_dropdown: false,
             show_timing_popover: false,
             test_results: Vec::new(),
@@ -184,6 +190,7 @@ impl ResponseState {
             self.console_logs.clear();
             self.current_response = None;
         }
+        self.jsonpath_query.clear();
         self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
         self.refresh_formatted_body();
     }
@@ -244,6 +251,7 @@ impl ResponseState {
 
         self.cache.insert(req_id, response.clone());
         self.current_response = Some(response);
+        self.jsonpath_query.clear();
         self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
         self.refresh_formatted_body();
         cx.emit(ResponseEvent::ContentChanged {
@@ -291,6 +299,7 @@ impl ResponseState {
             created_at: chrono::Utc::now(),
         };
         self.current_response = Some(Arc::new(record));
+        self.jsonpath_query.clear();
         self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
         self.refresh_formatted_body();
     }
@@ -300,6 +309,7 @@ impl ResponseState {
         if let Some(resp) = self.cache.get(&req_id.to_string()).cloned() {
             self.current_response = Some(resp);
         }
+        self.jsonpath_query.clear();
         self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
         self.refresh_formatted_body();
         cx.emit(ResponseEvent::ContentChanged {
@@ -331,23 +341,46 @@ impl ResponseState {
                 None => Arc::new(Self::build_cached_format(resp)),
             };
 
-            let (display_text, lines) = if matches!(self.view_mode, ResponseViewMode::Pretty) {
-                (
-                    cached_format.pretty_text.clone(),
-                    cached_format.pretty_lines.clone(),
-                )
-            } else {
-                (
-                    cached_format.raw_text.clone(),
-                    cached_format.raw_lines.clone(),
-                )
-            };
+            let (mut display_text, mut lines) =
+                if matches!(self.view_mode, ResponseViewMode::Pretty) {
+                    (
+                        cached_format.pretty_text.clone(),
+                        cached_format.pretty_lines.clone(),
+                    )
+                } else {
+                    (
+                        cached_format.raw_text.clone(),
+                        cached_format.raw_lines.clone(),
+                    )
+                };
+
+            // Apply the JSONPath query. The result is always pretty JSON
+            // because the query runs on parsed data rather than the raw text
+            // view; a syntax error keeps the base display and surfaces inline.
+            let (mut match_count, mut jsonpath_error) = (None, None);
+            if !self.jsonpath_query.is_empty() {
+                match &cached_format.parsed_json {
+                    Some(parsed) => {
+                        match zest_core::json_path::run_json_path(parsed, &self.jsonpath_query) {
+                            Ok(result) => {
+                                match_count = Some(result.match_count);
+                                display_text = Arc::new(result.result_text);
+                                lines = Arc::new(result.lines);
+                            }
+                            Err(err) => jsonpath_error = Some(err),
+                        }
+                    }
+                    None => jsonpath_error = Some("Response body is not valid JSON".to_string()),
+                }
+            }
 
             self.formatted_body = Some(FormattedResponseBody {
                 display_text,
                 lines,
                 is_json: cached_format.is_json,
                 is_xml: cached_format.is_xml,
+                match_count,
+                jsonpath_error,
                 cached_format: Some(cached_format),
             });
         } else {
@@ -389,6 +422,7 @@ impl ResponseState {
             raw_lines: Arc::new(raw_lines),
             pretty_text: Arc::new(pretty_str),
             pretty_lines: Arc::new(pretty_lines),
+            parsed_json: parsed_json.map(Arc::new),
             is_json,
             is_xml,
         }
@@ -404,6 +438,7 @@ impl ResponseState {
             self.console_logs = r.console_logs.clone();
         }
         self.current_response = response;
+        self.jsonpath_query.clear();
         self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
         self.refresh_formatted_body();
         cx.emit(ResponseEvent::ContentChanged {
@@ -444,16 +479,16 @@ impl ResponseState {
         cx.notify();
     }
 
-    pub fn set_search_query(&mut self, query: String, cx: &mut Context<Self>) {
-        self.search_query = query;
-        cx.notify();
-    }
-
-    pub fn toggle_search(&mut self, cx: &mut Context<Self>) {
-        self.is_searching = !self.is_searching;
-        if !self.is_searching {
-            self.search_query.clear();
-        }
+    /// Updates the JSONPath query used to filter the response Body tab.
+    ///
+    /// Re-emits `ContentChanged` so the shared response editor re-syncs with
+    /// the filtered display text through the standard event channel.
+    pub fn set_jsonpath_query(&mut self, query: String, cx: &mut Context<Self>) {
+        self.jsonpath_query = query;
+        self.refresh_formatted_body();
+        cx.emit(ResponseEvent::ContentChanged {
+            sync_sent_preview: false,
+        });
         cx.notify();
     }
 
