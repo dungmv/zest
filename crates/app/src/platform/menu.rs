@@ -8,12 +8,29 @@
 use crate::app::{HideApp, HideOtherApps, OpenAbout, OpenSettings, Quit, ShowAllApps};
 use crate::state::ModalState;
 use gpui_kit::*;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 const APP_NAME: &str = "Zest";
 
+pub type ActiveModalHandle = Rc<RefCell<Option<WeakEntity<ModalState>>>>;
+pub type ReopenWindowFn = Rc<dyn Fn(&mut App) -> Entity<ModalState>>;
+
+fn resolve_or_reopen_modal(
+    active_modal: &ActiveModalHandle,
+    reopen_window: &dyn Fn(&mut App) -> Entity<ModalState>,
+    cx: &mut App,
+) -> Entity<ModalState> {
+    active_modal
+        .borrow()
+        .as_ref()
+        .and_then(|weak| weak.upgrade())
+        .unwrap_or_else(|| reopen_window(cx))
+}
+
 /// Registers menu keybindings, global action handlers, and installs the
 /// application menu bar.
-pub fn init_app_menu(modal: Entity<ModalState>, cx: &mut App) {
+pub fn init_app_menu(active_modal: ActiveModalHandle, reopen_window: ReopenWindowFn, cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("cmd-q", Quit, None),
         KeyBinding::new("cmd-h", HideApp, None),
@@ -21,13 +38,16 @@ pub fn init_app_menu(modal: Entity<ModalState>, cx: &mut App) {
     ]);
 
     cx.on_action({
-        let modal = modal.clone();
+        let active_modal = active_modal.clone();
+        let reopen_window = reopen_window.clone();
         move |_: &OpenAbout, cx| {
+            let modal = resolve_or_reopen_modal(&active_modal, reopen_window.as_ref(), cx);
             modal.update(cx, |state, cx| state.open_about_modal(cx));
             cx.activate(true);
         }
     });
     cx.on_action(move |_: &OpenSettings, cx| {
+        let modal = resolve_or_reopen_modal(&active_modal, reopen_window.as_ref(), cx);
         modal.update(cx, |state, cx| state.open_settings_modal(cx));
         cx.activate(true);
     });

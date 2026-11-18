@@ -71,7 +71,17 @@ fn main() {
         }
     }
 
+    let active_modal: platform::ActiveModalHandle = std::rc::Rc::new(std::cell::RefCell::new(None));
+
     let app = gpui_kit::application().with_assets(AllAssets);
+
+    let active_modal_reopen = active_modal.clone();
+    app.on_reopen(move |cx| {
+        if cx.windows().is_empty() {
+            open_main_window(&active_modal_reopen, cx);
+        }
+        cx.activate(true);
+    });
 
     app.run(move |cx| {
         platform::set_dock_icon();
@@ -111,23 +121,31 @@ fn main() {
             KeyBinding::new("escape", DismissModal, None),
         ]);
 
-        cx.on_window_closed(|cx, _window_id| {
-            if cx.windows().is_empty() {
-                cx.quit();
-            }
-        })
-        .detach();
+        open_main_window(&active_modal, cx);
 
-        let window_options = default_window_options(cx);
-
-        let (_window, app_view) = gpui_kit::open_window(window_options, cx, |window, cx| {
-            cx.new(|cx| AppView::new(window, cx))
-        })
-        .expect("Failed to open main window");
-
-        let modal = app_view.read(cx).state.modal.clone();
-        platform::init_app_menu(modal, cx);
+        let active_modal_menu = active_modal.clone();
+        platform::init_app_menu(
+            active_modal,
+            std::rc::Rc::new(move |cx| open_main_window(&active_modal_menu, cx)),
+            cx,
+        );
     });
+}
+
+fn open_main_window(
+    active_modal: &platform::ActiveModalHandle,
+    cx: &mut App,
+) -> Entity<state::ModalState> {
+    let window_options = default_window_options(cx);
+
+    let (_window, app_view) = gpui_kit::open_window(window_options, cx, |window, cx| {
+        cx.new(|cx| AppView::new(window, cx))
+    })
+    .expect("Failed to open main window");
+
+    let modal = app_view.read(cx).state.modal.clone();
+    *active_modal.borrow_mut() = Some(modal.downgrade());
+    modal
 }
 
 #[cfg(test)]
