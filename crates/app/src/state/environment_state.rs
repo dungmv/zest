@@ -374,10 +374,14 @@ impl EnvironmentState {
     }
 
     pub fn add_variable(&mut self, env_id: &str, cx: &mut Context<Self>) {
+        self.add_variable_with_key(env_id, String::new(), cx);
+    }
+
+    pub fn add_variable_with_key(&mut self, env_id: &str, key: String, cx: &mut Context<Self>) {
         let new_var = zest_core::models::EnvironmentVariable {
-            key: "".to_string(),
-            initial_value: "".to_string(),
-            current_value: "".to_string(),
+            key,
+            initial_value: String::new(),
+            current_value: String::new(),
             secret: false,
         };
         if env_id == "globals" {
@@ -395,6 +399,47 @@ impl EnvironmentState {
             self.invalidate_cache();
             cx.emit(EnvironmentEvent::EnvironmentModified(env_name));
             cx.notify();
+        }
+    }
+
+    pub fn resolve_variable_env_id(&self, var_name: &str) -> String {
+        if let Some(active) = self.active_environment() {
+            if active.variables.iter().any(|v| v.key == var_name) {
+                return active.id.clone();
+            }
+        }
+        if self
+            .global_environment
+            .variables
+            .iter()
+            .any(|v| v.key == var_name)
+        {
+            return "globals".to_string();
+        }
+        for env in &self.environments {
+            if env.variables.iter().any(|v| v.key == var_name) {
+                return env.id.clone();
+            }
+        }
+        self.active_environment_id
+            .clone()
+            .unwrap_or_else(|| "globals".to_string())
+    }
+
+    pub fn has_variable(&self, env_id: &str, var_name: &str) -> bool {
+        if env_id == "globals" {
+            self.global_environment
+                .variables
+                .iter()
+                .any(|v| v.key == var_name)
+        } else if let Some(e) = self
+            .environments
+            .iter()
+            .find(|x| x.id == env_id || x.name == env_id)
+        {
+            e.variables.iter().any(|v| v.key == var_name)
+        } else {
+            false
         }
     }
 
@@ -610,6 +655,35 @@ mod tests {
             let dev_reloaded = env.environments.iter().find(|e| e.name == "dev").unwrap();
             assert_eq!(dev_reloaded.variables[0].initial_value, "disk-dev");
             assert_eq!(dev_reloaded.variables[0].current_value, "");
+        });
+    }
+
+    #[gpui_kit::test]
+    fn test_variable_resolution_and_addition(cx: &mut TestAppContext) {
+        let dir = tempdir().unwrap();
+        let store: Arc<dyn WorkspaceStore> = Arc::new(FsWorkspaceStore::new(dir.path()));
+        store.init_workspace("TestWS2").unwrap();
+
+        let env_entity =
+            cx.new(|_| EnvironmentState::new(store.clone(), "TestWS2".to_string(), None));
+
+        env_entity.update(cx, |env, cx| {
+            let env_id = env.create_environment(Some("Production".to_string()), cx);
+            env.set_active_environment(Some(env_id.clone()), cx);
+
+            // 1. Variable not found anywhere -> falls back to active env
+            assert_eq!(env.resolve_variable_env_id("token"), env_id);
+            assert!(!env.has_variable(&env_id, "token"));
+
+            // 2. Add variable with key
+            env.add_variable_with_key(&env_id, "token".to_string(), cx);
+            assert!(env.has_variable(&env_id, "token"));
+            assert_eq!(env.resolve_variable_env_id("token"), env_id);
+
+            // 3. Global variable resolution
+            env.add_variable_with_key("globals", "global_key".to_string(), cx);
+            assert!(env.has_variable("globals", "global_key"));
+            assert_eq!(env.resolve_variable_env_id("global_key"), "globals");
         });
     }
 }

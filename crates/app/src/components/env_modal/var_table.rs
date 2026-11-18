@@ -7,7 +7,8 @@ use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, ParentElement,
-    Render, SharedString, StatefulInteractiveElement as _, Styled, Subscription, Window,
+    Render, ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled, Subscription,
+    Window,
 };
 use zest_core::models::EnvironmentVariable;
 
@@ -27,6 +28,8 @@ pub struct EnvVarTable {
     modal_state: Entity<ModalState>,
     bound_env_id: String,
     rows: Vec<EnvVarRowInputs>,
+    scroll_handle: ScrollHandle,
+    target_variable: Option<String>,
     in_local_change: bool,
     _subscriptions: Vec<Subscription>,
 }
@@ -50,6 +53,8 @@ impl EnvVarTable {
             modal_state: modal_state.clone(),
             bound_env_id: initial_id,
             rows: Vec::new(),
+            scroll_handle: ScrollHandle::new(),
+            target_variable: None,
             in_local_change: false,
             _subscriptions: Vec::new(),
         };
@@ -67,6 +72,7 @@ impl EnvVarTable {
                     } else {
                         this.reconcile_full(window, cx);
                     }
+                    this.focus_target_variable(window, cx);
                     cx.notify();
                 }
             },
@@ -88,12 +94,14 @@ impl EnvVarTable {
                 EnvironmentEvent::EnvironmentModified(name) => {
                     if !this.in_local_change && this.bound_env_id == *name {
                         this.reconcile_structure(window, cx);
+                        this.focus_target_variable(window, cx);
                         cx.notify();
                     }
                 }
                 EnvironmentEvent::GlobalsModified => {
                     if !this.in_local_change && this.bound_env_id == "globals" {
                         this.reconcile_structure(window, cx);
+                        this.focus_target_variable(window, cx);
                         cx.notify();
                     }
                 }
@@ -103,6 +111,28 @@ impl EnvVarTable {
 
         this._subscriptions = vec![sub_modal, sub_env];
         this
+    }
+
+    fn focus_target_variable(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let target = self.modal_state.read(cx).env_modal.target_variable.clone();
+        self.target_variable = target.clone();
+
+        let Some(var_name) = target else {
+            return;
+        };
+
+        if let Some(idx) = self
+            .rows
+            .iter()
+            .position(|r| r.key_input.read(cx).value().as_ref() == var_name)
+        {
+            self.scroll_handle.scroll_to_item(idx);
+            let row = &self.rows[idx];
+            row.curr_input.update(cx, |inp, cx| {
+                inp.select_all(window, cx);
+                inp.focus(window, cx);
+            });
+        }
     }
 
     fn current_selected_env_id(&self, cx: &Context<Self>) -> String {
@@ -318,6 +348,11 @@ impl EnvVarTable {
             .get(idx)
             .map(|r| r.curr_input.read(cx).value().to_string())
     }
+
+    #[cfg(test)]
+    pub fn target_variable(&self) -> Option<String> {
+        self.target_variable.clone()
+    }
 }
 
 impl Render for EnvVarTable {
@@ -355,9 +390,11 @@ impl Render for EnvVarTable {
             // Table Rows
             .child(
                 div()
+                    .id("env-var-table-scroll")
                     .flex_1()
                     .px(px(12.))
                     .py(px(6.))
+                    .track_scroll(&self.scroll_handle)
                     .overflow_y_scrollbar()
                     .flex()
                     .flex_col()
@@ -381,173 +418,170 @@ impl Render for EnvVarTable {
                                 ),
                         )
                     })
-                    .child(div().w_full().flex().flex_col().gap(px(4.)).children(
-                        self.rows.iter().enumerate().map(|(idx, row)| {
-                            let row_id = format!("{}-row-{}", selected_id, idx);
-                            let k_input = row.key_input.clone();
-                            let init_input = row.init_input.clone();
-                            let curr_input = row.curr_input.clone();
-                            let secret = row.secret;
+                    .children(self.rows.iter().enumerate().map(|(idx, row)| {
+                        let row_id = format!("{}-row-{}", selected_id, idx);
+                        let k_input = row.key_input.clone();
+                        let init_input = row.init_input.clone();
+                        let curr_input = row.curr_input.clone();
+                        let secret = row.secret;
 
-                            let tbl_sec = table_entity.clone();
-                            let kin_sec = k_input.clone();
-                            let tbl_del = table_entity.clone();
-                            let kin_del = k_input.clone();
+                        let tbl_sec = table_entity.clone();
+                        let kin_sec = k_input.clone();
+                        let tbl_del = table_entity.clone();
+                        let kin_del = k_input.clone();
 
-                            div()
-                                .flex()
-                                .items_center()
-                                .px(px(4.))
-                                .py(px(2.))
-                                .gap(px(8.))
-                                .rounded(px(4.))
-                                .hover(|s| s.bg(t.bg_hover))
-                                // Key Input
-                                .child(
-                                    div()
-                                        .w(px(180.))
-                                        .h(px(28.))
-                                        .px(px(6.))
-                                        .rounded(px(4.))
-                                        .bg(t.bg_input)
-                                        .border_1()
-                                        .border_color(t.border)
-                                        .flex()
-                                        .items_center()
-                                        .child(
-                                            Input::new(&k_input)
-                                                .id(SharedString::from(format!("{}-key", row_id)))
-                                                .appearance(false)
-                                                .bordered(false)
-                                                .focus_bordered(false)
-                                                .px(px(0.))
-                                                .text_sm()
-                                                .font_family(".SystemMonoFont"),
-                                        ),
-                                )
-                                // Initial Value Input
-                                .child(
-                                    div()
-                                        .flex_1()
-                                        .h(px(28.))
-                                        .px(px(6.))
-                                        .rounded(px(4.))
-                                        .bg(t.bg_input)
-                                        .border_1()
-                                        .border_color(t.border)
-                                        .flex()
-                                        .items_center()
-                                        .child(
-                                            Input::new(&init_input)
-                                                .id(SharedString::from(format!(
-                                                    "{}-init-val",
-                                                    row_id
-                                                )))
-                                                .appearance(false)
-                                                .bordered(false)
-                                                .focus_bordered(false)
-                                                .px(px(0.))
-                                                .text_sm()
-                                                .font_family(".SystemMonoFont"),
-                                        ),
-                                )
-                                // Current Value Input
-                                .child(
-                                    div()
-                                        .flex_1()
-                                        .h(px(28.))
-                                        .px(px(6.))
-                                        .rounded(px(4.))
-                                        .bg(t.bg_input)
-                                        .border_1()
-                                        .border_color(t.border)
-                                        .flex()
-                                        .items_center()
-                                        .child(
-                                            Input::new(&curr_input)
-                                                .id(SharedString::from(format!(
-                                                    "{}-curr-val",
-                                                    row_id
-                                                )))
-                                                .appearance(false)
-                                                .bordered(false)
-                                                .focus_bordered(false)
-                                                .px(px(0.))
-                                                .text_sm()
-                                                .font_family(".SystemMonoFont"),
-                                        ),
-                                )
-                                // Secret toggle button
-                                .child(
-                                    div()
-                                        .id(SharedString::from(format!("{}-secret", row_id)))
-                                        .w(px(64.))
-                                        .h(px(24.))
-                                        .rounded(px(4.))
-                                        .bg(if secret {
-                                            gpui_kit::Hsla {
-                                                a: 0.15,
-                                                ..t.status_4xx
-                                            }
-                                        } else {
-                                            gpui_kit::transparent_black()
-                                        })
-                                        .hover(|s| s.bg(t.bg_card))
-                                        .cursor_pointer()
-                                        .flex()
-                                        .items_center()
-                                        .justify_center()
-                                        .text_xs()
-                                        .text_color(if secret {
-                                            t.status_4xx
-                                        } else {
-                                            t.text_muted
-                                        })
-                                        .on_click(move |_, _, cx| {
-                                            tbl_sec.update(cx, |this, cx| {
-                                                this.toggle_row_secret_by_key(&kin_sec, cx);
-                                            });
-                                        })
-                                        .child(if secret {
-                                            div()
-                                                .flex()
-                                                .items_center()
-                                                .gap(px(4.))
-                                                .child(Icon::new(IconName::Lock).size(px(14.)))
-                                                .child(" Secret")
-                                                .into_any_element()
-                                        } else {
-                                            div()
-                                                .flex()
-                                                .items_center()
-                                                .gap(px(4.))
-                                                .child(Icon::new(IconName::LockOpen).size(px(14.)))
-                                                .child(" Visible")
-                                                .into_any_element()
-                                        }),
-                                )
-                                // Delete row button
-                                .child(
-                                    div()
-                                        .id(SharedString::from(format!("{}-del", row_id)))
-                                        .w(px(24.))
-                                        .h(px(24.))
-                                        .rounded(px(4.))
-                                        .flex()
-                                        .items_center()
-                                        .justify_center()
-                                        .cursor_pointer()
-                                        .hover(|s| s.bg(t.bg_card).text_color(t.status_5xx))
-                                        .text_color(t.text_muted)
-                                        .on_click(move |_, _, cx| {
-                                            tbl_del.update(cx, |this, cx| {
-                                                this.delete_row_by_key(&kin_del, cx);
-                                            });
-                                        })
-                                        .child(Icon::new(IconName::Trash).small()),
-                                )
-                        }),
-                    )),
+                        let is_target = self
+                            .target_variable
+                            .as_deref()
+                            .is_some_and(|tv| tv == row.key_input.read(cx).value().as_ref());
+
+                        div()
+                            .id(SharedString::from(format!("env-row-item-{}", idx)))
+                            .flex()
+                            .items_center()
+                            .px(px(4.))
+                            .py(px(2.))
+                            .gap(px(8.))
+                            .rounded(px(4.))
+                            .hover(|s| s.bg(t.bg_hover))
+                            .when(is_target, |s| {
+                                s.bg(t.bg_hover).border_1().border_color(t.primary)
+                            })
+                            // Key Input
+                            .child(
+                                div()
+                                    .w(px(180.))
+                                    .h(px(28.))
+                                    .px(px(6.))
+                                    .rounded(px(4.))
+                                    .bg(t.bg_input)
+                                    .border_1()
+                                    .border_color(t.border)
+                                    .flex()
+                                    .items_center()
+                                    .child(
+                                        Input::new(&k_input)
+                                            .id(SharedString::from(format!("{}-key", row_id)))
+                                            .appearance(false)
+                                            .bordered(false)
+                                            .focus_bordered(false)
+                                            .px(px(0.))
+                                            .text_sm()
+                                            .font_family(".SystemMonoFont"),
+                                    ),
+                            )
+                            // Initial Value Input
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .h(px(28.))
+                                    .px(px(6.))
+                                    .rounded(px(4.))
+                                    .bg(t.bg_input)
+                                    .border_1()
+                                    .border_color(t.border)
+                                    .flex()
+                                    .items_center()
+                                    .child(
+                                        Input::new(&init_input)
+                                            .id(SharedString::from(format!("{}-init-val", row_id)))
+                                            .appearance(false)
+                                            .bordered(false)
+                                            .focus_bordered(false)
+                                            .px(px(0.))
+                                            .text_sm()
+                                            .font_family(".SystemMonoFont"),
+                                    ),
+                            )
+                            // Current Value Input
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .h(px(28.))
+                                    .px(px(6.))
+                                    .rounded(px(4.))
+                                    .bg(t.bg_input)
+                                    .border_1()
+                                    .border_color(t.border)
+                                    .flex()
+                                    .items_center()
+                                    .child(
+                                        Input::new(&curr_input)
+                                            .id(SharedString::from(format!("{}-curr-val", row_id)))
+                                            .appearance(false)
+                                            .bordered(false)
+                                            .focus_bordered(false)
+                                            .px(px(0.))
+                                            .text_sm()
+                                            .font_family(".SystemMonoFont"),
+                                    ),
+                            )
+                            // Secret toggle button
+                            .child(
+                                div()
+                                    .id(SharedString::from(format!("{}-secret", row_id)))
+                                    .w(px(64.))
+                                    .h(px(24.))
+                                    .rounded(px(4.))
+                                    .bg(if secret {
+                                        gpui_kit::Hsla {
+                                            a: 0.15,
+                                            ..t.status_4xx
+                                        }
+                                    } else {
+                                        gpui_kit::transparent_black()
+                                    })
+                                    .hover(|s| s.bg(t.bg_card))
+                                    .cursor_pointer()
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .text_xs()
+                                    .text_color(if secret { t.status_4xx } else { t.text_muted })
+                                    .on_click(move |_, _, cx| {
+                                        tbl_sec.update(cx, |this, cx| {
+                                            this.toggle_row_secret_by_key(&kin_sec, cx);
+                                        });
+                                    })
+                                    .child(if secret {
+                                        div()
+                                            .flex()
+                                            .items_center()
+                                            .gap(px(4.))
+                                            .child(Icon::new(IconName::Lock).size(px(14.)))
+                                            .child(" Secret")
+                                            .into_any_element()
+                                    } else {
+                                        div()
+                                            .flex()
+                                            .items_center()
+                                            .gap(px(4.))
+                                            .child(Icon::new(IconName::LockOpen).size(px(14.)))
+                                            .child(" Visible")
+                                            .into_any_element()
+                                    }),
+                            )
+                            // Delete row button
+                            .child(
+                                div()
+                                    .id(SharedString::from(format!("{}-del", row_id)))
+                                    .w(px(24.))
+                                    .h(px(24.))
+                                    .rounded(px(4.))
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .cursor_pointer()
+                                    .hover(|s| s.bg(t.bg_card).text_color(t.status_5xx))
+                                    .text_color(t.text_muted)
+                                    .on_click(move |_, _, cx| {
+                                        tbl_del.update(cx, |this, cx| {
+                                            this.delete_row_by_key(&kin_del, cx);
+                                        });
+                                    })
+                                    .child(Icon::new(IconName::Trash).small()),
+                            )
+                    })),
             )
     }
 }
@@ -627,5 +661,16 @@ mod tests {
         });
         vcx.run_until_parked();
         assert_eq!(table.read_with(&vcx, |t, _| t.row_count()), 0);
+
+        // 4. Target variable focus sets target_variable and rebuilds for target environment
+        modal_state.update(&mut vcx, |m, cx| {
+            m.open_env_modal_for_variable(Some("globals".to_string()), "BASE_URL".to_string(), cx);
+        });
+        vcx.run_until_parked();
+        assert_eq!(table.read_with(&vcx, |t, _| t.row_count()), 1);
+        assert_eq!(
+            table.read_with(&vcx, |t, _| t.target_variable()),
+            Some("BASE_URL".to_string())
+        );
     }
 }

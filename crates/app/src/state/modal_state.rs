@@ -60,6 +60,7 @@ pub struct EnvModalUi {
     pub is_open: bool,
     pub selected_id: Option<String>,
     pub filter_query: String,
+    pub target_variable: Option<String>,
 }
 
 /// Import-modal local UI state.
@@ -152,6 +153,7 @@ impl ModalState {
 
     pub fn toggle_env_modal(&mut self, cx: &mut Context<Self>) {
         self.env_modal.is_open = !self.env_modal.is_open;
+        self.env_modal.target_variable = None;
         if self.env_modal.is_open {
             cx.emit(ModalEvent::EnvModalSelectionChanged);
         }
@@ -160,18 +162,34 @@ impl ModalState {
 
     pub fn open_env_modal(&mut self, cx: &mut Context<Self>) {
         self.env_modal.is_open = true;
+        self.env_modal.target_variable = None;
         cx.emit(ModalEvent::EnvModalSelectionChanged);
         cx.notify();
     }
 
     pub fn close_env_modal(&mut self, cx: &mut Context<Self>) {
         self.env_modal.is_open = false;
+        self.env_modal.target_variable = None;
         cx.notify();
     }
 
     pub fn open_env_modal_with_id(&mut self, env_id: Option<String>, cx: &mut Context<Self>) {
         self.env_modal.is_open = true;
         self.env_modal.selected_id = env_id;
+        self.env_modal.target_variable = None;
+        cx.emit(ModalEvent::EnvModalSelectionChanged);
+        cx.notify();
+    }
+
+    pub fn open_env_modal_for_variable(
+        &mut self,
+        env_id: Option<String>,
+        var_name: String,
+        cx: &mut Context<Self>,
+    ) {
+        self.env_modal.is_open = true;
+        self.env_modal.selected_id = env_id;
+        self.env_modal.target_variable = Some(var_name);
         cx.emit(ModalEvent::EnvModalSelectionChanged);
         cx.notify();
     }
@@ -369,6 +387,7 @@ impl ModalState {
         }
         if self.env_modal.is_open {
             self.env_modal.is_open = false;
+            self.env_modal.target_variable = None;
             cx.notify();
             return true;
         }

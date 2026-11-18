@@ -6,7 +6,7 @@ pub use render::{
 };
 pub use var_tokens::{attach_missing_var_tokens, RetokenizeGuard};
 
-use crate::state::EnvironmentState;
+use crate::state::{EnvironmentState, ModalState};
 use anyhow::Result;
 use gpui_kit::component::input::{CompletionProvider, InlineToken, InputContent};
 use gpui_kit::component::RopeExt;
@@ -340,6 +340,38 @@ pub fn build_tokenized_content(text: &str, env: &EnvironmentState) -> InputConte
     content
 }
 
+/// Handles clicking on an inline variable token in any input:
+/// 1. For dynamic variables (`$timestamp`, `$guid`, etc.): opens environment modal.
+/// 2. For environment variables: resolves which environment defines it (active env, globals, or custom).
+///    If missing, automatically creates the variable in the target environment.
+/// 3. Opens the Environment Modal, switches to the target environment, scrolls to the variable row,
+///    highlights the row, and focuses its current value input with all text selected.
+pub fn handle_variable_token_click(
+    env_state: &Entity<EnvironmentState>,
+    modal_state: &Entity<ModalState>,
+    var_name: &str,
+    cx: &mut App,
+) {
+    if var_name.starts_with('$') {
+        modal_state.update(cx, |st, cx| {
+            st.open_env_modal(cx);
+        });
+        return;
+    }
+
+    let target_env_id = env_state.update(cx, |env_st, cx| {
+        let env_id = env_st.resolve_variable_env_id(var_name);
+        if !env_st.has_variable(&env_id, var_name) {
+            env_st.add_variable_with_key(&env_id, var_name.to_string(), cx);
+        }
+        env_id
+    });
+
+    modal_state.update(cx, |modal_st, cx| {
+        modal_st.open_env_modal_for_variable(Some(target_env_id), var_name.to_string(), cx);
+    });
+}
+
 pub struct EnvCompletionProvider {
     env_state: Entity<EnvironmentState>,
 }
@@ -636,5 +668,43 @@ mod tests {
         assert_eq!(state.selected_index, 2);
         assert!(state.dismissed);
         assert_eq!(state.last_query, Some("foo".to_string()));
+    }
+
+    #[gpui_kit::test]
+    fn test_handle_variable_token_click(cx: &mut gpui_kit::TestAppContext) {
+        use gpui_kit::AppContext as _;
+        let dir = tempfile::tempdir().unwrap();
+        let store: std::sync::Arc<dyn zest_core::storage::WorkspaceStore> =
+            std::sync::Arc::new(zest_core::storage::FsWorkspaceStore::new(dir.path()));
+        store.init_workspace("TokenClickWS").unwrap();
+
+        let env_state =
+            cx.new(|_| EnvironmentState::new(store.clone(), "TokenClickWS".to_string(), None));
+        let modal_state = cx.new(|_| ModalState::default());
+
+        // 1. Dynamic variable ($guid) opens modal without changing target_variable
+        cx.update(|cx| {
+            handle_variable_token_click(&env_state, &modal_state, "$guid", cx);
+        });
+        assert!(modal_state.read_with(cx, |m, _| m.env_modal.is_open));
+        assert_eq!(
+            modal_state.read_with(cx, |m, _| m.env_modal.target_variable.clone()),
+            None
+        );
+
+        // 2. Custom/missing variable creates the variable in active environment ("local") and targets it
+        cx.update(|cx| {
+            handle_variable_token_click(&env_state, &modal_state, "API_KEY", cx);
+        });
+        assert!(modal_state.read_with(cx, |m, _| m.env_modal.is_open));
+        assert_eq!(
+            modal_state.read_with(cx, |m, _| m.env_modal.target_variable.clone()),
+            Some("API_KEY".to_string())
+        );
+        assert_eq!(
+            modal_state.read_with(cx, |m, _| m.env_modal.selected_id.clone()),
+            Some("local".to_string())
+        );
+        assert!(env_state.read_with(cx, |e, _| e.has_variable("local", "API_KEY")));
     }
 }

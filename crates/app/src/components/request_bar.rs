@@ -1,8 +1,8 @@
 use crate::components::completion::env_autocomplete::{
     build_tokenized_content, detect_unclosed_env_var, get_env_completions, get_variable_details,
-    get_variable_kind_and_color, handle_autocomplete_keydown, render_candidate_detail_card,
-    render_candidate_row, variable_value_tooltip, AutocompleteNavState, CANDIDATE_DETAIL_GAP,
-    CANDIDATE_LIST_WIDTH,
+    get_variable_kind_and_color, handle_autocomplete_keydown, handle_variable_token_click,
+    render_candidate_detail_card, render_candidate_row, variable_value_tooltip,
+    AutocompleteNavState, CANDIDATE_DETAIL_GAP, CANDIDATE_LIST_WIDTH,
 };
 use crate::components::status_badge::{MethodBadge, ProtocolBadge};
 use crate::state::{edit_active_request, EnvironmentState, ModalState, RequestSessionState};
@@ -252,6 +252,7 @@ impl RenderOnce for RequestBar {
                             .items_center()
                             .child({
                                 let ws_env = ws_clone.clone();
+                                let env_for_click = ws_clone.clone();
                                 let modal_click = modal_clone.clone();
 
                                 Input::new(&self.url_input)
@@ -292,10 +293,14 @@ impl RenderOnce for RequestBar {
                                             .cursor_pointer()
                                             .child(var_name)
                                     })
-                                    .on_token_click(move |_, _window, cx| {
-                                        modal_click.update(cx, |state, cx| {
-                                            state.toggle_env_modal(cx);
-                                        });
+                                    .on_token_click(move |ev, _window, cx| {
+                                        let var_name = ev.token().id().to_string();
+                                        handle_variable_token_click(
+                                            &env_for_click,
+                                            &modal_click,
+                                            &var_name,
+                                            cx,
+                                        );
                                     })
                             }),
                     )

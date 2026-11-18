@@ -1,8 +1,8 @@
 use crate::components::completion::env_autocomplete::{
     build_tokenized_content, detect_unclosed_env_var, get_env_completions, get_variable_details,
-    get_variable_kind_and_color, handle_autocomplete_keydown, render_candidate_detail_card,
-    render_candidate_row, variable_value_tooltip, AutocompleteNavState, CANDIDATE_DETAIL_GAP,
-    CANDIDATE_LIST_WIDTH,
+    get_variable_kind_and_color, handle_autocomplete_keydown, handle_variable_token_click,
+    render_candidate_detail_card, render_candidate_row, variable_value_tooltip,
+    AutocompleteNavState, CANDIDATE_DETAIL_GAP, CANDIDATE_LIST_WIDTH,
 };
 use crate::state::{EnvironmentState, ModalState};
 use crate::theme::theme;
@@ -79,6 +79,7 @@ where
     let selected_index = auto_state.read(cx).selected_index;
 
     let env_for_token = env_state.cloned();
+    let env_for_click = env_state.cloned();
     let modal_for_click = modal_state.cloned();
     let inp_id_for_tok = input_id.clone();
 
@@ -183,10 +184,13 @@ where
                                 .cursor_pointer()
                                 .child(var_name)
                         })
-                        .on_token_click(move |_, _window, cx| {
-                            if let Some(modal) = &modal_for_click {
+                        .on_token_click(move |ev, _window, cx| {
+                            let var_name = ev.token().id().to_string();
+                            if let (Some(env_ent), Some(modal_ent)) = (&env_for_click, &modal_for_click) {
+                                handle_variable_token_click(env_ent, modal_ent, &var_name, cx);
+                            } else if let Some(modal) = &modal_for_click {
                                 modal.update(cx, |st, cx| {
-                                    st.toggle_env_modal(cx);
+                                    st.open_env_modal(cx);
                                 });
                             }
                         }),
