@@ -4,26 +4,26 @@ Tài liệu này xác định lộ trình phát triển toàn diện của **Zes
 
 ---
 
-## 🎯 Giai đoạn 0: Nền Tảng Cốt Lõi — Gửi HTTP Request & Xem Phản Hồi (Core HTTP Foundation)
+## 🎯 Giai đoạn 0: Nền Tảng Cốt Lõi — Gửi HTTP Request & Xem Phản Hồi (Core HTTP Foundation) — ✅ Đã hoàn thành (100% Implemented & Tested)
 *Mục tiêu: Xây dựng nền móng vững chắc cho ứng dụng: bộ soạn thảo request đa định dạng, tầng mạng async decoupled từ luồng UI, đo lường thời gian chính xác, trình xem phản hồi đa năng và hệ thống lưu trữ file phẳng Git-native.*
 
-1. **Bộ Soạn Thảo HTTP Request Đa Dạng (Request Builder):**
+1. **Bộ Soạn Thảo HTTP Request Đa Dạng (Request Builder) — ✅ Đã hoàn thành:**
    - Hỗ trợ đầy đủ phương thức: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `HEAD`, `OPTIONS`.
    - Bảng Query Parameters & Headers động kèm checkbox bật/tắt từng dòng, tự động encode URL.
    - Hỗ trợ các định dạng Request Body: None, JSON (đánh số dòng, format, syntax highlight), Form URL-Encoded, Multipart Form-Data, Raw Text, Binary File.
    - Cấu hình request: Network Timeout, Follow Redirects, Validate TLS Certificates.
-2. **Tầng Mạng Tokio Decoupled & Huỷ Yêu Cầu In-Flight:**
+2. **Tầng Mạng Tokio Decoupled & Huỷ Yêu Cầu In-Flight — ✅ Đã hoàn thành:**
    - Thực thi request hoàn toàn trên luồng Tokio riêng biệt, không block UI 120 FPS của GPUI.
    - Nút **Cancel** ngắt kết nối socket ngay lập tức khi request đang chạy.
    - Stream thông báo trạng thái kết nối liên tục về giao diện.
-3. **Đo Lường Thời Gian Chính Xác Cao (High-Precision Timing Breakdown):**
+3. **Đo Lường Thời Gian Chính Xác Cao (High-Precision Timing Breakdown) — ✅ Đã hoàn thành:**
    - Đo lường chi tiết: DNS Lookup, TCP Connect, TLS Handshake, TTFB (Time to First Byte), Content Download, và Total Duration.
    - Hiển thị thanh đo trực quan dạng popover khi di chuột vào thời gian phản hồi.
-4. **Trình Xem Phản Hồi Đa Năng (Response Viewer & Inspector):**
+4. **Trình Xem Phản Hồi Đa Năng (Response Viewer & Inspector) — ✅ Đã hoàn thành:**
    - Thanh trạng thái trực quan: Status Code phân màu (2xx/3xx/4xx/5xx), Thời gian ms, Dung lượng byte/KB/MB.
    - Các tab kiểm tra: Response Body (`Pretty` / `Raw`), Request Sent (request thực tế gửi qua mạng), Headers, Cookies.
    - Xử lý mượt mà payload lớn (10MB+) bằng cơ chế dòng ảo hóa (virtualized line rendering), không gây đơ lag giao diện.
-5. **Hệ Thống Lưu Trữ File Phẳng Git-Native (Storage Foundation):**
+5. **Hệ Thống Lưu Trữ File Phẳng Git-Native (Storage Foundation) — ✅ Đã hoàn thành:**
    - Lưu trữ collections và requests dưới dạng file YAML phẳng (Git-friendly, không lock-in).
    - Biến môi trường cơ bản với cơ chế thay thế `{{var}}` trong URL, headers, params, auth, body.
    - Lưu response cache vào file `.loc` cạnh file request.
@@ -113,31 +113,20 @@ Tài liệu này xác định lộ trình phát triển toàn diện của **Zes
 ---
 
 ## 🎯 Giai đoạn 4: Công cụ Developer & Nâng Cấp Giao Diện (DevTools & UI Polish)
-*Mục tiêu: Vượt trội hơn Postman/Insomnia về trải nghiệm lập trình viên và tốc độ.*
+*Mục tiêu: Nâng cao trải nghiệm lập trình viên với các công cụ tiện ích, bộ lọc dữ liệu thông minh và giao diện quản lý Git trực quan.*
 
-1. **Code Snippet Generator (16+ targets):**
-   - Sinh mã nguồn từ request sang các ngôn ngữ phổ biến:
-     - Rust (`reqwest`, `ureq`)
-     - Python (`requests`, `httpx`, `aiohttp`)
-     - JavaScript / TypeScript (`fetch`, `axios`)
-     - Node.js (`http`, `node-fetch`)
-     - Go (`net/http`)
-     - Java (`HttpClient`, `OkHttp`)
-     - C# (`HttpClient`, `RestSharp`)
-     - PHP (`curl`, `Guzzle`)
-     - cURL, HTTPie, Wget.
-2. **Response Inspector Đa Dạng (Previews & Diff):**
+1. **Trình Xem & Lọc Phản Hồi Nâng Cao (Advanced Response Previews & Query Bar):**
    - **JSONPath / XPath Query Bar:** Gõ `$.data.items[*].id` để lọc nhanh dữ liệu JSON hiển thị ngay lập tức.
    - **Preview Renderer:**
      - Ảnh (PNG, JPEG, SVG, WebP, GIF).
      - HTML Web Preview (sandboxed).
      - PDF viewer & Hex viewer.
-   - **Response Diff:** So sánh 2 response từ History xem trường nào vừa thay đổi.
-3. **Mô Hình Phiên Làm Việc Single-Active Request, Write-Behind Persistence & History Navigation — ✅ Đã hoàn thành (SL-001):**
+   *(Lưu ý: Không hỗ trợ Code Snippet Generator đa ngôn ngữ và Response Diff để giữ ứng dụng gọn nhẹ, tập trung vào trải nghiệm cốt lõi; người dùng có thể sử dụng "Copy as cURL")*.
+2. **Mô Hình Phiên Làm Việc Single-Active Request, Write-Behind Persistence & History Navigation — ✅ Đã hoàn thành (SL-001):**
    - Áp dụng mô hình gọn nhẹ chuẩn Insomnia/Yaak: `RequestSessionState` chỉ trỏ tới active request, dữ liệu mượn on-demand từ `WorkspaceDataState`.
    - History Navigation: ngăn xếp lịch sử chuyển đổi request với phím tắt `NavigateBack` (`Cmd+[`), `NavigateForward` (`Cmd+]`).
    - Tự động lưu ngầm hợp nhất qua `PersistenceCoordinator` (coalesced write-behind theo `PersistTarget` với quản lý `revision` và `workspace_gen`).
-4. **Tích hợp Git Trực Quan trong Ứng dụng — ✅ Đã hoàn thành:**
+3. **Tích hợp Git Trực Quan trong Ứng dụng — ✅ Đã hoàn thành:**
    - Panel quản lý Git (`GitModal` & `GitService`): Xem danh sách file bị sửa đổi (`git status`), lịch sử commit, quản lý nhánh và remotes.
    - Visual Diff: So sánh trực quan thay đổi của file với commit trước.
    - Nút Commit, Discard Changes, Fetch, Pull, Push trực tiếp không cần mở terminal, tự động đồng bộ với file watcher.
@@ -145,7 +134,7 @@ Tài liệu này xác định lộ trình phát triển toàn diện của **Zes
 ---
 
 ## 🎯 Giai đoạn 5: Khả năng Tương Thích & Nhập/Xuất (Import/Export & Migration)
-*Mục tiêu: Giúp người dùng chuyển ngay lập tức toàn bộ dữ liệu đang có từ Postman, Insomnia, OpenAPI và cURL sang Zest mà không mất bất kỳ cấu hình nào.*
+*Mục tiêu: Giúp người dùng chuyển ngay lập tức toàn bộ dữ liệu đang có từ Postman, OpenAPI và cURL sang Zest mà không mất bất kỳ cấu hình nào.*
 
 1. **Import cURL Tự Động Khi Dán Trực Tiếp (Inline cURL Paste) — ✅ Đã hoàn thành (100% Implemented & Tested):**
    - Tự động nhận diện lệnh cURL khi dán vào thanh URL input.
@@ -154,16 +143,14 @@ Tài liệu này xác định lộ trình phát triển toàn diện của **Zes
 2. **Import Postman Collections & Environments — ✅ Đã hoàn thành:**
    - Hỗ trợ chuẩn Postman Collection v2.0 và v2.1 format (`importers/postman.rs`).
    - Chuyển đổi chính xác: Folders, Requests, URL params, Headers, Body, Auth, Scripts, Environments.
-3. **Import Insomnia Export:**
-   - Hỗ trợ Insomnia Export v4 (YAML & JSON).
-   - Mapping Workspaces, Request Groups (Folders), Requests, Environments.
-4. **Import OpenAPI / Swagger (v3.0, v3.1) — ✅ Đã hoàn thành:**
+3. **Import OpenAPI / Swagger (v3.0, v3.1) — ✅ Đã hoàn thành:**
    - Đọc OpenAPI specs (YAML/JSON) kèm bộ phân giải `$ref` chống đệ quy vòng lặp (`importers/openapi.rs`).
    - Tự động sinh cây request theo Tag/Path kèm query parameters, headers, auth và sample JSON body từ schema.
-5. **Export đa định dạng:**
+4. **Export đa định dạng:**
    - Xuất Collection sang Postman v2.1 JSON (để chia sẻ cho đồng nghiệp vẫn dùng Postman).
    - Xuất sang OpenAPI 3.0 YAML/JSON.
    - Xuất sang định dạng Bruno (`.bru`) và cURL (đã hỗ trợ "Copy as cURL").
+*(Lưu ý: Không hỗ trợ import Insomnia để tinh giản bộ chuyển đổi định dạng và giảm thiểu phụ thuộc không cần thiết)*.
 
 ---
 

@@ -16,12 +16,12 @@ Thư mục `docs/` này bao gồm toàn bộ thiết kế chi tiết, kiến tr�
 | [**roadmap.md**](./roadmap.md) | Lộ trình phát triển 7 giai đoạn từ Phase 0 (Foundation) đến Phase 6 (Automation Suite) |
 | [**technical-debt.md**](./technical-debt.md) | Danh mục nợ kỹ thuật tập trung: SL-001..SL-006, PERF, CC, TD, Kiến trúc LRU Cache, State decoupling |
 | [**specs/00-core-http-foundation.md**](./specs/00-core-http-foundation.md) | Giai đoạn 0: Nền tảng cốt lõi — Gửi HTTP Request, timing breakdown, xem response, File storage |
-| [**specs/01-import-export-compatibility.md**](./specs/01-import-export-compatibility.md) | Chuẩn tương thích: Import/Export Postman v2.1, Insomnia v4, OpenAPI 3.0/3.1, HAR, Bruno |
+| [**specs/01-import-export-compatibility.md**](./specs/01-import-export-compatibility.md) | Chuẩn tương thích: Import/Export Postman v2.1, OpenAPI 3.0/3.1, cURL, HAR, Bruno |
 | [**specs/02-scripting-and-testing-engine.md**](./specs/02-scripting-and-testing-engine.md) | Pre-request Script, Test Script, Request Chaining (lấy token nhét vào env), JS Sandbox |
 | [**specs/03-protocols-graphql-websocket-grpc.md**](./specs/03-protocols-graphql-websocket-grpc.md) | Mở rộng giao thức: GraphQL (Introspection, Explorer), WebSocket (real-time stream), SSE, gRPC |
 | [**specs/04-advanced-auth-and-inheritance.md**](./specs/04-advanced-auth-and-inheritance.md) | OAuth 2.0 (PKCE, Refresh Token), AWS SigV4, mTLS Certs, Kế thừa Auth từ Folder/Workspace |
 | [**specs/05-git-sync-and-collaboration.md**](./specs/05-git-sync-and-collaboration.md) | Tích hợp Git UI trong app: Branching, Commit, Push/Pull, Visual Diff cho API changes |
-| [**specs/06-developer-tools-codegen-diff-docs.md**](./specs/06-developer-tools-codegen-diff-docs.md) | Sinh Code (15+ ngôn ngữ), JSONPath Filter, Dynamic Fake Vars (`{{$uuid}}`), Response Diff |
+| [**specs/06-developer-tools-codegen-diff-docs.md**](./specs/06-developer-tools-codegen-diff-docs.md) | JSONPath Filter, Dynamic Fake Vars (`{{$uuid}}`), API Docs Generator |
 | [**specs/07-ui-ux-enhancements.md**](./specs/07-ui-ux-enhancements.md) | Single-active Request & History Navigation, Preview ảnh/HTML, Cookie Manager nâng cao, Theme |
 | [**specs/08-collection-runner-and-testing-suite.md**](./specs/08-collection-runner-and-testing-suite.md) | Collection Runner, Data-Driven CSV/JSON, Headless CLI (Newman alt), Mock Server, Benchmark |
 | [**specs/09-phase1-implementation-notes.md**](./specs/09-phase1-implementation-notes.md) | Giai đoạn 1 (Hoàn thành): Scripting QuickJS (`rquickjs`), Pre-request/Tests, Request Chaining, Faker |
@@ -40,10 +40,10 @@ Thư mục `docs/` này bao gồm toàn bộ thiết kế chi tiết, kiến tr�
 | **Biến môi trường `{{var}}`** | Đầy đủ | Đầy đủ | **Đầy đủ + Dynamic Fake Vars (`{{$uuid}}`, `{{$timestamp}}`,...)** | **Đầy đủ + Dynamic Fake Vars** |
 | **Timing Breakdown** | DNS, TLS, TTFB | TTFB, Total | DNS, TCP, TLS, TTFB, Download | DNS, TCP, TLS, TTFB, Download |
 | **Response Cache & Examples** | Cloud sync | Local Storage | Local Response Cache (.loc) | Examples & Response Cache |
-| **Import Postman / Insomnia** | N/A | Postman | **Postman v2.0/v2.1 (Đã hoàn thành)** | **1-Click Import hoàn chỉnh** |
+| **Import Postman / OpenAPI** | N/A | Postman | **Postman v2.0/v2.1 & OpenAPI (Đã hoàn thành)** | **Postman v2.1, OpenAPI 3.0/3.1 (Không hỗ trợ Insomnia)** |
 | **Import cURL khi dán (URL bar)** | Có | Có | **Đầy đủ (Auto-detect & parse đa nền tảng)** | **Đầy đủ** |
 | **Import OpenAPI 3.0 / 3.1** | Có | Có | **Đầy đủ (JSON/YAML + Cycle-safe `$ref`)** | **Full Spec Tree Generator** |
-| **Code Generator** | 15+ languages | 12+ languages | cURL | **16+ languages & frameworks** |
+| **Code Generator / Snippet** | 15+ languages | 12+ languages | Copy as cURL | **Copy as cURL (Không hỗ trợ Code Snippet Generator)** |
 | **Pre-request & Test Scripts** | JavaScript sandbox | JavaScript sandbox | **Embedded QuickJS (`rquickjs`) Sandbox** | **Embedded QuickJS (`rquickjs`) Sandbox** |
 | **Request Chaining** | `pm.environment.set` | Tag filters | **Tự động qua `z.environment.set`** | **Tự động qua Test Script** |
 | **GraphQL Client** | Có (Schema explorer) | Có | **Dual-pane Query/Variables + Introspection + Deep Autocomplete** | **Dedicated GraphQL IDE** |

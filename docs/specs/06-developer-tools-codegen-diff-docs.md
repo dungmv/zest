@@ -1,30 +1,8 @@
 # Đặc tả Kỹ thuật: Bộ Công Cụ Developer — Sinh Mã Nguồn, So Sánh Response & Biến Ảo (Developer Tools Specification)
 
-## 1. Trình Sinh Mã Nguồn Đa Ngôn Ngữ (Code Snippet Generator)
+## 1. Trình Sinh Mã Nguồn Đa Ngôn Ngữ (Code Snippet Generator) — ⚠️ [ĐÃ LOẠI BỎ KHỎI SCOPE]
 
-### 1.1 Mục Tiêu
-Giúp kỹ sư sau khi test thành công một API trên Zest có thể sao chép ngay đoạn mã tương ứng để dán trực tiếp vào dự án backend hoặc frontend của họ mà không phải viết lại từ đầu.
-
-### 1.2 Danh Sách Ngôn Ngữ & Framework Hỗ Trợ (16 Targets)
-
-| Ngôn ngữ / Công cụ | Thư viện / Cú pháp | Ví dụ hiển thị |
-|---|---|---|
-| **cURL** | Shell CLI | `curl -X POST "https://api.com/v1" -H "..." -d '...'` |
-| **Rust** | `reqwest` (async) | `let res = reqwest::Client::new().post(...).send().await?;` |
-| **Rust** | `ureq` (blocking) | `let res = ureq::post("...").set("...", "...").send_json(...)?;` |
-| **JavaScript** | `fetch` (ES6 native) | `const res = await fetch("...", { method: "POST", ... });` |
-| **JavaScript / TS** | `axios` | `const res = await axios.post("...", data, { headers });` |
-| **Node.js** | `http` (native) | `const req = http.request(options, (res) => { ... });` |
-| **Python** | `requests` | `response = requests.post("...", json=data, headers=headers)` |
-| **Python** | `httpx` (async) | `async with httpx.AsyncClient() as client: r = await client.post(...)` |
-| **Go** | `net/http` | `req, err := http.NewRequestWithContext(ctx, "POST", url, body)` |
-| **Java** | `java.net.http.HttpClient` | `HttpRequest.newBuilder().uri(...).POST(...).build();` |
-| **Java / Kotlin** | `OkHttp` | `val request = Request.Builder().url(...).post(body).build()` |
-| **C# / .NET** | `HttpClient` | `var response = await client.PostAsync("...", content);` |
-| **PHP** | `cURL` | `$ch = curl_init(); curl_setopt_array($ch, [...]);` |
-| **PHP** | `Guzzle` | `$res = $client->request('POST', '...', ['json' => $data]);` |
-| **Swift** | `URLSession` | `let task = URLSession.shared.dataTask(with: request) { ... }` |
-| **Dart / Flutter** | `http` | `final response = await http.post(url, headers: h, body: b);` |
+> **Lưu ý:** Tính năng Code Snippet Generator đa ngôn ngữ đã được loại bỏ khỏi lộ trình phát triển của Zest để giữ ứng dụng gọn nhẹ và tối ưu hiệu năng. Thay vào đó, Zest tập trung hỗ trợ tính năng xuất lệnh **"Copy as cURL"** chất lượng cao và cURL auto-paste.
 
 ---
 
@@ -59,13 +37,9 @@ Phía trên cửa sổ Response Body, bổ sung một thanh nhập liệu **JSON
 
 ---
 
-## 4. So Sánh Response (Response Diff Viewer)
+## 4. So Sánh Response (Response Diff Viewer) — ⚠️ [ĐÃ LOẠI BỎ KHỎI SCOPE]
 
-- Người dùng có thể chọn bất kỳ 2 lần gửi trong **Response History** để mở màn hình so sánh Diff.
-- Phân tích sự khác biệt ở:
-  1. Status Code (ví dụ: `200 OK` vs `404 Not Found`).
-  2. Headers (ví dụ: thay đổi `ETag`, `Set-Cookie`).
-  3. Body JSON (hiển thị giao diện 2 cột với highlight màu xanh lá cho trường được thêm và màu đỏ cho trường bị xóa).
+> **Lưu ý:** Tính năng so sánh 2 response từ History (Response Diff) đã được loại bỏ khỏi phạm vi phát triển để giảm độ phức tạp giao diện và tối ưu tài nguyên lưu trữ bộ nhớ của hệ thống History/LRU Cache.
 
 ---
 

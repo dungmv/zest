@@ -3,12 +3,13 @@
 ## 1. Bối cảnh & Mục tiêu
 Khi Postman chuyển đổi sang chính sách lưu trữ đám mây bắt buộc (Cloud-only) vào năm 2023 và Insomnia đưa ra yêu cầu đăng nhập tài khoản bắt buộc ở phiên bản 8, hàng triệu kỹ sư trên thế giới đã tìm kiếm giải pháp thay thế mã nguồn mở, lưu trữ cục bộ (Local-first / Git-friendly).
 
-Để Zest trở thành sự thay thế khả dĩ nhất, rào cản di chuyển dữ liệu (Migration Barrier) phải bằng **0**. Người dùng phải có khả năng:
+Để Zest trở thành sự thay thế khả dĩ nhất, rào cản di chuyển dữ liệu (Migration Barrier) phải bằng **0**. Người dùng có thể:
 1. Nhập nguyên vẹn Collections, Folders, Requests và Environments từ Postman (v2.0 & v2.1).
-2. Nhập Workspaces từ Insomnia (v4 export).
-3. Nhập từ tài liệu kỹ thuật OpenAPI 3.0 / 3.1 & Swagger 2.0.
-4. Nhập từ tệp log trình duyệt HAR (HTTP Archive).
+2. Nhập từ tài liệu kỹ thuật OpenAPI 3.0 / 3.1 & Swagger 2.0.
+3. Nhập cURL tự động khi dán trực tiếp.
+4. Nhập từ tệp log trình duyệt HAR (HTTP Archive) hoặc Bruno.
 5. Xuất ngược lại ra Postman v2.1 hoặc OpenAPI để chia sẻ cho các đối tác hoặc thành viên nhóm vẫn đang sử dụng các công cụ cũ.
+*(Lưu ý: Import từ Insomnia không được hỗ trợ)*.
 
 ---
 
@@ -26,7 +27,6 @@ crates/core/src/
     │   ├── mod.rs
     │   ├── body.rs       # Form/multipart body extraction (normalize_mime_type, collect_schema_form_fields)
     │   └── tests.rs
-    ├── insomnia.rs       # Insomnia v4 YAML/JSON parser (planned)
     ├── har.rs            # HAR 1.2 log parser (planned)
     └── bruno.rs          # Bruno .bru parser (planned)
 ```
