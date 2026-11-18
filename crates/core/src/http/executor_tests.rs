@@ -268,3 +268,105 @@ async fn test_send_streaming_cancelled_before_connect() {
     let result = executor.send_streaming(resolved, None, tx, cancel_rx).await;
     assert!(matches!(result, Err(RequestError::Cancelled)));
 }
+
+#[test]
+fn test_multipart_request_headers_and_boundary() {
+    use crate::models::{KeyValuePair, MultipartItem, RequestBody};
+
+    let mut item = RequestItem::new(
+        "mp-1",
+        "MP",
+        HttpMethod::Post,
+        "http://127.0.0.1:8080/upload",
+    );
+    item.body = RequestBody::Multipart {
+        items: vec![MultipartItem::new_text("username", "alice")],
+    };
+    item.headers
+        .push(KeyValuePair::new("Content-Type", "multipart/form-data"));
+    let resolved = ResolvedRequest::from_item(&item, None).unwrap();
+    let executor = ReqwestExecutor::new();
+    let builder = executor.build_request_builder(&resolved, false).unwrap();
+    let req = builder.build().unwrap();
+    let ct = req.headers().get("content-type").unwrap().to_str().unwrap();
+    eprintln!("ACTUAL CONTENT-TYPE: {}", ct);
+    assert!(
+        ct.contains("boundary="),
+        "Expected boundary in Content-Type, got: {}",
+        ct
+    );
+}
+
+#[tokio::test]
+async fn test_multipart_form_data_wire_transfer() {
+    use crate::models::{KeyValuePair, MultipartItem, RequestBody};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    let temp_file = tempfile::NamedTempFile::new().unwrap();
+    let file_path = temp_file.path().to_str().unwrap().to_string();
+    std::fs::write(&file_path, b"dummy file content 12345").unwrap();
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server_url = format!("http://127.0.0.1:{}/upload", port);
+
+    let (captured_tx, mut captured_rx) = tokio::sync::mpsc::channel(1);
+
+    tokio::spawn(async move {
+        if let Ok((mut socket, _)) = listener.accept().await {
+            let mut buf = vec![0u8; 4096];
+            let mut total_read = Vec::new();
+            // Read until we get the full multipart payload
+            loop {
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                if n == 0 {
+                    break;
+                }
+                total_read.extend_from_slice(&buf[..n]);
+                // If we've read the end boundary or enough bytes
+                if total_read
+                    .windows(4)
+                    .any(|w| w == b"--\r\n" || w == b"--\n")
+                    || total_read.len() > 500
+                {
+                    let _ = socket
+                        .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK")
+                        .await;
+                    break;
+                }
+            }
+            let _ = captured_tx.send(total_read).await;
+        }
+    });
+
+    let mut item = RequestItem::new("mp-test", "Multipart Test", HttpMethod::Post, &server_url);
+    item.body = RequestBody::Multipart {
+        items: vec![
+            MultipartItem::new_text("title", "Greetings"),
+            MultipartItem::new_file("attachment", &file_path),
+        ],
+    };
+    item.headers
+        .push(KeyValuePair::new("Content-Type", "multipart/form-data"));
+
+    let resolved = ResolvedRequest::from_item(&item, None).unwrap();
+    let executor = ReqwestExecutor::new();
+    let res = executor
+        .send(resolved, None)
+        .await
+        .expect("send multipart request");
+    assert_eq!(res.status_code, 200);
+
+    let raw_request = captured_rx.recv().await.expect("captured request");
+    let req_str = String::from_utf8_lossy(&raw_request);
+    eprintln!("RAW REQUEST FROM CLIENT:\n{}", req_str);
+
+    assert!(req_str
+        .to_ascii_lowercase()
+        .contains("content-type: multipart/form-data; boundary="));
+    assert!(req_str.contains("name=\"title\""));
+    assert!(req_str.contains("Greetings"));
+    assert!(req_str.contains("name=\"attachment\""));
+    assert!(req_str.contains("dummy file content 12345"));
+}

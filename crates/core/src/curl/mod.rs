@@ -353,8 +353,12 @@ pub fn request_to_curl(item: &RequestItem, env: Option<&Environment>) -> String 
     parts.push(format!("'{}'", url.replace('\'', "'\\''")));
 
     // Headers
+    let is_multipart = matches!(&item.body, RequestBody::Multipart { .. });
     for h in &item.headers {
         if h.enabled && !h.key.trim().is_empty() {
+            if is_multipart && h.key.eq_ignore_ascii_case("content-type") {
+                continue;
+            }
             let k = interpolator.interpolate_cow(&h.key);
             let v = interpolator.interpolate_cow(&h.value);
             parts.push("-H".to_string());
@@ -437,6 +441,30 @@ pub fn request_to_curl(item: &RequestItem, env: Option<&Environment>) -> String 
                         k.replace('\'', "'\\''"),
                         v.replace('\'', "'\\''")
                     ));
+                }
+            }
+        }
+        RequestBody::Multipart { items } => {
+            for item in items {
+                if item.enabled && !item.key.trim().is_empty() {
+                    let k = interpolator.interpolate_cow(&item.key);
+                    parts.push("-F".to_string());
+                    if item.is_file {
+                        let path = item.file_path.as_deref().unwrap_or("").trim();
+                        let p = interpolator.interpolate_cow(path);
+                        parts.push(format!(
+                            "'{}=@{}'",
+                            k.replace('\'', "'\\''"),
+                            p.replace('\'', "'\\''")
+                        ));
+                    } else {
+                        let v = interpolator.interpolate_cow(&item.value);
+                        parts.push(format!(
+                            "'{}={}'",
+                            k.replace('\'', "'\\''"),
+                            v.replace('\'', "'\\''")
+                        ));
+                    }
                 }
             }
         }

@@ -98,6 +98,9 @@ pub fn resolve_fake_vars_in_request(req_item: &mut RequestItem) {
             for item in items {
                 resolve_fake_vars_in_place(&mut item.key);
                 resolve_fake_vars_in_place(&mut item.value);
+                if let Some(fp) = item.file_path.as_mut() {
+                    resolve_fake_vars_in_place(fp);
+                }
             }
         }
         _ => {}

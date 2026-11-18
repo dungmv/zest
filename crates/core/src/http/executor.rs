@@ -252,6 +252,9 @@ impl ReqwestExecutor {
 
         let mut header_map = HeaderMap::new();
         for (k, v) in &req.headers {
+            if req.multipart.is_some() && k.eq_ignore_ascii_case("content-type") {
+                continue;
+            }
             if let (Ok(h_name), Ok(h_val)) = (HeaderName::from_str(k), HeaderValue::from_str(v)) {
                 header_map.insert(h_name, h_val);
             }
@@ -262,18 +265,33 @@ impl ReqwestExecutor {
             let mut form = reqwest::multipart::Form::new();
             for item in multipart_items {
                 if item.is_file {
-                    if let Some(path) = &item.file_path {
-                        if let Ok(file_bytes) = std::fs::read(path) {
-                            let file_name = std::path::Path::new(path)
-                                .file_name()
-                                .and_then(|n| n.to_str())
-                                .unwrap_or("file")
-                                .to_string();
-                            let part =
-                                reqwest::multipart::Part::bytes(file_bytes).file_name(file_name);
-                            form = form.part(item.key.clone(), part);
-                        }
+                    let path = item.file_path.as_deref().unwrap_or("").trim();
+                    if path.is_empty() {
+                        return Err(RequestError::Other(format!(
+                            "No file selected for multipart field '{}'",
+                            item.key
+                        )));
                     }
+                    let file_bytes = std::fs::read(path).map_err(|e| {
+                        RequestError::Other(format!(
+                            "Failed to read file '{}' for multipart field '{}': {}",
+                            path, item.key, e
+                        ))
+                    })?;
+                    let file_name = std::path::Path::new(path)
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("file")
+                        .to_string();
+                    let mime = mime_guess::from_path(path)
+                        .first_or_octet_stream()
+                        .to_string();
+                    let part = reqwest::multipart::Part::bytes(file_bytes.clone())
+                        .file_name(file_name.clone());
+                    let part = part.mime_str(&mime).unwrap_or_else(|_| {
+                        reqwest::multipart::Part::bytes(file_bytes).file_name(file_name)
+                    });
+                    form = form.part(item.key.clone(), part);
                 } else {
                     form = form.text(item.key.clone(), item.value.clone());
                 }

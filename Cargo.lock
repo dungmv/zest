@@ -10159,6 +10159,7 @@ dependencies = [
  "hex",
  "hmac",
  "md-5",
+ "mime_guess",
  "notify 6.1.1",
  "prost",
  "prost-reflect",

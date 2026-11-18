@@ -150,3 +150,32 @@ fn test_export_curl() {
     assert!(exported.contains("curl -X GET 'https://httpbin.org/get'"));
     assert!(exported.contains("-H 'Accept: application/json'"));
 }
+
+#[test]
+fn test_export_curl_multipart() {
+    use crate::models::MultipartItem;
+
+    let mut req = RequestItem::new(
+        "ws1",
+        "Test Multipart",
+        HttpMethod::Post,
+        "https://httpbin.org/post",
+    );
+    req.headers
+        .push(KeyValuePair::new("Content-Type", "multipart/form-data"));
+    req.headers
+        .push(KeyValuePair::new("Authorization", "Bearer token123"));
+    req.body = RequestBody::Multipart {
+        items: vec![
+            MultipartItem::new_text("username", "john_doe"),
+            MultipartItem::new_file("photo", "/path/to/avatar.png"),
+        ],
+    };
+    let exported = request_to_curl(&req, None);
+    assert!(exported.contains("curl -X POST 'https://httpbin.org/post'"));
+    assert!(exported.contains("-H 'Authorization: Bearer token123'"));
+    // Content-Type: multipart/form-data must NOT be explicitly included in -H to allow curl to generate boundary
+    assert!(!exported.contains("Content-Type: multipart/form-data"));
+    assert!(exported.contains("-F 'username=john_doe'"));
+    assert!(exported.contains("-F 'photo=@/path/to/avatar.png'"));
+}
