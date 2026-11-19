@@ -2,7 +2,7 @@
 name: interop-spec-converters
 description: >-
   Use this skill when developing, refactoring, or testing API specification importers,
-  exporters (OpenAPI, Postman, Insomnia, cURL, HAR), and code generation in core and app.
+  exporters (OpenAPI, Postman, cURL, HAR), and code generation in core and app.
 ---
 
 # Interoperability, Importers & Spec Converters Guide
@@ -20,6 +20,7 @@ This skill governs data migration and conversion between external formats and Ze
 | **Postman Collection** | Postman v2.0, v2.1 (JSON) | ✅ Implemented | `crates/core/src/importers/postman.rs` |
 | **cURL** | Bash, PowerShell (`` ` ``), CMD (`^`) parser & exporter | ✅ Implemented | `crates/core/src/curl/mod.rs` |
 | **Insomnia** | Insomnia Export v4 (JSON & YAML) | 📋 Planned (Spec 01) | [`docs/specs/01-import-export-compatibility.md`](docs/specs/01-import-export-compatibility.md) |
+| **Insomnia** | Insomnia Export v4 (JSON & YAML) | 🚫 Not supported (removed 2026-11-20 to keep converters lean) | — |
 | **HAR** | HTTP Archive 1.2 | 📋 Planned (Spec 01) | [`docs/specs/01-import-export-compatibility.md`](docs/specs/01-import-export-compatibility.md) |
 | **Multi-Language Codegen** | Python, JS/TS, Rust, Go, Java, C#, PHP, HTTPie | 📋 Planned (Spec 06) | [`docs/specs/06-developer-tools-codegen-diff-docs.md`](docs/specs/06-developer-tools-codegen-diff-docs.md) |
 
