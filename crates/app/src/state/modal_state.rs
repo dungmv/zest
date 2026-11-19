@@ -70,10 +70,13 @@ pub struct ImportModalUi {
     pub target_folder_rel: Option<String>,
 }
 
-/// Export-modal local UI state.
+/// Export-modal local UI state. `target_folder_id` scopes the export to one
+/// folder subtree; `None` exports the whole workspace.
 #[derive(Debug, Clone, Default)]
 pub struct ExportModalUi {
     pub is_open: bool,
+    pub target_folder_id: Option<String>,
+    pub target_folder_name: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -287,6 +290,21 @@ impl ModalState {
 
     pub fn open_export_modal(&mut self, cx: &mut Context<Self>) {
         self.export_modal.is_open = true;
+        self.export_modal.target_folder_id = None;
+        self.export_modal.target_folder_name = None;
+        cx.notify();
+    }
+
+    /// Opens the export modal scoped to one folder subtree.
+    pub fn open_export_modal_for_folder(
+        &mut self,
+        folder_id: String,
+        folder_name: String,
+        cx: &mut Context<Self>,
+    ) {
+        self.export_modal.is_open = true;
+        self.export_modal.target_folder_id = Some(folder_id);
+        self.export_modal.target_folder_name = Some(folder_name);
         cx.notify();
     }
 

@@ -201,6 +201,10 @@ pub fn render_folder_row(
             let modal_settings = ctx.modal.clone();
             let f_id_settings = f_id.clone();
 
+            let modal_exp = ctx.modal.clone();
+            let f_id_exp = f_id.clone();
+            let f_name_exp = f_name_str.clone();
+
             let sb_menu = ctx.sidebar.clone();
             let ed_menu = ctx.ed.clone();
             let f_id_menu = f_id.clone();
@@ -402,6 +406,24 @@ pub fn render_folder_row(
                                     cx,
                                 );
                             });
+                        }),
+                )
+                .item(
+                    gpui_kit::component::menu::PopupMenuItem::new("Export OpenAPI...")
+                        .icon(IconName::Upload)
+                        .on_click({
+                            let modal_e = modal_exp.clone();
+                            let f_id_e = f_id_exp.clone();
+                            let f_name_e = f_name_exp.clone();
+                            move |_, _, cx| {
+                                modal_e.update(cx, |state, cx| {
+                                    state.open_export_modal_for_folder(
+                                        f_id_e.clone(),
+                                        f_name_e.clone(),
+                                        cx,
+                                    );
+                                });
+                            }
                         }),
                 )
                 .separator()

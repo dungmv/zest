@@ -221,16 +221,24 @@ impl WorkspaceDataState {
     /// Cheap counts for the export modal: (exportable requests, folders,
     /// requests skipped because their protocol is not OpenAPI-representable).
     pub fn openapi_export_stats(&self) -> (usize, usize, usize) {
-        let exportable = self
-            .requests
+        self.openapi_export_stats_for(None)
+    }
+
+    /// Folder-scoped variant of [`Self::openapi_export_stats`]: counts only
+    /// requests inside `folder_id`'s subtree. Folders are counted from the
+    /// subtree too.
+    pub fn openapi_export_stats_for(&self, folder_id: Option<&str>) -> (usize, usize, usize) {
+        let scope_ids = folder_id.map(|id| self.folder_subtree_ids(id));
+        let scoped_requests = self.requests_in_scope(scope_ids.as_deref());
+        let exportable = scoped_requests
             .iter()
             .filter(|r| r.protocol.uses_http_transport())
             .count();
-        (
-            exportable,
-            self.folders.len(),
-            self.requests.len() - exportable,
-        )
+        // Exclude the export root itself from the folder count.
+        let folders = scope_ids
+            .as_ref()
+            .map_or(self.folders.len(), |ids| ids.len() - 1);
+        (exportable, folders, scoped_requests.len() - exportable)
     }
 
     /// Builds an OpenAPI 3.0 export of the whole workspace as the input for
@@ -240,9 +248,24 @@ impl WorkspaceDataState {
     /// exporter and reported as warnings. GraphQL requests are flattened to
     /// their HTTP transport shape first (same conversion as the send pipeline).
     pub fn build_openapi_export(&self) -> zest_core::exporters::OpenApiExport {
-        let exported: Vec<zest_core::importers::ImportedRequest> = self
-            .requests
-            .iter()
+        self.build_openapi_export_for(None)
+    }
+
+    /// Folder-scoped variant of [`Self::build_openapi_export`]: only requests
+    /// inside `folder_id`'s subtree are exported, tags become the folder chain
+    /// relative to the export root, and the folder name is the document title.
+    pub fn build_openapi_export_for(
+        &self,
+        folder_id: Option<&str>,
+    ) -> zest_core::exporters::OpenApiExport {
+        let scope_ids = folder_id.map(|id| self.folder_subtree_ids(id));
+        let scoped_requests = self.requests_in_scope(scope_ids.as_deref());
+        // Length of the export root's own ancestor chain; request chains share
+        // this prefix, so skipping it keeps tags relative to the export root.
+        let root_chain_len = folder_id.map(|id| self.get_folder_hierarchy(Some(id)).len());
+
+        let exported: Vec<zest_core::importers::ImportedRequest> = scoped_requests
+            .into_iter()
             .map(|req| {
                 let effective = if req.protocol == Protocol::GraphQL {
                     req.to_graphql_http_item().unwrap_or_else(|_| req.clone())
@@ -250,6 +273,12 @@ impl WorkspaceDataState {
                     req.clone()
                 };
                 let (headers, auth) = self.resolve_request_hierarchy(&effective);
+                let folder_path: Vec<String> = self
+                    .get_folder_hierarchy(req.folder_id.as_deref())
+                    .into_iter()
+                    .skip(root_chain_len.unwrap_or(0))
+                    .map(|f| f.name.clone())
+                    .collect();
                 zest_core::importers::ImportedRequest {
                     name: effective.name.clone(),
                     method: effective.method,
@@ -263,25 +292,71 @@ impl WorkspaceDataState {
                     body: effective.body.clone(),
                     script: None,
                     examples: effective.examples.clone(),
-                    folder_path: self
-                        .get_folder_hierarchy(req.folder_id.as_deref())
-                        .into_iter()
-                        .map(|f| f.name.clone())
-                        .collect(),
+                    folder_path,
                     // RequestItem carries no description field.
                     description: None,
                 }
             })
             .collect();
 
-        let (title, description) = match &self.active_workspace {
-            Some(w) => (
-                w.name.clone(),
-                Some(w.description.clone()).filter(|d| !d.trim().is_empty()),
+        let (title, description) = match folder_id {
+            Some(id) => (
+                self.folders
+                    .iter()
+                    .find(|f| f.id == id)
+                    .map(|f| f.name.clone())
+                    .unwrap_or_else(|| "Folder".to_string()),
+                None,
             ),
-            None => ("Workspace".to_string(), None),
+            None => match &self.active_workspace {
+                Some(w) => (
+                    w.name.clone(),
+                    Some(w.description.clone()).filter(|d| !d.trim().is_empty()),
+                ),
+                None => ("Workspace".to_string(), None),
+            },
         };
         zest_core::exporters::requests_to_openapi(&title, description.as_deref(), &exported)
+    }
+
+    /// Requests whose folder is in the given id set (workspace-scope when
+    /// `scope_ids` is `None`).
+    fn requests_in_scope(&self, scope_ids: Option<&[String]>) -> Vec<&RequestItem> {
+        match scope_ids {
+            None => self.requests.iter().collect(),
+            Some(ids) => self
+                .requests
+                .iter()
+                .filter(|r| {
+                    r.folder_id
+                        .as_deref()
+                        .is_some_and(|fid| ids.iter().any(|id| id == fid))
+                })
+                .collect(),
+        }
+    }
+
+    /// Ids of `folder_id` and all its descendant folders (cycle-safe walk over
+    /// the flat folder list).
+    fn folder_subtree_ids(&self, folder_id: &str) -> Vec<String> {
+        let mut ids = vec![folder_id.to_string()];
+        let mut i = 0;
+        while i < ids.len() {
+            let current = ids[i].clone();
+            i += 1;
+            let child_ids: Vec<String> = self
+                .folders
+                .iter()
+                .filter(|f| f.parent_id.as_deref() == Some(current.as_str()))
+                .map(|f| f.id.clone())
+                .collect();
+            for child in child_ids {
+                if !ids.contains(&child) {
+                    ids.push(child);
+                }
+            }
+        }
+        ids
     }
 
     pub fn reload_all(&mut self) {
@@ -638,5 +713,110 @@ impl WorkspaceDataState {
             ),
             None => "No auth configured in parent hierarchy".to_string(),
         }
+    }
+}
+
+#[cfg(test)]
+mod openapi_export_scope_tests {
+    use super::*;
+    use zest_core::models::HttpMethod;
+
+    /// Builds a minimal state (no GPUI context): a `users` folder containing an
+    /// `auth` subfolder, requests spread across the tree, and one WebSocket
+    /// request that the exporter must skip.
+    fn state_with_tree() -> WorkspaceDataState {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let state = WorkspaceDataState {
+            store: Arc::new(FsWorkspaceStore::new(tmp.path())),
+            executor: Arc::new(ReqwestExecutor::new()),
+            workspace_path: tmp.path().to_path_buf(),
+            workspace_meta: WorkspaceMeta::default(),
+            active_workspace: None,
+            folders: vec![
+                Folder {
+                    id: "f-users".into(),
+                    workspace_id: "ws".into(),
+                    name: "users".into(),
+                    parent_id: None,
+                    sort_order: 0,
+                    headers: Vec::new(),
+                    auth: Auth::Inherit,
+                },
+                Folder {
+                    id: "f-auth".into(),
+                    workspace_id: "ws".into(),
+                    name: "auth".into(),
+                    parent_id: Some("f-users".into()),
+                    sort_order: 0,
+                    headers: Vec::new(),
+                    auth: Auth::Inherit,
+                },
+            ],
+            requests: vec![
+                {
+                    let mut r = RequestItem::new("ws", "List users", HttpMethod::Get, "/users");
+                    r.folder_id = Some("f-users".into());
+                    r
+                },
+                {
+                    let mut r = RequestItem::new("ws", "Login", HttpMethod::Post, "/auth/login");
+                    r.folder_id = Some("f-auth".into());
+                    r
+                },
+                RequestItem::new("ws", "Root ping", HttpMethod::Get, "/ping"),
+                {
+                    let mut r = RequestItem::new_with_protocol(
+                        "ws",
+                        "Live feed",
+                        HttpMethod::Get,
+                        "/feed",
+                        Protocol::WebSocket,
+                    );
+                    r.folder_id = Some("f-auth".into());
+                    r
+                },
+            ],
+            scratch_request: RequestItem::new("ws", "scratch", HttpMethod::Get, "/"),
+            parse_errors: HashMap::new(),
+            pins: Vec::new(),
+            cookies: Vec::new(),
+            recent_workspaces: Vec::new(),
+            tree_version: 0,
+            url_version: 0,
+        };
+        // Keep the tempdir alive for the whole test run by leaking it: the
+        // store never touches disk during export (pure in-memory projection).
+        std::mem::forget(tmp);
+        state
+    }
+
+    #[test]
+    fn folder_export_includes_subtree_with_relative_tags() {
+        let state = state_with_tree();
+        let export = state.build_openapi_export_for(Some("f-users"));
+        let paths = export.document["paths"].as_object().expect("paths");
+        // Subtree requests only: the workspace-root request is excluded.
+        assert_eq!(paths.len(), 2);
+        assert!(paths.contains_key("/users"));
+        assert!(paths.contains_key("/auth/login"));
+        // Tags are relative to the export root: direct child has none, deeper
+        // requests carry the subfolder chain only.
+        assert!(export.document["paths"]["/users"]["get"]["tags"].is_null());
+        assert_eq!(
+            export.document["paths"]["/auth/login"]["post"]["tags"],
+            serde_json::json!(["auth"])
+        );
+        assert_eq!(export.document["info"]["title"], "users");
+        // The WebSocket request is skipped with a warning, not exported.
+        assert!(export.warnings.iter().any(|w| w.contains("Live feed")));
+    }
+
+    #[test]
+    fn folder_export_stats_count_subtree_only() {
+        let state = state_with_tree();
+        // (exportable, folders, skipped) inside the `users` subtree.
+        assert_eq!(state.openapi_export_stats_for(Some("f-users")), (2, 1, 1));
+        // Whole-workspace stats are unchanged by folder scoping.
+        assert_eq!(state.openapi_export_stats(), (3, 2, 1));
     }
 }

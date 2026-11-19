@@ -71,16 +71,30 @@ impl RenderOnce for ExportModal {
             .clone();
 
         let format = modal_entity.read(cx).format;
-        let (exportable, folders, skipped) = ws_entity.read(cx).openapi_export_stats();
-        let ws_name = ws_entity
+        let export_modal_ui = &self.modal_state.read(cx).export_modal;
+        let target_folder_id = export_modal_ui.target_folder_id.clone();
+        let target_folder_name = export_modal_ui
+            .target_folder_name
+            .clone()
+            .unwrap_or_else(|| "Folder".to_string());
+        let (exportable, folders, skipped) = ws_entity
             .read(cx)
-            .active_workspace
-            .as_ref()
-            .map(|w| w.name.clone())
-            .unwrap_or_else(|| "Workspace".to_string());
+            .openapi_export_stats_for(target_folder_id.as_deref());
+        let (source_label, source_name) = match &target_folder_id {
+            Some(_) => ("Folder", target_folder_name.as_str()),
+            None => (
+                "Workspace",
+                ws_entity
+                    .read(cx)
+                    .active_workspace
+                    .as_ref()
+                    .map(|w| w.name.as_str())
+                    .unwrap_or("Workspace"),
+            ),
+        };
         let default_file_name = format!(
             "{}.openapi.{}",
-            zest_core::storage::slug::slugify(&ws_name),
+            zest_core::storage::slug::slugify(source_name),
             format.extension()
         );
 
@@ -121,7 +135,7 @@ impl RenderOnce for ExportModal {
                                     .text_xs()
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(t.text_primary)
-                                    .child(format!("Workspace: {}", ws_name)),
+                                    .child(format!("{}: {}", source_label, source_name)),
                             )
                             .child(div().text_xs().text_color(t.text_secondary).child(format!(
                                 "{} requests across {} folders will be exported.",
@@ -281,6 +295,7 @@ impl RenderOnce for ExportModal {
                                 let modal_exec = modal_entity_ref.clone();
                                 let toast_exec = toast_entity.clone();
                                 let st_exec = modal_entity.clone();
+                                let scope_exec = target_folder_id.clone();
 
                                 Button::new("btn-execute-export")
                                     .primary()
@@ -294,6 +309,7 @@ impl RenderOnce for ExportModal {
                                         let format = st_exec.read(cx).format;
                                         let file_name = file_name.clone();
                                         let ws_exec = ws_exec.clone();
+                                        let scope = scope_exec.clone();
                                         let modal_exec = modal_exec.clone();
                                         let toast_exec = toast_exec.clone();
 
@@ -306,7 +322,8 @@ impl RenderOnce for ExportModal {
                                             {
                                                 let path = file.path().to_path_buf();
                                                 let result = ws_exec.update(cx, |ws, _cx| {
-                                                    let export = ws.build_openapi_export();
+                                                    let export = ws
+                                                        .build_openapi_export_for(scope.as_deref());
                                                     let warnings = export.warnings.clone();
                                                     zest_core::exporters::serialize_openapi(
                                                         &export, format,
