@@ -5,7 +5,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use zest_core::http::ReqwestExecutor;
-use zest_core::models::{Auth, Folder, KeyValuePair, RequestItem, StoredCookie, Workspace};
+use zest_core::models::{
+    Auth, Folder, KeyValuePair, Protocol, RequestItem, StoredCookie, Workspace,
+};
 use zest_core::storage::models::{FolderNode, WorkspaceMeta};
 use zest_core::storage::{FsWorkspaceStore, WorkspaceStore};
 use zest_core::transport::{resolve_inherited_headers, InheritedHeader};
@@ -214,6 +216,72 @@ impl WorkspaceDataState {
             zest_core::importers::apply_import_to_workspace(new_store.as_ref(), &result, &options)?;
         self.open_workspace(target_dir, cx);
         Ok(summary)
+    }
+
+    /// Cheap counts for the export modal: (exportable requests, folders,
+    /// requests skipped because their protocol is not OpenAPI-representable).
+    pub fn openapi_export_stats(&self) -> (usize, usize, usize) {
+        let exportable = self
+            .requests
+            .iter()
+            .filter(|r| r.protocol.uses_http_transport())
+            .count();
+        (
+            exportable,
+            self.folders.len(),
+            self.requests.len() - exportable,
+        )
+    }
+
+    /// Builds an OpenAPI 3.0 export of the whole workspace as the input for
+    /// `zest_core::exporters::requests_to_openapi`. Headers/auth are resolved
+    /// to their effective values (workspace + folder chain inheritance) via
+    /// `resolve_request_hierarchy`; WebSocket/gRPC requests are skipped by the
+    /// exporter and reported as warnings. GraphQL requests are flattened to
+    /// their HTTP transport shape first (same conversion as the send pipeline).
+    pub fn build_openapi_export(&self) -> zest_core::exporters::OpenApiExport {
+        let exported: Vec<zest_core::importers::ImportedRequest> = self
+            .requests
+            .iter()
+            .map(|req| {
+                let effective = if req.protocol == Protocol::GraphQL {
+                    req.to_graphql_http_item().unwrap_or_else(|_| req.clone())
+                } else {
+                    req.clone()
+                };
+                let (headers, auth) = self.resolve_request_hierarchy(&effective);
+                zest_core::importers::ImportedRequest {
+                    name: effective.name.clone(),
+                    method: effective.method,
+                    url: effective.url.clone(),
+                    // Keep the original protocol so the exporter can warn on
+                    // non-HTTP-transport requests.
+                    protocol: req.protocol,
+                    params: effective.params.clone(),
+                    headers,
+                    auth,
+                    body: effective.body.clone(),
+                    script: None,
+                    examples: effective.examples.clone(),
+                    folder_path: self
+                        .get_folder_hierarchy(req.folder_id.as_deref())
+                        .into_iter()
+                        .map(|f| f.name.clone())
+                        .collect(),
+                    // RequestItem carries no description field.
+                    description: None,
+                }
+            })
+            .collect();
+
+        let (title, description) = match &self.active_workspace {
+            Some(w) => (
+                w.name.clone(),
+                Some(w.description.clone()).filter(|d| !d.trim().is_empty()),
+            ),
+            None => ("Workspace".to_string(), None),
+        };
+        zest_core::exporters::requests_to_openapi(&title, description.as_deref(), &exported)
     }
 
     pub fn reload_all(&mut self) {

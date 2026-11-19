@@ -146,10 +146,12 @@ Tài liệu này xác định lộ trình phát triển toàn diện của **Zes
 3. **Import OpenAPI / Swagger (v3.0, v3.1) — ✅ Đã hoàn thành:**
    - Đọc OpenAPI specs (YAML/JSON) kèm bộ phân giải `$ref` chống đệ quy vòng lặp (`importers/openapi.rs`).
    - Tự động sinh cây request theo Tag/Path kèm query parameters, headers, auth và sample JSON body từ schema.
-4. **Export đa định dạng:**
-   - Xuất Collection sang Postman v2.1 JSON (để chia sẻ cho đồng nghiệp vẫn dùng Postman).
-   - Xuất sang OpenAPI 3.0 YAML/JSON.
-   - Xuất sang định dạng Bruno (`.bru`) và cURL (đã hỗ trợ "Copy as cURL").
+4. **Export OpenAPI 3.0 — ✅ Đã hoàn thành (phạm vi điều chỉnh 2026-11-20):**
+   - Xuất toàn bộ Workspace sang OpenAPI 3.0 YAML/JSON qua menu workspace → "Export OpenAPI..." (modal chọn định dạng YAML/JSON, save dialog, toast báo cáo cảnh báo).
+   - Mapping đầy đủ: path template `{{var}}` → `{var}` kèm khai báo path parameter, query/header parameters, security schemes (Bearer/Basic/API Key — không xuất secret), requestBody (JSON example / form / multipart / raw / binary), saved examples → responses, GraphQL flatten về HTTP POST, SSE auto `Accept: text/event-stream`.
+   - WebSocket/gRPC không biểu diễn được trong OpenAPI → tự động bỏ qua và báo cáo trong cảnh báo.
+   - Roundtrip đảm bảo: tài liệu xuất ra import ngược lại được bằng Import OpenAPI (test `exporters::openapi::tests::roundtrip_through_importer`).
+   - *(Phạm vi điều chỉnh: chỉ xuất OpenAPI 3.0; bỏ xuất Postman v2.1 JSON và Bruno `.bru` để giữ bộ chuyển đổi gọn nhẹ — quyết định của user 2026-11-20. Xuất từng request cURL đã có sẵn qua "Copy as cURL".)*
 *(Lưu ý: Không hỗ trợ import Insomnia để tinh giản bộ chuyển đổi định dạng và giảm thiểu phụ thuộc không cần thiết)*.
 
 ---

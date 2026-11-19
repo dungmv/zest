@@ -40,6 +40,7 @@ pub fn attach_modal_overlays(
     let show_settings_modal = modal.show_settings_modal;
     let show_workspace_setting_modal = modal.workspace_setting_target.is_some();
     let show_import_modal = modal.import_modal.is_open;
+    let show_export_modal = modal.export_modal.is_open;
     let show_command_palette = modal.show_command_palette;
     let show_about_modal = modal.show_about_modal;
 
@@ -83,6 +84,13 @@ pub fn attach_modal_overlays(
     })
     .when(show_import_modal, |this| {
         this.child(ImportModal::new(
+            ws_entity.clone(),
+            modal_entity.clone(),
+            toast_entity.clone(),
+        ))
+    })
+    .when(show_export_modal, |this| {
+        this.child(ExportModal::new(
             ws_entity.clone(),
             modal_entity.clone(),
             toast_entity.clone(),

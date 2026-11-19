@@ -70,6 +70,12 @@ pub struct ImportModalUi {
     pub target_folder_rel: Option<String>,
 }
 
+/// Export-modal local UI state.
+#[derive(Debug, Clone, Default)]
+pub struct ExportModalUi {
+    pub is_open: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct ModalState {
     pub env_modal: EnvModalUi,
@@ -81,6 +87,7 @@ pub struct ModalState {
     pub cookie_filter_query: String,
     pub workspace_setting_target: Option<WorkspaceSettingTarget>,
     pub import_modal: ImportModalUi,
+    pub export_modal: ExportModalUi,
     pub theme_preference: crate::theme::ThemePreference,
     pub split_layout_vertical: bool,
     pub network: NetworkPrefs,
@@ -98,6 +105,7 @@ impl Default for ModalState {
             cookie_filter_query: String::new(),
             workspace_setting_target: None,
             import_modal: ImportModalUi::default(),
+            export_modal: ExportModalUi::default(),
             theme_preference: crate::theme::ThemePreference::System,
             split_layout_vertical: false,
             network: NetworkPrefs::default(),
@@ -277,6 +285,16 @@ impl ModalState {
         cx.notify();
     }
 
+    pub fn open_export_modal(&mut self, cx: &mut Context<Self>) {
+        self.export_modal.is_open = true;
+        cx.notify();
+    }
+
+    pub fn close_export_modal(&mut self, cx: &mut Context<Self>) {
+        self.export_modal.is_open = false;
+        cx.notify();
+    }
+
     pub fn set_theme_preference(
         &mut self,
         pref: crate::theme::ThemePreference,
@@ -375,6 +393,11 @@ impl ModalState {
             cx.notify();
             return true;
         }
+        if self.export_modal.is_open {
+            self.export_modal.is_open = false;
+            cx.notify();
+            return true;
+        }
         if self.show_settings_modal {
             self.show_settings_modal = false;
             cx.notify();
@@ -398,6 +421,7 @@ impl ModalState {
         self.show_about_modal
             || self.show_command_palette
             || self.import_modal.is_open
+            || self.export_modal.is_open
             || self.show_settings_modal
             || self.workspace_setting_target.is_some()
             || self.env_modal.is_open

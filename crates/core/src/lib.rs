@@ -1,5 +1,6 @@
 pub mod cache;
 pub mod curl;
+pub mod exporters;
 pub mod git;
 pub mod graphql;
 pub mod grpc;

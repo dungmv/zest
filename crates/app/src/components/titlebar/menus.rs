@@ -51,6 +51,7 @@ pub(super) fn render_workspace_switcher(
             let ws_folder = ws_s.clone();
             let ws_clean = ws_s.clone();
             let modal_import = modal_s.clone();
+            let modal_export = modal_s.clone();
             let modal_about = modal_s.clone();
 
             let mut m = menu
@@ -97,6 +98,15 @@ pub(super) fn render_workspace_switcher(
                         .on_click(move |_, _, cx| {
                             modal_import.update(cx, |state, cx| {
                                 state.open_import_modal(None, cx);
+                            });
+                        }),
+                )
+                .item(
+                    PopupMenuItem::new("Export OpenAPI...")
+                        .icon(IconName::Upload)
+                        .on_click(move |_, _, cx| {
+                            modal_export.update(cx, |state, cx| {
+                                state.open_export_modal(cx);
                             });
                         }),
                 )

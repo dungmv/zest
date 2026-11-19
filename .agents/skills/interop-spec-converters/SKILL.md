@@ -7,7 +7,7 @@ description: >-
 
 # Interoperability, Importers & Spec Converters Guide
 
-This skill governs data migration and conversion between external formats and Zest canonical domain models in `zest-core::importers` and `zest-core::curl`.
+This skill governs data migration and conversion between external formats and Zest canonical domain models in `zest-core::importers`, `zest-core::exporters` and `zest-core::curl`.
 
 ---
 
@@ -16,11 +16,26 @@ This skill governs data migration and conversion between external formats and Ze
 | Format | Specification / Version | Status | Module / Spec Reference |
 | :--- | :--- | :---: | :--- |
 | **OpenAPI / Swagger** | OpenAPI 3.0, 3.1 & Swagger 2.0 (JSON & YAML) | ✅ Implemented | `crates/core/src/importers/openapi/` (`mod.rs`, `body.rs`, `tests.rs`) |
+| **OpenAPI Export** | OpenAPI 3.0.3 (YAML & JSON) | ✅ Implemented | `crates/core/src/exporters/openapi/` (`mod.rs`, `tests.rs`) — scope reduced 2026-11-20: OpenAPI-only export (Postman v2.1 / Bruno export dropped) |
 | **Postman Collection** | Postman v2.0, v2.1 (JSON) | ✅ Implemented | `crates/core/src/importers/postman.rs` |
 | **cURL** | Bash, PowerShell (`` ` ``), CMD (`^`) parser & exporter | ✅ Implemented | `crates/core/src/curl/mod.rs` |
 | **Insomnia** | Insomnia Export v4 (JSON & YAML) | 📋 Planned (Spec 01) | [`docs/specs/01-import-export-compatibility.md`](docs/specs/01-import-export-compatibility.md) |
 | **HAR** | HTTP Archive 1.2 | 📋 Planned (Spec 01) | [`docs/specs/01-import-export-compatibility.md`](docs/specs/01-import-export-compatibility.md) |
 | **Multi-Language Codegen** | Python, JS/TS, Rust, Go, Java, C#, PHP, HTTPie | 📋 Planned (Spec 06) | [`docs/specs/06-developer-tools-codegen-diff-docs.md`](docs/specs/06-developer-tools-codegen-diff-docs.md) |
+
+---
+
+## 1a. OpenAPI 3.0 Exporter Principles (`exporters/openapi/`)
+
+- **Neutral DTO reuse**: the export input is `importers::models::ImportedRequest` — the same exchange model the importers produce — so `requests_to_openapi(title, description, &[ImportedRequest]) -> OpenApiExport` is the natural inverse of `parse_openapi` (see the roundtrip test). `OpenApiExport { document: serde_json::Value, warnings }` + `serialize_openapi(&export, OpenApiFileFormat::Yaml|Json)`.
+- **Manual URL split, never `url::Url::parse` for path keys**: the WHATWG parser percent-encodes path braces (`{{userId}}` → `%7BuserId%7D`), destroying templates. `split_request_url` splits `scheme://authority/path?query` by hand so templates stay verbatim; unparseable URLs (e.g. `{{base_url}}/users`) fall back to the raw URL as the path key with no `servers` entry.
+- **Templating**: `{{var}}` → `{var}` in path keys; every `{var}` token emits a required `in: path` parameter (`extract_path_param_names`). Query pairs found in the URL merge with `params` (enabled only, deduped by name+value). `Content-Type` headers are skipped (expressed via requestBody content); SSE requests auto-gain `Accept: text/event-stream`.
+- **Secrets never leave**: Bearer/Basic/ApiKey map to `components.securitySchemes` shapes only — token/username/password/key values are deliberately omitted.
+- **JSON body examples**: parse → on failure substitute `{{token}}` placeholders (`substitute_var_tokens`: quoted tokens keep quotes, bare tokens gain quotes, `$faker` names stripped) → raw text as final fallback.
+- **Protocol filtering**: only `Protocol::uses_http_transport()` requests export; WebSocket/gRPC produce warnings. GraphQL arrives pre-flattened to POST + JSON body app-side via `RequestItem::to_graphql_http_item` (the DTO has no `graphql` field).
+- **Duplicate `(path, method)`**: first definition wins, later ones are dropped with a warning.
+- **Determinism**: `serde_json::Map` is a BTreeMap → top-level keys serialize in sorted order (spec-valid); response statuses are emitted sorted. Do not enable serde_json `preserve_order` to change this — it would change JSON body formatting behavior app-wide.
+- **App wiring**: `WorkspaceDataState::build_openapi_export` (resolves inherited headers/auth via `resolve_request_hierarchy`, builds `folder_path` tags) + `openapi_export_stats` for the modal counts; `components/export_modal/` mirrors `ImportModal` (keyed `ExportModalState.format`, rfd `save_file` + `background_executor` write, toast success + warnings); entry point = workspace switcher dropdown "Export OpenAPI..." (`titlebar/menus.rs`).
 
 ---
 
