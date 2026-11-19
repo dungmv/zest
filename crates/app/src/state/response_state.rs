@@ -35,8 +35,6 @@ pub struct FormattedResponseBody {
     pub is_xml: bool,
     /// Number of JSONPath query matches when a query is active, else `None`.
     pub match_count: Option<usize>,
-    /// JSONPath query error (invalid syntax or non-JSON body) to show inline.
-    pub jsonpath_error: Option<String>,
     pub(crate) cached_format: Option<Arc<CachedResponseFormat>>,
 }
 
@@ -130,6 +128,8 @@ pub struct ResponseState {
     pub view_mode: ResponseViewMode,
     /// Active JSONPath query for the response Body tab (empty = no filter).
     pub jsonpath_query: String,
+    /// Whether the JSONPath filter bar below the response toolbar is visible.
+    pub show_jsonpath_bar: bool,
     pub show_examples_dropdown: bool,
     pub show_timing_popover: bool,
     pub test_results: Vec<TestResult>,
@@ -158,6 +158,7 @@ impl ResponseState {
             active_tab: ResponseTabKind::Response,
             view_mode: ResponseViewMode::Pretty,
             jsonpath_query: String::new(),
+            show_jsonpath_bar: false,
             show_examples_dropdown: false,
             show_timing_popover: false,
             test_results: Vec::new(),
@@ -356,21 +357,18 @@ impl ResponseState {
 
             // Apply the JSONPath query. The result is always pretty JSON
             // because the query runs on parsed data rather than the raw text
-            // view; a syntax error keeps the base display and surfaces inline.
-            let (mut match_count, mut jsonpath_error) = (None, None);
+            // view; incomplete or invalid expressions silently keep the base
+            // display so typing (e.g. `$.`) is never disrupted.
+            let mut match_count = None;
             if !self.jsonpath_query.is_empty() {
-                match &cached_format.parsed_json {
-                    Some(parsed) => {
-                        match zest_core::json_path::run_json_path(parsed, &self.jsonpath_query) {
-                            Ok(result) => {
-                                match_count = Some(result.match_count);
-                                display_text = Arc::new(result.result_text);
-                                lines = Arc::new(result.lines);
-                            }
-                            Err(err) => jsonpath_error = Some(err),
-                        }
+                if let Some(parsed) = &cached_format.parsed_json {
+                    if let Ok(result) =
+                        zest_core::json_path::run_json_path(parsed, &self.jsonpath_query)
+                    {
+                        match_count = Some(result.match_count);
+                        display_text = Arc::new(result.result_text);
+                        lines = Arc::new(result.lines);
                     }
-                    None => jsonpath_error = Some("Response body is not valid JSON".to_string()),
                 }
             }
 
@@ -380,7 +378,6 @@ impl ResponseState {
                 is_json: cached_format.is_json,
                 is_xml: cached_format.is_xml,
                 match_count,
-                jsonpath_error,
                 cached_format: Some(cached_format),
             });
         } else {
@@ -489,6 +486,33 @@ impl ResponseState {
         cx.emit(ResponseEvent::ContentChanged {
             sync_sent_preview: false,
         });
+        cx.notify();
+    }
+
+    /// Toggles the JSONPath filter bar below the response toolbar. Closing the
+    /// bar clears any active query so the full response body is restored.
+    /// Returns the new visibility state.
+    pub fn toggle_jsonpath_bar(&mut self, cx: &mut Context<Self>) -> bool {
+        if self.show_jsonpath_bar {
+            self.close_jsonpath_bar(cx);
+            false
+        } else {
+            self.show_jsonpath_bar = true;
+            cx.notify();
+            true
+        }
+    }
+
+    /// Closes the JSONPath filter bar and clears any active query.
+    pub fn close_jsonpath_bar(&mut self, cx: &mut Context<Self>) {
+        self.show_jsonpath_bar = false;
+        if !self.jsonpath_query.is_empty() {
+            self.jsonpath_query.clear();
+            self.refresh_formatted_body();
+            cx.emit(ResponseEvent::ContentChanged {
+                sync_sent_preview: false,
+            });
+        }
         cx.notify();
     }
 

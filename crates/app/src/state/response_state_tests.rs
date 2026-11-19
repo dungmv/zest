@@ -252,6 +252,7 @@ fn test_toolbar_icons_exist_in_all_assets() {
 
     let assets = AllAssets;
     let icons = [
+        IconName::Funnel.path(),
         IconName::TextWrap.path(),
         IconName::Copy.path(),
         IconName::Download.path(),
@@ -430,4 +431,33 @@ fn test_formatted_body_caching_on_view_mode_toggle() {
     };
     assert_eq!(cache_ptr1, cache_ptr3);
     assert_eq!(display_text3, display_text1);
+}
+
+#[test]
+fn test_jsonpath_incomplete_query_keeps_base_display() {
+    let mut state = ResponseState::new();
+    assert!(!state.show_jsonpath_bar);
+    let payload = r#"{"total": 3, "items": [1, 2, 3]}"#.as_bytes().to_vec();
+    let record = Arc::new(HttpResponseRecord {
+        body: payload,
+        headers: vec![("content-type".to_string(), "application/json".to_string())],
+        ..Default::default()
+    });
+    state.current_response = Some(record);
+    state.refresh_formatted_body();
+    let base_text = state.formatted_body.as_ref().unwrap().display_text.clone();
+
+    // Incomplete query like "$." keeps the base display without match count
+    state.jsonpath_query = "$.".to_string();
+    state.refresh_formatted_body();
+    let fmt_incomplete = state.formatted_body.as_ref().unwrap();
+    assert_eq!(fmt_incomplete.display_text, base_text);
+    assert_eq!(fmt_incomplete.match_count, None);
+
+    // Valid query filters the display and sets match count
+    state.jsonpath_query = "$.total".to_string();
+    state.refresh_formatted_body();
+    let fmt_valid = state.formatted_body.as_ref().unwrap();
+    assert_eq!(&*fmt_valid.display_text, "3");
+    assert_eq!(fmt_valid.match_count, Some(1));
 }

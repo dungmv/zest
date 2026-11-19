@@ -203,6 +203,8 @@ pub(super) fn render_body_tab(
         let is_large_payload = body_len > 10 * 1024 * 1024 || total_lines > 20000;
 
         let rs_toggle = resp_state_clone.clone();
+        let rs_filter = resp_state_clone.clone();
+        let rs_close_filter = resp_state_clone.clone();
         let rs_copy = resp_state_clone.clone();
         let rs_save = resp_state_clone.clone();
         let rs_wrap = resp_state_clone.clone();
@@ -213,6 +215,7 @@ pub(super) fn render_body_tab(
         });
         let req_id_opt = active_id.clone();
         let wrap_lines = resp_s.wrap_lines;
+        let show_jsonpath_bar = resp_s.show_jsonpath_bar;
 
         // Query bar is offered only when the body parsed as JSON (the
         // retained parsed value in CachedResponseFormat is what gets queried).
@@ -221,28 +224,18 @@ pub(super) fn render_body_tab(
             .as_ref()
             .and_then(|f| f.cached_format.as_ref())
             .is_some_and(|cf| cf.parsed_json.is_some());
-        let (jsonpath_matches, jsonpath_error) = resp_s
-            .formatted_body
-            .as_ref()
-            .map_or((None, None), |f| (f.match_count, f.jsonpath_error.clone()));
-        let jsonpath_hint = jsonpath_error
-            .map(|err| {
-                div()
-                    .text_xs()
-                    .max_w(px(260.))
-                    .truncate()
-                    .text_color(t.danger)
-                    .child(err)
-            })
-            .or_else(|| {
-                jsonpath_matches.map(|n| {
-                    div().text_xs().text_color(t.text_muted).child(if n == 1 {
-                        "1 match".to_string()
-                    } else {
-                        format!("{n} matches")
-                    })
+        let jsonpath_matches = resp_s.formatted_body.as_ref().and_then(|f| f.match_count);
+        let jsonpath_hint = jsonpath_matches.map(|n| {
+            div()
+                .flex_shrink_0()
+                .text_xs()
+                .text_color(t.text_muted)
+                .child(if n == 1 {
+                    "1 match".to_string()
+                } else {
+                    format!("{n} matches")
                 })
-            });
+        });
 
         div()
                                     .size_full()
@@ -313,46 +306,38 @@ pub(super) fn render_body_tab(
                                                             .child("Raw")
                                                     })
                                             )
-                                            // JSONPath query bar (JSON bodies only)
-                                            .when(jsonpath_active, |this| {
-                                                this.child(
-                                                    div()
-                                                        .flex_1()
-                                                        .mx(px(8.))
-                                                        .flex()
-                                                        .items_center()
-                                                        .gap(px(8.))
-                                                        .child(
-                                                            div()
-                                                                .flex_1()
-                                                                .max_w(px(420.))
-                                                                .h(px(24.))
-                                                                .px(px(6.))
-                                                                .rounded(px(6.))
-                                                                .bg(t.bg_input)
-                                                                .border_1()
-                                                                .border_color(t.border_subtle)
-                                                                .flex()
-                                                                .items_center()
-                                                                .child(
-                                                                    div().flex_1().child(
-                                                                        Input::new(&jsonpath_input)
-                                                                            .id("response-jsonpath-input")
-                                                                            .appearance(false)
-                                                                            .bordered(false)
-                                                                            .focus_bordered(false)
-                                                                            .cleanable(true),
-                                                                    ),
-                                                                ),
-                                                        )
-                                                        .children(jsonpath_hint),
-                                                )
-                                            })
                                             .child(
                                                 div()
                                                     .flex()
                                                     .items_center()
                                                     .gap(px(6.))
+                                                    // Toggle JSONPath Filter Button (JSON bodies only)
+                                                    .when(jsonpath_active, |this| {
+                                                        let rs_f = rs_filter.clone();
+                                                        let jp_in = jsonpath_input.clone();
+                                                        let filter_icon = if show_jsonpath_bar {
+                                                            Icon::new(IconName::Funnel).text_color(t.primary)
+                                                        } else {
+                                                            Icon::new(IconName::Funnel)
+                                                        };
+                                                        this.child(
+                                                            Button::new("btn-toggle-jsonpath")
+                                                                .ghost()
+                                                                .xsmall()
+                                                                .icon(filter_icon)
+                                                                .tooltip("Filter with JSONPath")
+                                                                .on_click(move |_, window, cx: &mut App| {
+                                                                    let now_open = rs_f.update(cx, |state, cx| {
+                                                                        state.toggle_jsonpath_bar(cx)
+                                                                    });
+                                                                    if now_open {
+                                                                        jp_in.update(cx, |inp, cx| {
+                                                                            inp.focus(window, cx);
+                                                                        });
+                                                                    }
+                                                                }),
+                                                        )
+                                                    })
                                                     // Save as Example Button
                                                     .when_some(req_id_opt.clone(), |this, req_id| {
                                                         if is_viewing_example {
@@ -468,6 +453,63 @@ pub(super) fn render_body_tab(
                                                     }),
                                             ),
                                     )
+                                    // JSONPath filter row (shown below toolbar when toggled)
+                                    .when(jsonpath_active && show_jsonpath_bar, |this| {
+                                        let rs_close = rs_close_filter.clone();
+                                        this.child(
+                                            div()
+                                                .h(px(36.))
+                                                .px(px(8.))
+                                                .border_b_1()
+                                                .border_color(t.border)
+                                                .bg(t.bg_editor)
+                                                .flex()
+                                                .items_center()
+                                                .gap(px(8.))
+                                                .child(
+                                                    div()
+                                                        .flex_1()
+                                                        .min_w_0()
+                                                        .h(px(26.))
+                                                        .px(px(8.))
+                                                        .rounded(px(6.))
+                                                        .bg(t.bg_input)
+                                                        .border_1()
+                                                        .border_color(t.border_subtle)
+                                                        .flex()
+                                                        .items_center()
+                                                        .gap(px(6.))
+                                                        .child(
+                                                            Icon::new(IconName::Funnel)
+                                                                .size(px(13.))
+                                                                .text_color(t.text_muted),
+                                                        )
+                                                        .child(
+                                                            div().flex_1().min_w_0().child(
+                                                                Input::new(&jsonpath_input)
+                                                                    .id("response-jsonpath-input")
+                                                                    .appearance(false)
+                                                                    .bordered(false)
+                                                                    .focus_bordered(false)
+                                                                    .cleanable(true),
+                                                            ),
+                                                        ),
+                                                )
+                                                .children(jsonpath_hint)
+                                                .child(
+                                                    Button::new("btn-close-jsonpath")
+                                                        .ghost()
+                                                        .xsmall()
+                                                        .icon(IconName::Close)
+                                                        .tooltip("Close filter")
+                                                        .on_click(move |_, _, cx: &mut App| {
+                                                            rs_close.update(cx, |state, cx| {
+                                                                state.close_jsonpath_bar(cx);
+                                                            });
+                                                        }),
+                                                ),
+                                        )
+                                    })
                                     // Large payload notice banner
                                     .when(is_large_payload, |this| {
                                         this.child(
