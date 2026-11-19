@@ -209,3 +209,122 @@ fn test_ws_message_format_yaml_contract() {
     let item = round_tripped.into_item("req-1", "ws1", None);
     assert_eq!(item.ws_message_format, WsMessageFormat::Json);
 }
+
+#[test]
+fn test_parse_content_disposition_filename() {
+    // Simple unquoted & quoted
+    assert_eq!(
+        parse_content_disposition_filename("attachment; filename=report.pdf"),
+        Some("report.pdf".to_string())
+    );
+    assert_eq!(
+        parse_content_disposition_filename("inline; filename=\"my report.pdf\""),
+        Some("my report.pdf".to_string())
+    );
+
+    // Semicolon and escaped quote inside quoted string
+    assert_eq!(
+        parse_content_disposition_filename("attachment; filename=\"a;b=c.csv\"; size=42"),
+        Some("a;b=c.csv".to_string())
+    );
+    assert_eq!(
+        parse_content_disposition_filename(r#"attachment; filename="say \"hi\".txt""#),
+        Some(r#"say "hi".txt"#.to_string())
+    );
+
+    // RFC 5987 / RFC 8187 filename* (UTF-8, ISO-8859-1, literal '+')
+    assert_eq!(
+        parse_content_disposition_filename("attachment; filename*=UTF-8''%E2%82%AC%20rates.pdf"),
+        Some("€ rates.pdf".to_string())
+    );
+    assert_eq!(
+        parse_content_disposition_filename(
+            "attachment; filename*=utf-8'vi'b%C3%A1o%20c%C3%A1o.pdf"
+        ),
+        Some("báo cáo.pdf".to_string())
+    );
+    assert_eq!(
+        parse_content_disposition_filename("attachment; filename*=UTF-8''a+b%20c.txt"),
+        Some("a+b c.txt".to_string())
+    );
+    assert_eq!(
+        parse_content_disposition_filename("attachment; filename*=ISO-8859-1''%A3%20rates.pdf"),
+        Some("£ rates.pdf".to_string())
+    );
+
+    // Precedence: filename* overrides filename regardless of order
+    assert_eq!(
+        parse_content_disposition_filename(
+            "attachment; filename=\"fallback.pdf\"; filename*=UTF-8''preferred.pdf"
+        ),
+        Some("preferred.pdf".to_string())
+    );
+    assert_eq!(
+        parse_content_disposition_filename(
+            "attachment; FILENAME*=UTF-8''preferred.pdf; FILENAME=\"fallback.pdf\""
+        ),
+        Some("preferred.pdf".to_string())
+    );
+
+    // Path traversal & directory stripping
+    assert_eq!(
+        parse_content_disposition_filename("attachment; filename=\"../../etc/passwd\""),
+        Some("passwd".to_string())
+    );
+    assert_eq!(
+        parse_content_disposition_filename(r#"attachment; filename="C:\Users\Alice\invoice.pdf""#),
+        Some("invoice.pdf".to_string())
+    );
+    assert_eq!(
+        parse_content_disposition_filename(
+            r#"attachment; filename="C:\\Users\\Alice\\invoice.pdf""#
+        ),
+        Some("invoice.pdf".to_string())
+    );
+
+    // Missing or invalid filenames
+    assert_eq!(parse_content_disposition_filename("attachment"), None);
+    assert_eq!(
+        parse_content_disposition_filename("attachment; filename=\"\""),
+        None
+    );
+    assert_eq!(
+        parse_content_disposition_filename("attachment; filename=\"..\""),
+        None
+    );
+    assert_eq!(
+        parse_content_disposition_filename("attachment; filename=\".\""),
+        None
+    );
+    assert_eq!(
+        parse_content_disposition_filename("attachment; filename=\"   \""),
+        None
+    );
+}
+
+#[test]
+fn test_http_response_record_suggested_filename() {
+    let mut resp = HttpResponseRecord::default();
+    assert_eq!(resp.content_disposition_filename(), None);
+    assert_eq!(resp.suggested_filename(), "response.json");
+
+    resp.headers.push((
+        "Content-Disposition".to_string(),
+        "attachment; filename=\"export.xlsx\"".to_string(),
+    ));
+    assert_eq!(
+        resp.content_disposition_filename(),
+        Some("export.xlsx".to_string())
+    );
+    assert_eq!(resp.suggested_filename(), "export.xlsx");
+
+    // Case-insensitive header name
+    let resp_lower = HttpResponseRecord {
+        headers: vec![(
+            "content-disposition".to_string(),
+            "attachment; filename*=UTF-8''data%20file.csv".to_string(),
+        )],
+        ..Default::default()
+    };
+    assert_eq!(resp_lower.suggested_filename(), "data file.csv");
+}

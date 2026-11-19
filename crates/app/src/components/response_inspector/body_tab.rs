@@ -442,11 +442,15 @@ pub(super) fn render_body_tab(
                                                             .icon(IconName::Download)
                                                             .tooltip("Save to File")
                                                             .on_click(move |_, _, cx: &mut App| {
-                                                                let save_bytes = rs_s.read(cx).current_response.as_ref().map(|r| r.body.clone());
-                                                                if let Some(bytes) = save_bytes {
+                                                                let save_data = rs_s
+                                                                    .read(cx)
+                                                                    .current_response
+                                                                    .as_ref()
+                                                                    .map(|r| (r.body.clone(), r.suggested_filename()));
+                                                                if let Some((bytes, file_name)) = save_data {
                                                                     cx.spawn(async move |cx| {
                                                                         if let Some(file) = rfd::AsyncFileDialog::new()
-                                                                            .set_file_name("response.json")
+                                                                            .set_file_name(&file_name)
                                                                             .save_file()
                                                                             .await
                                                                         {

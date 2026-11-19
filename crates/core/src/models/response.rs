@@ -204,4 +204,139 @@ impl HttpResponseRecord {
                     || v.to_lowercase().contains("text/xml"))
         })
     }
+
+    /// Extracts the filename from the `Content-Disposition` response header, if present.
+    pub fn content_disposition_filename(&self) -> Option<String> {
+        self.headers.iter().find_map(|(k, v)| {
+            if k.eq_ignore_ascii_case("content-disposition") {
+                parse_content_disposition_filename(v)
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Returns the suggested filename when saving this response body to disk.
+    /// Uses the `Content-Disposition` header filename when available, otherwise defaults to `"response.json"`.
+    pub fn suggested_filename(&self) -> String {
+        self.content_disposition_filename()
+            .unwrap_or_else(|| "response.json".to_string())
+    }
+}
+
+/// Parses a `Content-Disposition` header value and extracts the filename,
+/// following RFC 6266 and RFC 5987 / RFC 8187.
+///
+/// Prefers `filename*` (extended parameter with charset and percent-encoding)
+/// over `filename` when both are present. Sanitizes the extracted filename to
+/// prevent path traversal or control characters.
+pub fn parse_content_disposition_filename(header_value: &str) -> Option<String> {
+    let mut filename_ext: Option<String> = None;
+    let mut filename_plain: Option<String> = None;
+
+    for param in split_disposition_params(header_value) {
+        let Some((raw_key, raw_val)) = param.split_once('=') else {
+            continue;
+        };
+        let key = raw_key.trim();
+        let val = raw_val.trim();
+
+        if key.eq_ignore_ascii_case("filename*") {
+            if let Some(decoded) = decode_rfc5987_value(val) {
+                if let Some(clean) = sanitize_filename(&decoded) {
+                    filename_ext = Some(clean);
+                }
+            }
+        } else if key.eq_ignore_ascii_case("filename") {
+            let unquoted = unquote_header_value(val);
+            if let Some(clean) = sanitize_filename(&unquoted) {
+                filename_plain = Some(clean);
+            }
+        }
+    }
+
+    filename_ext.or(filename_plain)
+}
+
+fn split_disposition_params(input: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut start = 0;
+    let mut in_quotes = false;
+    let mut escaped = false;
+
+    for (idx, ch) in input.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match ch {
+            '\\' if in_quotes => escaped = true,
+            '"' => in_quotes = !in_quotes,
+            ';' if !in_quotes => {
+                parts.push(&input[start..idx]);
+                start = idx + 1;
+            }
+            _ => {}
+        }
+    }
+    if start <= input.len() {
+        parts.push(&input[start..]);
+    }
+    parts
+}
+
+fn unquote_header_value(val: &str) -> String {
+    let trimmed = val.trim();
+    if trimmed.len() >= 2 && trimmed.starts_with('"') && trimmed.ends_with('"') {
+        let inner = &trimmed[1..trimmed.len() - 1];
+        let mut out = String::with_capacity(inner.len());
+        let mut chars = inner.chars().peekable();
+        while let Some(ch) = chars.next() {
+            if ch == '\\' {
+                if let Some(&next) = chars.peek() {
+                    if next == '"' || next == '\\' {
+                        out.push(next);
+                        chars.next();
+                        continue;
+                    }
+                }
+            }
+            out.push(ch);
+        }
+        out
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn decode_rfc5987_value(val: &str) -> Option<String> {
+    let unquoted = val.trim().trim_matches('"');
+    let (charset, rest) = unquoted.split_once('\'')?;
+    let (_lang, encoded) = rest.split_once('\'')?;
+    let bytes = urlencoding::decode_binary(encoded.as_bytes());
+
+    if charset.eq_ignore_ascii_case("iso-8859-1")
+        || charset.eq_ignore_ascii_case("latin1")
+        || charset.eq_ignore_ascii_case("latin-1")
+    {
+        Some(bytes.iter().map(|&b| b as char).collect())
+    } else {
+        Some(String::from_utf8_lossy(&bytes).into_owned())
+    }
+}
+
+fn sanitize_filename(raw: &str) -> Option<String> {
+    let basename = raw.rsplit(['/', '\\']).next().unwrap_or("");
+    let cleaned: String = basename
+        .chars()
+        .filter(|c| !c.is_control())
+        .collect::<String>()
+        .trim()
+        .to_string();
+
+    if cleaned.is_empty() || cleaned == "." || cleaned == ".." {
+        None
+    } else {
+        Some(cleaned)
+    }
 }
