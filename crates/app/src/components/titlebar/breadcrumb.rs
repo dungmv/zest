@@ -47,7 +47,8 @@ pub(super) fn render_center_section(
         .h(px(26.))
         .w(px(340.))
         .flex_shrink_0()
-        .px(px(8.))
+        .pl(px(8.))
+        .pr(px(3.))
         .rounded(px(5.))
         .bg(t.bg_card)
         .border_1()
@@ -96,8 +97,11 @@ pub(super) fn render_center_section(
         .child(
             div()
                 .flex_shrink_0()
-                .px(px(4.))
-                .py(px(1.))
+                .h(px(18.))
+                .px(px(5.))
+                .flex()
+                .items_center()
+                .justify_center()
                 .rounded(px(3.))
                 .bg(t.bg_input)
                 .border_1()
@@ -105,6 +109,7 @@ pub(super) fn render_center_section(
                 .text_color(t.text_muted)
                 .font_family(".SystemMonoFont")
                 .text_size(px(10.))
+                .line_height(px(10.))
                 .child(if cfg!(target_os = "macos") {
                     "⌘K"
                 } else {
