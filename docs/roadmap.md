@@ -133,8 +133,9 @@ Tài liệu này xác định lộ trình phát triển toàn diện của **Zes
 
 ---
 
-## 🎯 Giai đoạn 5: Khả năng Tương Thích & Nhập/Xuất (Import/Export & Migration)
+## 🎯 Giai đoạn 5: Khả năng Tương Thích & Nhập/Xuất (Import/Export & Migration) — ✅ Đã hoàn thành (Implemented & Tested)
 *Mục tiêu: Giúp người dùng chuyển ngay lập tức toàn bộ dữ liệu đang có từ Postman, OpenAPI và cURL sang Zest mà không mất bất kỳ cấu hình nào.*
+*Tiến độ: 4/4 — cURL Import ✅, Postman Import ✅, OpenAPI Import ✅, OpenAPI Export ✅ (phạm vi điều chỉnh 2026-11-20: chỉ xuất OpenAPI 3.0, bỏ Postman/Bruno export).*
 
 1. **Import cURL Tự Động Khi Dán Trực Tiếp (Inline cURL Paste) — ✅ Đã hoàn thành (100% Implemented & Tested):**
    - Tự động nhận diện lệnh cURL khi dán vào thanh URL input.
