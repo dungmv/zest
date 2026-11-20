@@ -1,13 +1,14 @@
 ---
 name: request-authoring
 description: >-
-  Use this skill when generating, creating, or editing Zest API requests, folder metadata,
-  collections, environment variables, and workspace directory structures.
+  Use this skill when generating, creating, or editing Zest API requests (HTTP, WebSocket,
+  gRPC, GraphQL, SSE), folder metadata, collections, environment variables, and workspace
+  directory structures.
 ---
 
 # Zest Request Authoring & Workspace Directory Guide
 
-This skill provides the exact specifications, YAML schemas, folder conventions, and scripting patterns needed for any AI agent to generate valid, conflict-free Zest requests and workspaces.
+This skill provides the exact specifications, YAML schemas, folder conventions, and scripting patterns needed for any AI agent to generate valid, conflict-free Zest requests and workspaces across all supported protocols (**HTTP**, **WebSocket**, **gRPC**, **GraphQL**, and **SSE**).
 
 ---
 
@@ -63,15 +64,70 @@ Order your YAML fields as follows:
 1. `name` (string, required)
 2. `method` (string: `GET` | `POST` | `PUT` | `DELETE` | `PATCH` | `HEAD` | `OPTIONS`, default `GET`)
 3. `url` (string, required; supports interpolation like `{{base_url}}/api/v1/resource`)
-4. `params` (array of KeyValuePair, optional)
-5. `headers` (array of KeyValuePair, optional)
-6. `auth` (tagged enum object, optional)
-7. `body` (tagged enum object, optional)
-8. `settings` (object, optional)
-9. `script` (object, optional)
-10. `examples` (**MUST be last** if present, array of example objects)
+4. `protocol` (string: `http` | `websocket` | `grpc` | `graphql` | `sse`, optional; defaults to `http` and is **omitted** for HTTP requests)
+5. `grpc` (object, optional; **only** when `protocol: grpc`)
+6. `graphql` (object, optional; **only** when `protocol: graphql`)
+7. `ws_message_format` (string: `text` | `json`, optional; defaults to `text` and is **omitted** when `text`; used when `protocol: websocket`)
+8. `params` (array of KeyValuePair, optional)
+9. `headers` (array of KeyValuePair, optional)
+10. `auth` (tagged enum object, optional)
+11. `body` (tagged enum object, optional)
+12. `settings` (object, optional)
+13. `script` (object, optional)
+14. `examples` (**MUST be last** if present, array of example objects)
 
-### 3.2 KeyValuePair Object
+### 3.2 Protocols & Protocol-Specific Fields
+
+- **HTTP (`http`, default):** Omit `protocol` completely for standard REST/HTTP requests.
+- **WebSocket (`websocket`):**
+  - Set `protocol: websocket`, `method: GET`, and a `ws://` or `wss://` URL.
+  - Optional `ws_message_format`: `text` (default, omit if `text`) or `json`.
+  ```yaml
+  protocol: websocket
+  ws_message_format: json
+  ```
+- **gRPC (`grpc`):**
+  - Set `protocol: grpc`, `method: POST`, and a `grpc://` or `grpcs://` (or `http://`/`https://`) URL.
+  - Include the `grpc` payload object (`#[serde(deny_unknown_fields)]`):
+    - `proto_path` (optional string): Path to a `.proto` file. Omit when using Server Reflection.
+    - `use_reflection` (boolean, default `true`): Fetch schema via gRPC Server Reflection.
+    - `service` (string): Fully-qualified service name (e.g. `helloworld.Greeter`).
+    - `method` (string): RPC method name within `service` (e.g. `SayHello`).
+    - `message_json` (string): Request message as raw JSON string.
+  ```yaml
+  protocol: grpc
+  grpc:
+    use_reflection: true
+    service: helloworld.Greeter
+    method: SayHello
+    message_json: '{"name": "Zest"}'
+  ```
+- **GraphQL (`graphql`):**
+  - Set `protocol: graphql` and `method: POST`.
+  - Include the `graphql` payload object (`#[serde(deny_unknown_fields)]`):
+    - `query` (string): GraphQL query or mutation document.
+    - `variables` (string, optional/default `""`): Variables as a raw JSON object string. Empty string means no variables.
+    - `operation_name` (optional string): Operation name when the document defines multiple operations.
+  ```yaml
+  protocol: graphql
+  graphql:
+    query: |
+      query GetCountry($code: ID!) {
+        country(code: $code) {
+          name
+          capital
+        }
+      }
+    variables: '{"code": "VN"}'
+    operation_name: GetCountry
+  ```
+- **Server-Sent Events (`sse`):**
+  - Set `protocol: sse` (uses HTTP transport; typically `method: GET` or `POST`, with optional `params`, `headers`, `auth`, `body`).
+  ```yaml
+  protocol: sse
+  ```
+
+### 3.3 KeyValuePair Object
 Headers, query parameters, and url-encoded forms use this structure:
 ```yaml
 name: "Content-Type"       # or 'key'
@@ -80,7 +136,7 @@ enabled: true              # optional, defaults to true
 description: "Optional notes" # optional
 ```
 
-### 3.3 Auth Types
+### 3.4 Auth Types
 Auth is a tagged object using `type`:
 - **Inherit from parent folder/workspace**:
   ```yaml
@@ -114,7 +170,7 @@ Auth is a tagged object using `type`:
     add_to: header       # "header" or "query" (default: "header")
   ```
 
-### 3.4 Request Body Types
+### 3.5 Request Body Types
 Body is a tagged object using `type`:
 - **None**:
   ```yaml
@@ -168,7 +224,7 @@ Body is a tagged object using `type`:
     file_path: "/path/to/archive.zip"
   ```
 
-### 3.5 Request Settings
+### 3.6 Request Settings
 ```yaml
 settings:
   timeout_ms: 30000        # default: 30000 (30 seconds)
@@ -176,7 +232,7 @@ settings:
   validate_tls: true       # default: true
 ```
 
-### 3.6 Script Config (Pre-Request & Post-Response)
+### 3.7 Script Config (Pre-Request & Post-Response)
 Pre-request scripts run before transmission; post-response scripts run after response arrival. Evaluated in a QuickJS sandbox.
 ```yaml
 script:
@@ -190,7 +246,7 @@ script:
     }
 ```
 
-### 3.7 Saved Examples
+### 3.8 Saved Examples
 Examples must be placed at the bottom of the request file:
 ```yaml
 examples:
@@ -205,7 +261,29 @@ examples:
 
 ---
 
-## 4. Folder Metadata File (`_folder.yaml`)
+## 4. Workspace Metadata File (`workspace.yaml`)
+
+The root `workspace.yaml` defines workspace-level metadata, shared headers, and default auth (`#[serde(deny_unknown_fields)]`):
+
+```yaml
+version: 1
+name: "My API Workspace"
+headers:
+  - name: "X-Client"
+    value: "zest"
+    enabled: true
+auth:
+  type: none
+```
+
+- `version`: Schema version (integer, default `1`).
+- `name`: Workspace display name.
+- `headers`: Optional headers inherited by all collections and requests.
+- `auth`: Optional default auth (defaults to `type: none` if omitted).
+
+---
+
+## 5. Folder Metadata File (`_folder.yaml`)
 
 Every directory inside `collections/` can contain a `_folder.yaml` defining folder-level properties:
 
@@ -230,7 +308,7 @@ auth:
 
 ---
 
-## 5. Environment Files (`environments/*.yaml`)
+## 6. Environment Files (`environments/*.yaml`)
 
 Variables can be interpolated in URLs, headers, params, and bodies using `{{variable_name}}`.
 
@@ -249,7 +327,7 @@ variables:
 
 ---
 
-## 6. Complete End-to-End Examples
+## 7. Complete End-to-End Examples
 
 ### Example 1: Standard GET Request with Query Params
 File: `collections/users/list-users.yaml`
@@ -315,4 +393,97 @@ examples:
         value: application/json
         enabled: true
     body: '{"token": "sample-jwt-token-value"}'
+```
+
+### Example 3: WebSocket Request
+File: `collections/realtime/echo-socket.yaml`
+
+```yaml
+name: Echo Socket
+method: GET
+url: "wss://echo.websocket.events"
+protocol: websocket
+ws_message_format: json
+headers:
+  - name: Origin
+    value: "https://example.com"
+    enabled: true
+auth:
+  type: inherit
+```
+
+### Example 4: gRPC Request (Server Reflection)
+File: `collections/grpc/say-hello.yaml`
+
+```yaml
+name: Say Hello
+method: POST
+url: "grpc://localhost:50051"
+protocol: grpc
+grpc:
+  use_reflection: true
+  service: helloworld.Greeter
+  method: SayHello
+  message_json: '{"name": "Zest"}'
+headers:
+  - name: x-request-id
+    value: "{{$guid}}"
+    enabled: true
+auth:
+  type: inherit
+```
+
+*(If using a local `.proto` file instead of Server Reflection, set `use_reflection: false` and `proto_path: "./protos/helloworld.proto"`.)*
+
+### Example 5: GraphQL Query with Variables
+File: `collections/graphql/get-country.yaml`
+
+```yaml
+name: Get Country
+method: POST
+url: "https://countries.trevorblades.com/graphql"
+protocol: graphql
+graphql:
+  query: |
+    query GetCountry($code: ID!) {
+      country(code: $code) {
+        name
+        capital
+        currency
+      }
+    }
+  variables: '{"code": "VN"}'
+  operation_name: GetCountry
+auth:
+  type: none
+```
+
+### Example 6: Server-Sent Events (SSE) Stream
+File: `collections/streaming/chat-completions-stream.yaml`
+
+```yaml
+name: Chat Completions Stream
+method: POST
+url: "{{base_url}}/v1/chat/completions"
+protocol: sse
+headers:
+  - name: Content-Type
+    value: application/json
+    enabled: true
+  - name: Accept
+    value: text/event-stream
+    enabled: true
+auth:
+  type: bearer
+  token: "{{api_key}}"
+body:
+  type: json
+  content: |
+    {
+      "model": "gpt-4o-mini",
+      "stream": true,
+      "messages": [
+        { "role": "user", "content": "Hello!" }
+      ]
+    }
 ```

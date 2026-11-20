@@ -16,7 +16,7 @@ Targeted for **macOS** and **Windows** with real HTTP request execution from the
 - 💾 **100% Filesystem-First:** Workspace data lives as clean, human-readable YAML files. No hidden SQLite database or proprietary locks.
 - 🐙 **Built-in Git Source Control GUI:** Staging, diff viewer, commit history, branch switcher, and remote sync (`push`/`pull`/`fetch`) right inside the app (`Cmd+Shift+G`).
 - 📥 **Universal Importers:** Direct support for OpenAPI 3.0/3.1 (JSON & YAML), Postman Collection v2.1, and bidirectional cURL CLI command translation (`Cmd+I`).
-- 🔌 **Multi-Protocol Client:** Native WebSocket (`ws`/`wss`) with a unified real-time frame log, and gRPC (unary & server streaming) with server reflection or `.proto` schema source.
+- 🔌 **Multi-Protocol Client:** First-class support for HTTP/1.1 & HTTP/2 REST, WebSocket (`ws`/`wss`) with a unified real-time frame log, gRPC (unary & server streaming) with server reflection or `.proto` schemas, GraphQL (query, variables & operation name), and Server-Sent Events (SSE) streaming.
 - 🖱️ **Fluid Drag-and-Drop Organization:** Drag requests and folders with live dropzone indicators, folder nesting, and root un-nesting.
 - 📜 **QuickJS Scripting Sandbox:** Embedded ECMAScript engine with `z.*` APIs, crypto helpers, Faker dynamic variables (`{{$guid}}`, `{{$randomEmail}}`), and test assertion runners.
 - 🔒 **Zero-Leak Secret Separation:** Environment files only commit variable definitions; actual secret values remain strictly local in `.local/secrets/`.
@@ -116,45 +116,20 @@ To prevent noisy diffs and merge conflicts when working in teams:
 
 ---
 
-## 🧱 Codebase Structure
+## 🤖 AI-Assisted Workspace & Collection Authoring
 
-The project is structured as a Cargo virtual workspace with clean separation between UI and the storage trait:
+Because Zest stores everything as clean, deterministic YAML files on disk, you can use AI coding assistants (such as Antigravity, Claude Code, Cursor, or Codex) to scaffold entire workspaces, collections, folders, environments, and multi-protocol requests directly in your repository.
 
-```
-zest/
-├── crates/
-│   ├── core/                  # Pure business logic, models, executor, storage
-│   │   ├── src/
-│   │   │   ├── curl/          # cURL CLI importer and exporter
-│   │   │   ├── git/           # Git integration (status, diffs, branches, stage, commit, sync)
-│   │   │   ├── http/          # HttpExecutor trait & ReqwestExecutor with timing breakdowns
-│   │   │   ├── importers/     # OpenAPI 3.0/3.1 & Postman v2.1 collection parsers and workspace importer
-│   │   │   ├── interpolation.rs # {{var}} interpolation & syntax scanning
-│   │   │   ├── models.rs      # Data models (HttpRequestItem, HttpMethod, Auth, etc.)
-│   │   │   ├── scripting/     # Embedded QuickJS (rquickjs) sandbox, API bridge, faker
-│   │   │   └── storage/       # Filesystem persistence implementation
-│   │   │       ├── fs_ops.rs      # Single-code-path filesystem CRUD operations
-│   │   │       ├── fs_store.rs    # FsWorkspaceStore implementing WorkspaceStore trait
-│   │   │       ├── models.rs      # Plain serde YAML/JSON models
-│   │   │       ├── serialize.rs   # Deterministic LF serialization & atomic write with retry
-│   │   │       ├── slug.rs        # Slugs, stem matching, collisions
-│   │   │       ├── traits.rs      # WorkspaceStore trait
-│   │   │       └── watcher.rs     # Debounced notify filesystem watcher & path suppression
-│   │   └── Cargo.toml
-│   └── app/                   # GPUI desktop application
-│       ├── src/
-│       │   ├── app/           # AppView, RequestComposer, ComposerInputs, InspectorDisplays, Subscriptions
-│       │   ├── components/    # Reusable UI widgets (ResponseInspector, Sidebar, Modals, StatusBadge)
-│       │   ├── platform/      # macOS vs Windows caption buttons & git branch chip
-│       │   ├── services/      # Decoupled execution services (HttpEngine, Runner)
-│       │   ├── settings.rs    # OS config directory AppSettings
-│       │   ├── state/         # Fine-grained entity states (AppState, WorkspaceDataState, RequestSessionState, ResponseState)
-│       │   ├── theme.rs       # Theme tokens & palettes
-│       │   └── main.rs        # App entry point, menus, keyboard shortcuts, split layouts
-│       └── Cargo.toml
-├── Cargo.toml                 # Workspace root
-└── README.md
-```
+This repository includes an agent skill at [`skills/zest/SKILL.md`](skills/zest/SKILL.md) containing the exact YAML schemas, slugification rules, `#[serde(deny_unknown_fields)]` constraints, and end-to-end examples for **HTTP**, **WebSocket**, **gRPC**, **GraphQL**, and **SSE**.
+
+### How to Use
+
+1. **Reference the skill in your AI tool:**
+   - Copy or symlink `skills/zest` into your agent's skills directory (e.g. `.agents/skills/zest` or `~/.claude/skills/zest`), or point your AI assistant directly to [`skills/zest/SKILL.md`](skills/zest/SKILL.md).
+2. **Ask your AI assistant to generate what you need:**
+   - *"Read `skills/zest/SKILL.md` and create a Zest workspace in `./api-workspace` with `local` and `staging` environments plus an `auth` collection."*
+   - *"Using `skills/zest/SKILL.md`, generate Zest requests for our gRPC `Greeter` service, GraphQL queries, and SSE streaming endpoints."*
+3. **Open the workspace in Zest:** Any generated or updated YAML files are picked up immediately on disk.
 
 ---
 
@@ -207,9 +182,6 @@ cargo clippy --workspace --all-targets -- -D warnings
 1. **AST Code-Folding in Response Viewer:**
    - *Current status:* High-performance code editor view with syntax coloring, line numbers, and automatic fallback to a 120 FPS virtualized list (`uniform_list`) for large payloads (>2,000 lines).
    - *Next step:* Full recursive AST syntax folding on brace blocks when `gpui-component` editor AST folding stabilizes.
-2. **Server-Sent Events (SSE) Streaming:**
-   - *Current status:* Multi-protocol support has shipped — WebSocket (`ws`/`wss`) with a unified frame log and gRPC (unary & server streaming, server reflection or `.proto` schema) now live alongside HTTP/1.1 + HTTP/2 REST with timing breakdowns.
-   - *Planned:* Real-time SSE (`text/event-stream`) event feeds for streaming APIs (OpenAI, Anthropic, Gemini).
-3. **GraphQL Visual Query Builder:**
-   - *Current status:* GraphQL queries can be executed via standard POST JSON requests.
-   - *Planned:* Schema introspection, autocomplete, and a visual query/variables builder.
+2. **GraphQL Schema Introspection & Autocomplete:**
+   - *Current status:* Dedicated `graphql` protocol with query, variables, and operation name editors is shipped alongside HTTP, WebSocket, gRPC, and SSE.
+   - *Next step:* Live schema introspection and query/field autocomplete.
