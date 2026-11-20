@@ -6,7 +6,7 @@ pub use render::{
 };
 pub use var_tokens::{attach_missing_var_tokens, RetokenizeGuard};
 
-use crate::state::{EnvironmentState, ModalState};
+use crate::state::{EnvironmentState, ModalKind, ModalPayload, ModalState};
 use anyhow::Result;
 use gpui_kit::component::input::{CompletionProvider, InlineToken, InputContent};
 use gpui_kit::component::RopeExt;
@@ -354,7 +354,7 @@ pub fn handle_variable_token_click(
 ) {
     if var_name.starts_with('$') {
         modal_state.update(cx, |st, cx| {
-            st.open_env_modal(cx);
+            st.open(ModalKind::Environment, None, cx);
         });
         return;
     }
@@ -368,7 +368,14 @@ pub fn handle_variable_token_click(
     });
 
     modal_state.update(cx, |modal_st, cx| {
-        modal_st.open_env_modal_for_variable(Some(target_env_id), var_name.to_string(), cx);
+        modal_st.open(
+            ModalKind::Environment,
+            Some(ModalPayload::Env {
+                env_id: Some(target_env_id),
+                target_variable: Some(var_name.to_string()),
+            }),
+            cx,
+        );
     });
 }
 

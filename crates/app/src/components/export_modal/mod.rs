@@ -1,5 +1,5 @@
 use crate::components::ModalDialog;
-use crate::state::{ModalState, WorkspaceDataState};
+use crate::state::{ModalKind, ModalState, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -102,7 +102,7 @@ impl RenderOnce for ExportModal {
             .on_close({
                 let modal_c = modal_entity_ref.clone();
                 move |_, cx| {
-                    modal_c.update(cx, |m, cx| m.close_export_modal(cx));
+                    modal_c.update(cx, |m, cx| m.close(ModalKind::Export, cx));
                 }
             })
             // Content Body
@@ -280,7 +280,8 @@ impl RenderOnce for ExportModal {
                                     .on_click({
                                         let modal_c = modal_entity_ref.clone();
                                         move |_, _, cx| {
-                                            modal_c.update(cx, |m, cx| m.close_export_modal(cx));
+                                            modal_c
+                                                .update(cx, |m, cx| m.close(ModalKind::Export, cx));
                                         }
                                     }),
                             )
@@ -336,7 +337,7 @@ impl RenderOnce for ExportModal {
                                                         match write_res {
                                                             Ok(()) => {
                                                                 modal_exec.update(cx, |m, cx| {
-                                                                    m.close_export_modal(cx);
+                                                                    m.close(ModalKind::Export, cx);
                                                                 });
                                                                 cx.update(|cx| {
                                                                     crate::notify::success(

@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
     use crate::state::{
-        EnvironmentState, GitActiveModal, GitState, GitTab, ModalState, PersistenceState,
-        SettingsTab, SidebarState, WorkspaceDataState, WorkspaceSettingTarget,
+        EnvironmentState, GitActiveModal, GitState, GitTab, ModalKind, ModalPayload, ModalState,
+        PersistenceState, SettingsTab, SidebarState, WorkspaceDataState, WorkspaceSettingTarget,
     };
     use std::sync::Arc;
     use zest_core::models::{
@@ -70,13 +70,19 @@ mod tests {
 
         let modal_state = cx.new(|_| ModalState::default());
 
-        modal_state.update(cx, |modal, cx| modal.open_settings_modal(cx));
+        modal_state.update(cx, |modal, cx| modal.open(ModalKind::Settings, None, cx));
         assert!(modal_state.read_with(cx, |modal, _| {
             modal.active_modal == Some(crate::state::ModalKind::Settings)
         }));
 
         modal_state.update(cx, |modal, cx| {
-            modal.open_import_modal(Some("folder".to_string()), cx)
+            modal.open(
+                ModalKind::Import,
+                Some(ModalPayload::Import {
+                    target_folder_rel: Some("folder".to_string()),
+                }),
+                cx,
+            )
         });
         assert!(modal_state.read_with(cx, |modal, _| {
             modal.active_modal == Some(crate::state::ModalKind::Import)

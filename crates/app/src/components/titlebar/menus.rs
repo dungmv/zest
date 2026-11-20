@@ -1,4 +1,7 @@
-use crate::state::{EnvironmentState, ModalState, WorkspaceDataState, WorkspaceSettingTarget};
+use crate::state::{
+    EnvironmentState, ModalKind, ModalPayload, ModalState, WorkspaceDataState,
+    WorkspaceSettingTarget,
+};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -60,7 +63,7 @@ pub(super) fn render_workspace_switcher(
                         .icon(IconName::Info)
                         .on_click(move |_, _, cx| {
                             modal_about.update(cx, |state, cx| {
-                                state.open_about_modal(cx);
+                                state.open(ModalKind::About, None, cx);
                             });
                         }),
                 )
@@ -70,7 +73,13 @@ pub(super) fn render_workspace_switcher(
                         .icon(IconName::Settings)
                         .on_click(move |_, _, cx| {
                             modal_settings.update(cx, |state, cx| {
-                                state.open_workspace_setting(WorkspaceSettingTarget::Workspace, cx);
+                                state.open(
+                                    ModalKind::WorkspaceSetting,
+                                    Some(ModalPayload::WorkspaceSetting(
+                                        WorkspaceSettingTarget::Workspace,
+                                    )),
+                                    cx,
+                                );
                             });
                         }),
                 )
@@ -97,7 +106,13 @@ pub(super) fn render_workspace_switcher(
                         .icon(IconName::Download)
                         .on_click(move |_, _, cx| {
                             modal_import.update(cx, |state, cx| {
-                                state.open_import_modal(None, cx);
+                                state.open(
+                                    ModalKind::Import,
+                                    Some(ModalPayload::Import {
+                                        target_folder_rel: None,
+                                    }),
+                                    cx,
+                                );
                             });
                         }),
                 )
@@ -106,7 +121,7 @@ pub(super) fn render_workspace_switcher(
                         .icon(IconName::Upload)
                         .on_click(move |_, _, cx| {
                             modal_export.update(cx, |state, cx| {
-                                state.open_export_modal(cx);
+                                state.open(ModalKind::Export, None, cx);
                             });
                         }),
                 )
@@ -262,7 +277,7 @@ pub(super) fn render_environment_switcher(
                     .icon(IconName::Settings)
                     .on_click(move |_, _, cx| {
                         modal_settings.update(cx, |state, cx| {
-                            state.open_env_modal(cx);
+                            state.open(ModalKind::Environment, None, cx);
                         });
                     }),
             );

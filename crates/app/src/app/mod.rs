@@ -385,7 +385,7 @@ impl Render for AppView {
                 let modal_c = modal_entity.clone();
                 move |_: &ToggleCommandPalette, _, cx| {
                     modal_c.update(cx, |state, cx| {
-                        state.toggle_command_palette(cx);
+                        state.toggle(ModalKind::CommandPalette, cx);
                     });
                 }
             })
@@ -401,7 +401,7 @@ impl Render for AppView {
                 let modal_c = modal_entity.clone();
                 move |_: &ToggleSettings, _, cx| {
                     modal_c.update(cx, |state, cx| {
-                        state.toggle_settings_modal(cx);
+                        state.toggle(ModalKind::Settings, cx);
                     });
                 }
             })
@@ -417,7 +417,7 @@ impl Render for AppView {
                 let modal_c = modal_entity.clone();
                 move |_: &ToggleAboutModal, _, cx| {
                     modal_c.update(cx, |state, cx| {
-                        state.toggle_about_modal(cx);
+                        state.toggle(ModalKind::About, cx);
                     });
                 }
             })
@@ -425,7 +425,13 @@ impl Render for AppView {
                 let modal_c = modal_entity.clone();
                 move |_: &OpenImportModal, _, cx| {
                     modal_c.update(cx, |state, cx| {
-                        state.open_import_modal(None, cx);
+                        state.open(
+                            ModalKind::Import,
+                            Some(ModalPayload::Import {
+                                target_folder_rel: None,
+                            }),
+                            cx,
+                        );
                     });
                 }
             })
@@ -488,7 +494,7 @@ impl Render for AppView {
                         let git_open = git_c.read(cx).modal.is_open;
                         if !git_open {
                             modal_c.update(cx, |m, cx| {
-                                m.toggle_command_palette(cx);
+                                m.toggle(ModalKind::CommandPalette, cx);
                             });
                             cx.stop_propagation();
                         }

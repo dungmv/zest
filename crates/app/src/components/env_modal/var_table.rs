@@ -589,6 +589,7 @@ impl Render for EnvVarTable {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::{ModalKind, ModalPayload};
     use gpui_kit::{TestAppContext, VisualTestContext};
     use std::sync::Arc;
     use tempfile::tempdir;
@@ -664,7 +665,14 @@ mod tests {
 
         // 4. Target variable focus sets target_variable and rebuilds for target environment
         modal_state.update(&mut vcx, |m, cx| {
-            m.open_env_modal_for_variable(Some("globals".to_string()), "BASE_URL".to_string(), cx);
+            m.open(
+                ModalKind::Environment,
+                Some(ModalPayload::Env {
+                    env_id: Some("globals".to_string()),
+                    target_variable: Some("BASE_URL".to_string()),
+                }),
+                cx,
+            );
         });
         vcx.run_until_parked();
         assert_eq!(table.read_with(&vcx, |t, _| t.row_count()), 1);

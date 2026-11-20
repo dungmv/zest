@@ -5,7 +5,7 @@ mod network_tab;
 mod shortcuts_tab;
 
 use crate::components::ModalDialog;
-use crate::state::{ModalState, SettingsTab, WorkspaceDataState};
+use crate::state::{ModalKind, ModalState, SettingsTab, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::scroll::ScrollableElement as _;
@@ -80,7 +80,7 @@ impl RenderOnce for SettingsModal {
                 let modal_s = modal_clone.clone();
                 move |_, cx| {
                     modal_s.update(cx, |state, cx| {
-                        state.close_settings_modal(cx);
+                        state.close(ModalKind::Settings, cx);
                     });
                 }
             })

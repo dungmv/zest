@@ -5,7 +5,7 @@ mod var_table;
 pub use var_table::EnvVarTable;
 
 use crate::components::ModalDialog;
-use crate::state::{EnvironmentState, ModalState, PersistenceState, SidebarState};
+use crate::state::{EnvironmentState, ModalKind, ModalState, PersistenceState, SidebarState};
 use crate::theme::theme;
 use detail_header::{render_detail_header, DetailHeaderProps};
 use env_list::{render_env_list_sidebar, EnvListProps};
@@ -78,7 +78,7 @@ impl RenderOnce for EnvironmentModal {
             .icon(IconName::Globe)
             .on_close(move |_, cx| {
                 modal_close.update(cx, |state, cx| {
-                    state.close_env_modal(cx);
+                    state.close(ModalKind::Environment, cx);
                 });
             })
             .child(

@@ -1,5 +1,5 @@
 use crate::components::ModalDialog;
-use crate::state::{ModalState, UpdateStatus};
+use crate::state::{ModalKind, ModalState, UpdateStatus};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -55,7 +55,7 @@ impl RenderOnce for AboutModal {
                 let modal_s = modal_clone.clone();
                 move |_, cx| {
                     modal_s.update(cx, |state, cx| {
-                        state.close_about_modal(cx);
+                        state.close(ModalKind::About, cx);
                     });
                 }
             })
@@ -210,7 +210,7 @@ impl RenderOnce for AboutModal {
                                     .py(px(4.))
                                     .on_click(move |_, _, cx| {
                                         modal_s.update(cx, |state, cx| {
-                                            state.close_about_modal(cx);
+                                            state.close(ModalKind::About, cx);
                                         });
                                     })
                                     .child("Close")
@@ -384,7 +384,7 @@ pub fn render_update_section(
                             .py(px(3.))
                             .h(px(24.))
                             .on_click(move |_, _, _| {
-                                crate::state::open_browser_url(&url);
+                                open_browser_url(&url);
                             })
                             .child(Icon::new(IconName::Globe).size(px(12.)))
                             .child(
@@ -466,4 +466,16 @@ fn render_meta_row(
                 .text_color(val_color)
                 .child(value.to_string()),
         )
+}
+
+/// Opens `url` in the system browser (per-OS shell-out).
+fn open_browser_url(url: &str) {
+    #[cfg(target_os = "windows")]
+    let _ = std::process::Command::new("rundll32")
+        .args(["url.dll,FileProtocolHandler", url])
+        .spawn();
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open").arg(url).spawn();
+    #[cfg(target_os = "linux")]
+    let _ = std::process::Command::new("xdg-open").arg(url).spawn();
 }

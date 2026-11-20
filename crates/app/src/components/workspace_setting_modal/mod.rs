@@ -9,7 +9,9 @@ pub use general_tab::*;
 pub use headers_tab::*;
 
 use crate::components::ModalDialog;
-use crate::state::{EnvironmentState, ModalState, WorkspaceDataState, WorkspaceSettingTarget};
+use crate::state::{
+    EnvironmentState, ModalKind, ModalState, WorkspaceDataState, WorkspaceSettingTarget,
+};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement as _;
@@ -180,7 +182,7 @@ impl RenderOnce for WorkspaceSettingModal {
             .on_close({
                 let modal_c = modal_clone.clone();
                 move |_, cx| {
-                    modal_c.update(cx, |m, cx| m.close_workspace_setting(cx));
+                    modal_c.update(cx, |m, cx| m.close(ModalKind::WorkspaceSetting, cx));
                 }
             })
             // Tab Bar

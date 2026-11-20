@@ -2,7 +2,7 @@ mod breadcrumb;
 mod menus;
 
 use crate::state::{
-    EnvironmentState, ModalState, RequestSessionState, ResponseState, SidebarState,
+    EnvironmentState, ModalKind, ModalState, RequestSessionState, ResponseState, SidebarState,
     WorkspaceDataState,
 };
 use crate::theme::theme;
@@ -265,7 +265,7 @@ impl RenderOnce for AppTitleBar {
                     .w(px(28.))
                     .h(px(26.))
                     .on_click(move |_, _, cx| {
-                        modal_s.update(cx, |state, cx| state.toggle_settings_modal(cx));
+                        modal_s.update(cx, |state, cx| state.toggle(ModalKind::Settings, cx));
                     })
                     .child(Icon::new(IconName::Settings).size(px(16.)))
             });

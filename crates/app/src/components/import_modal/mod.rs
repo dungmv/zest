@@ -1,7 +1,7 @@
 mod preview;
 
 use crate::components::ModalDialog;
-use crate::state::{ModalState, WorkspaceDataState};
+use crate::state::{ModalKind, ModalState, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::alert::Alert;
@@ -133,7 +133,7 @@ impl RenderOnce for ImportModal {
             .on_close({
                 let modal_c = modal_entity_ref.clone();
                 move |_, cx| {
-                    modal_c.update(cx, |m, cx| m.close_import_modal(cx));
+                    modal_c.update(cx, |m, cx| m.close(ModalKind::Import, cx));
                 }
             })
             // Content Body (Scrollable)
@@ -350,7 +350,7 @@ impl RenderOnce for ImportModal {
                                     .on_click({
                                         let modal_c = modal_entity_ref.clone();
                                         move |_, _, cx| {
-                                            modal_c.update(cx, |m, cx| m.close_import_modal(cx));
+                                            modal_c.update(cx, |m, cx| m.close(ModalKind::Import, cx));
                                         }
                                     }),
                             )
@@ -388,7 +388,7 @@ impl RenderOnce for ImportModal {
                                         match res {
                                             Ok(summary) => {
                                                 modal_exec.update(cx, |m, cx| {
-                                                    m.close_import_modal(cx);
+                                                    m.close(ModalKind::Import, cx);
                                                 });
                                                 crate::notify::success_in(
                                                     "Import Complete",

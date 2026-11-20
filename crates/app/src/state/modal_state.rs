@@ -19,6 +19,24 @@ pub enum ModalKind {
     About,
 }
 
+/// Optional open-time parameters for [`ModalState::open`]. Opening without a
+/// payload keeps sticky modal state untouched and only resets transient
+/// fields (see [`ModalState::reset_transient_ui`]).
+#[derive(Debug, Clone)]
+pub enum ModalPayload {
+    /// Environment modal targeted at an env id and/or variable name.
+    Env {
+        env_id: Option<String>,
+        target_variable: Option<String>,
+    },
+    /// Workspace settings scoped to the whole workspace or one folder.
+    WorkspaceSetting(WorkspaceSettingTarget),
+    /// Import scoped to a target folder relative path.
+    Import { target_folder_rel: Option<String> },
+    /// Export scoped to a folder subtree (`folder_id`, `folder_name`).
+    Export { folder: Option<(String, String)> },
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SettingsTab {
     #[default]
@@ -65,11 +83,11 @@ impl Default for NetworkPrefs {
     }
 }
 
-/// Environment-modal local UI state.
+/// Environment-modal selection state. `selected_id` is sticky and survives
+/// close/reopen; `target_variable` is transient and cleared on open/close.
 #[derive(Debug, Clone, Default)]
 pub struct EnvModalUi {
     pub selected_id: Option<String>,
-    pub filter_query: String,
     pub target_variable: Option<String>,
 }
 
@@ -166,48 +184,82 @@ impl ModalState {
         cx.notify();
     }
 
-    pub fn toggle_env_modal(&mut self, cx: &mut Context<Self>) {
-        if self.active_modal == Some(ModalKind::Environment) {
-            self.close_env_modal(cx);
-        } else {
-            self.open_env_modal(cx);
+    /// Registry of transient UI fields reset on every open/close, per kind:
+    /// - `Environment`: `env_modal.target_variable`
+    /// - `WorkspaceSetting`: `workspace_setting_target`
+    /// - `Import`: `import_modal.target_folder_rel`
+    /// - `Export`: `export_modal.target_folder_id/name`
+    ///
+    /// Sticky state (`env_modal.selected_id`, `settings_tab`,
+    /// `cookie_filter_query`, `update_status`) is never cleared here.
+    fn reset_transient_ui(&mut self, kind: ModalKind) {
+        match kind {
+            ModalKind::Environment => self.env_modal.target_variable = None,
+            ModalKind::WorkspaceSetting => self.workspace_setting_target = None,
+            ModalKind::Import => self.import_modal.target_folder_rel = None,
+            ModalKind::Export => {
+                self.export_modal.target_folder_id = None;
+                self.export_modal.target_folder_name = None;
+            }
+            ModalKind::CommandPalette | ModalKind::Settings | ModalKind::About => {}
         }
     }
 
-    pub fn open_env_modal(&mut self, cx: &mut Context<Self>) {
-        self.active_modal = Some(ModalKind::Environment);
-        self.env_modal.target_variable = None;
-        cx.emit(ModalEvent::EnvModalSelectionChanged);
+    fn apply_payload(&mut self, payload: ModalPayload) {
+        match payload {
+            ModalPayload::Env {
+                env_id,
+                target_variable,
+            } => {
+                self.env_modal.selected_id = env_id;
+                self.env_modal.target_variable = target_variable;
+            }
+            ModalPayload::WorkspaceSetting(target) => self.workspace_setting_target = Some(target),
+            ModalPayload::Import { target_folder_rel } => {
+                self.import_modal.target_folder_rel = target_folder_rel;
+            }
+            ModalPayload::Export { folder } => {
+                if let Some((folder_id, folder_name)) = folder {
+                    self.export_modal.target_folder_id = Some(folder_id);
+                    self.export_modal.target_folder_name = Some(folder_name);
+                }
+            }
+        }
+    }
+
+    /// Opens `kind` and applies `payload` (when provided) after resetting its
+    /// transient UI fields. Opening the Environment modal always emits
+    /// `ModalEvent::EnvModalSelectionChanged` so `EnvVarTable` reconciles its
+    /// rows and re-applies the target-variable focus.
+    pub fn open(&mut self, kind: ModalKind, payload: Option<ModalPayload>, cx: &mut Context<Self>) {
+        self.active_modal = Some(kind);
+        self.reset_transient_ui(kind);
+        if let Some(payload) = payload {
+            self.apply_payload(payload);
+        }
+        if kind == ModalKind::Environment {
+            cx.emit(ModalEvent::EnvModalSelectionChanged);
+        }
         cx.notify();
     }
 
-    pub fn close_env_modal(&mut self, cx: &mut Context<Self>) {
-        if self.active_modal == Some(ModalKind::Environment) {
+    /// Closes `kind` if it is the active modal and resets its transient UI
+    /// fields. Sticky state survives close/reopen.
+    pub fn close(&mut self, kind: ModalKind, cx: &mut Context<Self>) {
+        if self.active_modal == Some(kind) {
             self.active_modal = None;
         }
-        self.env_modal.target_variable = None;
+        self.reset_transient_ui(kind);
         cx.notify();
     }
 
-    pub fn open_env_modal_with_id(&mut self, env_id: Option<String>, cx: &mut Context<Self>) {
-        self.active_modal = Some(ModalKind::Environment);
-        self.env_modal.selected_id = env_id;
-        self.env_modal.target_variable = None;
-        cx.emit(ModalEvent::EnvModalSelectionChanged);
-        cx.notify();
-    }
-
-    pub fn open_env_modal_for_variable(
-        &mut self,
-        env_id: Option<String>,
-        var_name: String,
-        cx: &mut Context<Self>,
-    ) {
-        self.active_modal = Some(ModalKind::Environment);
-        self.env_modal.selected_id = env_id;
-        self.env_modal.target_variable = Some(var_name);
-        cx.emit(ModalEvent::EnvModalSelectionChanged);
-        cx.notify();
+    /// Closes `kind` when it is the active modal, opens it otherwise.
+    pub fn toggle(&mut self, kind: ModalKind, cx: &mut Context<Self>) {
+        if self.active_modal == Some(kind) {
+            self.close(kind, cx);
+        } else {
+            self.open(kind, None, cx);
+        }
     }
 
     pub fn select_modal_environment(&mut self, env_id: Option<String>, cx: &mut Context<Self>) {
@@ -216,125 +268,13 @@ impl ModalState {
         cx.notify();
     }
 
-    pub fn set_env_filter_query(&mut self, query: String, cx: &mut Context<Self>) {
-        self.env_modal.filter_query = query;
-        cx.notify();
-    }
-
-    pub fn set_cookie_filter_query(&mut self, query: String, cx: &mut Context<Self>) {
-        self.cookie_filter_query = query;
-        cx.notify();
-    }
-
-    pub fn toggle_command_palette(&mut self, cx: &mut Context<Self>) {
-        if self.active_modal == Some(ModalKind::CommandPalette) {
-            self.close_command_palette(cx);
-        } else {
-            self.open_command_palette(cx);
-        }
-    }
-
-    pub fn open_command_palette(&mut self, cx: &mut Context<Self>) {
-        self.active_modal = Some(ModalKind::CommandPalette);
-        cx.notify();
-    }
-
-    pub fn close_command_palette(&mut self, cx: &mut Context<Self>) {
-        if self.active_modal == Some(ModalKind::CommandPalette) {
-            self.active_modal = None;
-        }
-        cx.notify();
-    }
-
-    pub fn toggle_settings_modal(&mut self, cx: &mut Context<Self>) {
-        if self.active_modal == Some(ModalKind::Settings) {
-            self.close_settings_modal(cx);
-        } else {
-            self.open_settings_modal(cx);
-        }
-    }
-
-    pub fn open_settings_modal(&mut self, cx: &mut Context<Self>) {
-        self.active_modal = Some(ModalKind::Settings);
-        cx.notify();
-    }
-
-    pub fn open_settings_tab(&mut self, tab: SettingsTab, cx: &mut Context<Self>) {
-        self.settings_tab = tab;
-        self.active_modal = Some(ModalKind::Settings);
-        cx.notify();
-    }
-
     pub fn set_settings_tab(&mut self, tab: SettingsTab, cx: &mut Context<Self>) {
         self.settings_tab = tab;
         cx.notify();
     }
 
-    pub fn close_settings_modal(&mut self, cx: &mut Context<Self>) {
-        if self.active_modal == Some(ModalKind::Settings) {
-            self.active_modal = None;
-        }
-        cx.notify();
-    }
-
-    pub fn open_workspace_setting(
-        &mut self,
-        target: WorkspaceSettingTarget,
-        cx: &mut Context<Self>,
-    ) {
-        self.workspace_setting_target = Some(target);
-        self.active_modal = Some(ModalKind::WorkspaceSetting);
-        cx.notify();
-    }
-
-    pub fn close_workspace_setting(&mut self, cx: &mut Context<Self>) {
-        self.workspace_setting_target = None;
-        if self.active_modal == Some(ModalKind::WorkspaceSetting) {
-            self.active_modal = None;
-        }
-        cx.notify();
-    }
-
-    pub fn open_import_modal(&mut self, target_folder_rel: Option<String>, cx: &mut Context<Self>) {
-        self.import_modal.target_folder_rel = target_folder_rel;
-        self.active_modal = Some(ModalKind::Import);
-        cx.notify();
-    }
-
-    pub fn close_import_modal(&mut self, cx: &mut Context<Self>) {
-        self.import_modal.target_folder_rel = None;
-        if self.active_modal == Some(ModalKind::Import) {
-            self.active_modal = None;
-        }
-        cx.notify();
-    }
-
-    pub fn open_export_modal(&mut self, cx: &mut Context<Self>) {
-        self.active_modal = Some(ModalKind::Export);
-        self.export_modal.target_folder_id = None;
-        self.export_modal.target_folder_name = None;
-        cx.notify();
-    }
-
-    /// Opens the export modal scoped to one folder subtree.
-    pub fn open_export_modal_for_folder(
-        &mut self,
-        folder_id: String,
-        folder_name: String,
-        cx: &mut Context<Self>,
-    ) {
-        self.active_modal = Some(ModalKind::Export);
-        self.export_modal.target_folder_id = Some(folder_id);
-        self.export_modal.target_folder_name = Some(folder_name);
-        cx.notify();
-    }
-
-    pub fn close_export_modal(&mut self, cx: &mut Context<Self>) {
-        if self.active_modal == Some(ModalKind::Export) {
-            self.active_modal = None;
-        }
-        self.export_modal.target_folder_id = None;
-        self.export_modal.target_folder_name = None;
+    pub fn set_cookie_filter_query(&mut self, query: String, cx: &mut Context<Self>) {
+        self.cookie_filter_query = query;
         cx.notify();
     }
 
@@ -355,26 +295,6 @@ impl ModalState {
 
         cx.refresh_windows();
         cx.notify();
-    }
-
-    pub fn open_about_modal(&mut self, cx: &mut Context<Self>) {
-        self.active_modal = Some(ModalKind::About);
-        cx.notify();
-    }
-
-    pub fn close_about_modal(&mut self, cx: &mut Context<Self>) {
-        if self.active_modal == Some(ModalKind::About) {
-            self.active_modal = None;
-        }
-        cx.notify();
-    }
-
-    pub fn toggle_about_modal(&mut self, cx: &mut Context<Self>) {
-        if self.active_modal == Some(ModalKind::About) {
-            self.close_about_modal(cx);
-        } else {
-            self.open_about_modal(cx);
-        }
     }
 
     pub fn check_for_updates(&mut self, cx: &mut Context<Self>) {
@@ -424,33 +344,19 @@ impl ModalState {
         .detach();
     }
 
+    /// Dismisses the currently active modal, if any. Returns whether a modal
+    /// was open.
     pub fn dismiss_top_modal(&mut self, cx: &mut Context<Self>) -> bool {
-        let active = self.active_modal;
-        match active {
-            Some(ModalKind::Environment) => self.close_env_modal(cx),
-            Some(ModalKind::CommandPalette) => self.close_command_palette(cx),
-            Some(ModalKind::Settings) => self.close_settings_modal(cx),
-            Some(ModalKind::WorkspaceSetting) => self.close_workspace_setting(cx),
-            Some(ModalKind::Import) => self.close_import_modal(cx),
-            Some(ModalKind::Export) => self.close_export_modal(cx),
-            Some(ModalKind::About) => self.close_about_modal(cx),
-            None => return false,
+        match self.active_modal {
+            Some(kind) => {
+                self.close(kind, cx);
+                true
+            }
+            None => false,
         }
-        true
     }
 
     pub fn has_any_modal_open(&self) -> bool {
         self.active_modal.is_some()
     }
-}
-
-pub fn open_browser_url(url: &str) {
-    #[cfg(target_os = "windows")]
-    let _ = std::process::Command::new("rundll32")
-        .args(["url.dll,FileProtocolHandler", url])
-        .spawn();
-    #[cfg(target_os = "macos")]
-    let _ = std::process::Command::new("open").arg(url).spawn();
-    #[cfg(target_os = "linux")]
-    let _ = std::process::Command::new("xdg-open").arg(url).spawn();
 }

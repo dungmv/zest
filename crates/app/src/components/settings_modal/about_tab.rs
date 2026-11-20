@@ -1,4 +1,5 @@
 use crate::components::about_modal::render_update_section;
+use crate::state::ModalKind;
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -128,8 +129,8 @@ pub fn render_about_tab(
                                         .rounded(px(5.))
                                         .on_click(move |_, _, cx| {
                                             modal_s.update(cx, |state, cx| {
-                                                state.close_settings_modal(cx);
-                                                state.open_about_modal(cx);
+                                                state.close(ModalKind::Settings, cx);
+                                                state.open(ModalKind::About, None, cx);
                                             });
                                         })
                                         .child(

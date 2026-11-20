@@ -1,4 +1,4 @@
-use crate::state::{effective_request_name, ModalState, WorkspaceDataState};
+use crate::state::{effective_request_name, ModalKind, ModalState, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::component::breadcrumb::{Breadcrumb, BreadcrumbItem};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -63,7 +63,7 @@ pub(super) fn render_center_section(
         .on_click(move |_, _, cx| {
             let modal_cp = modal_center_clone.clone();
             modal_cp.update(cx, |state, cx| {
-                state.toggle_command_palette(cx);
+                state.toggle(ModalKind::CommandPalette, cx);
             });
         })
         .when(!full_path.is_empty(), |this| {

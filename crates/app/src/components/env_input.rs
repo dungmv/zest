@@ -4,7 +4,7 @@ use crate::components::completion::env_autocomplete::{
     render_candidate_detail_card, render_candidate_row, variable_value_tooltip,
     AutocompleteNavState, CANDIDATE_DETAIL_GAP, CANDIDATE_LIST_WIDTH,
 };
-use crate::state::{EnvironmentState, ModalState};
+use crate::state::{EnvironmentState, ModalKind, ModalState};
 use crate::theme::theme;
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::scroll::ScrollableElement as _;
@@ -190,7 +190,7 @@ where
                                 handle_variable_token_click(env_ent, modal_ent, &var_name, cx);
                             } else if let Some(modal) = &modal_for_click {
                                 modal.update(cx, |st, cx| {
-                                    st.open_env_modal(cx);
+                                    st.open(ModalKind::Environment, None, cx);
                                 });
                             }
                         }),

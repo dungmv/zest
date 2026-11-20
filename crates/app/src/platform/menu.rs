@@ -6,7 +6,7 @@
 //! window holds focus.
 
 use crate::app::{HideApp, HideOtherApps, OpenAbout, OpenSettings, Quit, ShowAllApps};
-use crate::state::ModalState;
+use crate::state::{ModalKind, ModalState};
 use gpui_kit::*;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -42,13 +42,13 @@ pub fn init_app_menu(active_modal: ActiveModalHandle, reopen_window: ReopenWindo
         let reopen_window = reopen_window.clone();
         move |_: &OpenAbout, cx| {
             let modal = resolve_or_reopen_modal(&active_modal, reopen_window.as_ref(), cx);
-            modal.update(cx, |state, cx| state.open_about_modal(cx));
+            modal.update(cx, |state, cx| state.open(ModalKind::About, None, cx));
             cx.activate(true);
         }
     });
     cx.on_action(move |_: &OpenSettings, cx| {
         let modal = resolve_or_reopen_modal(&active_modal, reopen_window.as_ref(), cx);
-        modal.update(cx, |state, cx| state.open_settings_modal(cx));
+        modal.update(cx, |state, cx| state.open(ModalKind::Settings, None, cx));
         cx.activate(true);
     });
     cx.on_action(|_: &HideApp, cx| cx.hide());

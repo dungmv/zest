@@ -3,7 +3,7 @@ use super::git_status::SidebarGitStatus;
 use super::item_actions::delete_multi_selected_items;
 use super::{SidebarRenderContext, SIDEBAR_ROW_HEIGHT};
 use crate::app::actions::DismissModal;
-use crate::state::WorkspaceSettingTarget;
+use crate::state::{ModalKind, ModalPayload, WorkspaceSettingTarget};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::menu::ContextMenuExt as _;
@@ -401,8 +401,11 @@ pub fn render_folder_row(
                         .icon(IconName::Settings)
                         .on_click(move |_, _, cx| {
                             modal_set.update(cx, |state, cx| {
-                                state.open_workspace_setting(
-                                    WorkspaceSettingTarget::Folder(f_id_set.clone()),
+                                state.open(
+                                    ModalKind::WorkspaceSetting,
+                                    Some(ModalPayload::WorkspaceSetting(
+                                        WorkspaceSettingTarget::Folder(f_id_set.clone()),
+                                    )),
                                     cx,
                                 );
                             });
@@ -417,9 +420,11 @@ pub fn render_folder_row(
                             let f_name_e = f_name_exp.clone();
                             move |_, _, cx| {
                                 modal_e.update(cx, |state, cx| {
-                                    state.open_export_modal_for_folder(
-                                        f_id_e.clone(),
-                                        f_name_e.clone(),
+                                    state.open(
+                                        ModalKind::Export,
+                                        Some(ModalPayload::Export {
+                                            folder: Some((f_id_e.clone(), f_name_e.clone())),
+                                        }),
                                         cx,
                                     );
                                 });

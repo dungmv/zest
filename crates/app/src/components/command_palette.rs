@@ -1,6 +1,6 @@
 use crate::components::status_badge::MethodBadge;
 use crate::state::{
-    EnvironmentState, ModalState, PersistenceState, RequestSessionState, SidebarState,
+    EnvironmentState, ModalKind, ModalState, PersistenceState, RequestSessionState, SidebarState,
     WorkspaceDataState,
 };
 use crate::theme::theme;
@@ -167,7 +167,7 @@ impl RenderOnce for CommandPalette {
                 let modal_s = modal_clone.clone();
                 move |_, _, cx| {
                     modal_s.update(cx, |state, cx| {
-                        state.close_command_palette(cx);
+                        state.close(ModalKind::CommandPalette, cx);
                     });
                 }
             })
@@ -180,7 +180,7 @@ impl RenderOnce for CommandPalette {
                         && event.keystroke.key.eq_ignore_ascii_case("k");
                     if is_escape || is_ctrl_or_cmd_k {
                         modal_s.update(cx, |state, cx| {
-                            state.close_command_palette(cx);
+                            state.close(ModalKind::CommandPalette, cx);
                         });
                         cx.stop_propagation();
                     }
@@ -208,7 +208,7 @@ impl RenderOnce for CommandPalette {
                                 && event.keystroke.key.eq_ignore_ascii_case("k");
                             if is_escape || is_ctrl_or_cmd_k {
                                 modal_s.update(cx, |state, cx| {
-                                    state.close_command_palette(cx);
+                                    state.close(ModalKind::CommandPalette, cx);
                                 });
                                 cx.stop_propagation();
                             }
@@ -240,7 +240,7 @@ impl RenderOnce for CommandPalette {
                                                 && event.keystroke.key.eq_ignore_ascii_case("k");
                                             if is_escape || is_ctrl_or_cmd_k {
                                                 modal_s.update(cx, |state, cx| {
-                                                    state.close_command_palette(cx);
+                                                    state.close(ModalKind::CommandPalette, cx);
                                                 });
                                                 cx.stop_propagation();
                                             }
@@ -273,7 +273,7 @@ impl RenderOnce for CommandPalette {
                                     .text_size(px(10.))
                                     .on_click(move |_, _, cx| {
                                         modal_s.update(cx, |state, cx| {
-                                            state.close_command_palette(cx);
+                                            state.close(ModalKind::CommandPalette, cx);
                                         });
                                     })
                                     .child("Esc")
@@ -336,7 +336,7 @@ impl RenderOnce for CommandPalette {
                                                     state.record_navigation(&r_id);
                                                 });
                                                 modal_s.update(cx, |state, cx| {
-                                                    state.close_command_palette(cx);
+                                                    state.close(ModalKind::CommandPalette, cx);
                                                 });
                                                 ed_s.update(cx, |state, cx| {
                                                     state.set_active_request_id(&r_id, cx);
@@ -430,7 +430,7 @@ impl RenderOnce for CommandPalette {
                                                 );
                                             });
                                             modal_s.update(cx, |state, cx| {
-                                                state.close_command_palette(cx);
+                                                state.close(ModalKind::CommandPalette, cx);
                                             });
                                         })
                                         .child("●")
