@@ -1,11 +1,10 @@
 use crate::components::*;
 use crate::services::GitService;
 use crate::state::{
-    EnvironmentState, GitState, ModalState, PersistenceState, RequestSessionState, SidebarState,
-    WorkspaceDataState,
+    EnvironmentState, GitState, ModalKind, ModalState, PersistenceState, RequestSessionState,
+    SidebarState, WorkspaceDataState,
 };
-use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{App, Div, Entity, ParentElement, Window};
+use gpui_kit::{App, Div, Entity, IntoElement, ParentElement, Window};
 
 pub struct ModalOverlayEntities<'a> {
     pub workspace_state: &'a Entity<WorkspaceDataState>,
@@ -33,15 +32,7 @@ pub fn attach_modal_overlays(
     let editor_state = entities.editor_state;
     let env_var_table = entities.env_var_table;
 
-    let modal = modal_state.read(cx);
-    let show_env_modal = modal.env_modal.is_open;
-    let show_settings_modal = modal.show_settings_modal;
-    let show_workspace_setting_modal = modal.workspace_setting_target.is_some();
-    let show_import_modal = modal.import_modal.is_open;
-    let show_export_modal = modal.export_modal.is_open;
-    let show_command_palette = modal.show_command_palette;
-    let show_about_modal = modal.show_about_modal;
-
+    let active_modal = modal_state.read(cx).active_modal;
     let show_git_modal = git_state.read(cx).modal.is_open;
 
     let ws_entity = workspace_state.clone();
@@ -53,49 +44,54 @@ pub fn attach_modal_overlays(
     let ed_entity = editor_state.clone();
     let var_table_entity = env_var_table.clone();
 
-    root.when(show_env_modal, |this| {
-        this.child(EnvironmentModal::new(
-            env_entity.clone(),
-            per_entity.clone(),
-            modal_entity.clone(),
-            sidebar_entity.clone(),
-            var_table_entity,
-        ))
-    })
-    .when(show_settings_modal, |this| {
-        this.child(SettingsModal::new(ws_entity.clone(), modal_entity.clone()))
-    })
-    .when(show_workspace_setting_modal, |this| {
-        this.child(WorkspaceSettingModal::new(
-            ws_entity.clone(),
-            env_entity.clone(),
-            modal_entity.clone(),
-        ))
-    })
-    .when(show_git_modal, |this| {
-        this.child(GitModal::new(
-            git_entity.clone(),
-            ws_entity.clone(),
-            GitService::new(git_entity.clone()),
-        ))
-    })
-    .when(show_import_modal, |this| {
-        this.child(ImportModal::new(ws_entity.clone(), modal_entity.clone()))
-    })
-    .when(show_export_modal, |this| {
-        this.child(ExportModal::new(ws_entity.clone(), modal_entity.clone()))
-    })
-    .when(show_about_modal, |this| {
-        this.child(AboutModal::new(modal_entity.clone()))
-    })
-    .when(show_command_palette, move |this| {
-        this.child(CommandPalette::new(
-            ws_entity.clone(),
-            env_entity.clone(),
-            per_entity.clone(),
-            modal_entity.clone(),
-            sidebar_entity.clone(),
-            ed_entity.clone(),
-        ))
-    })
+    if show_git_modal {
+        return root.child(
+            GitModal::new(
+                git_entity.clone(),
+                ws_entity.clone(),
+                GitService::new(git_entity.clone()),
+            )
+            .into_any_element(),
+        );
+    }
+
+    match active_modal {
+        Some(ModalKind::Environment) => root.child(
+            EnvironmentModal::new(
+                env_entity.clone(),
+                per_entity.clone(),
+                modal_entity.clone(),
+                sidebar_entity.clone(),
+                var_table_entity,
+            )
+            .into_any_element(),
+        ),
+        Some(ModalKind::Settings) => root
+            .child(SettingsModal::new(ws_entity.clone(), modal_entity.clone()).into_any_element()),
+        Some(ModalKind::WorkspaceSetting) => root.child(
+            WorkspaceSettingModal::new(ws_entity.clone(), env_entity.clone(), modal_entity.clone())
+                .into_any_element(),
+        ),
+        Some(ModalKind::Import) => {
+            root.child(ImportModal::new(ws_entity.clone(), modal_entity.clone()).into_any_element())
+        }
+        Some(ModalKind::Export) => {
+            root.child(ExportModal::new(ws_entity.clone(), modal_entity.clone()).into_any_element())
+        }
+        Some(ModalKind::About) => {
+            root.child(AboutModal::new(modal_entity.clone()).into_any_element())
+        }
+        Some(ModalKind::CommandPalette) => root.child(
+            CommandPalette::new(
+                ws_entity.clone(),
+                env_entity.clone(),
+                per_entity.clone(),
+                modal_entity.clone(),
+                sidebar_entity.clone(),
+                ed_entity.clone(),
+            )
+            .into_any_element(),
+        ),
+        None => root,
+    }
 }

@@ -45,24 +45,52 @@ mod tests {
     #[test]
     fn test_modal_state_defaults() {
         let mut modals = ModalState::default();
-        assert!(!modals.env_modal.is_open);
-        assert!(!modals.show_settings_modal);
+        assert!(modals.active_modal.is_none());
+        assert!(!modals.has_any_modal_open());
         assert_eq!(modals.settings_tab, SettingsTab::General);
         assert!(modals.cookie_filter_query.is_empty());
-        assert!(!modals.show_command_palette);
         assert_eq!(modals.network.request_timeout_secs, 30);
         assert!(modals.network.follow_redirects);
         assert!(modals.network.validate_tls);
 
-        modals.show_settings_modal = true;
+        modals.active_modal = Some(crate::state::ModalKind::Settings);
         modals.settings_tab = SettingsTab::Cookies;
         modals.workspace_setting_target = Some(WorkspaceSettingTarget::Workspace);
-        assert!(modals.show_settings_modal);
+        assert!(modals.has_any_modal_open());
         assert_eq!(modals.settings_tab, SettingsTab::Cookies);
         assert_eq!(
             modals.workspace_setting_target,
             Some(WorkspaceSettingTarget::Workspace)
         );
+    }
+
+    #[gpui_kit::test]
+    fn test_modal_state_switches_one_active_modal(cx: &mut gpui_kit::TestAppContext) {
+        use gpui_kit::AppContext as _;
+
+        let modal_state = cx.new(|_| ModalState::default());
+
+        modal_state.update(cx, |modal, cx| modal.open_settings_modal(cx));
+        assert!(modal_state.read_with(cx, |modal, _| {
+            modal.active_modal == Some(crate::state::ModalKind::Settings)
+        }));
+
+        modal_state.update(cx, |modal, cx| {
+            modal.open_import_modal(Some("folder".to_string()), cx)
+        });
+        assert!(modal_state.read_with(cx, |modal, _| {
+            modal.active_modal == Some(crate::state::ModalKind::Import)
+                && modal.import_modal.target_folder_rel.as_deref() == Some("folder")
+        }));
+
+        modal_state.update(cx, |modal, cx| {
+            assert!(modal.dismiss_top_modal(cx));
+        });
+        assert!(modal_state.read_with(cx, |modal, _| {
+            modal.active_modal.is_none()
+                && modal.import_modal.target_folder_rel.is_none()
+                && !modal.has_any_modal_open()
+        }));
     }
 
     #[test]

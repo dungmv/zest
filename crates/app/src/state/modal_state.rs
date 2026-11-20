@@ -8,6 +8,17 @@ pub enum WorkspaceSettingTarget {
     Folder(String),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModalKind {
+    Environment,
+    CommandPalette,
+    Settings,
+    WorkspaceSetting,
+    Import,
+    Export,
+    About,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SettingsTab {
     #[default]
@@ -57,7 +68,6 @@ impl Default for NetworkPrefs {
 /// Environment-modal local UI state.
 #[derive(Debug, Clone, Default)]
 pub struct EnvModalUi {
-    pub is_open: bool,
     pub selected_id: Option<String>,
     pub filter_query: String,
     pub target_variable: Option<String>,
@@ -66,7 +76,6 @@ pub struct EnvModalUi {
 /// Import-modal local UI state.
 #[derive(Debug, Clone, Default)]
 pub struct ImportModalUi {
-    pub is_open: bool,
     pub target_folder_rel: Option<String>,
 }
 
@@ -74,7 +83,6 @@ pub struct ImportModalUi {
 /// folder subtree; `None` exports the whole workspace.
 #[derive(Debug, Clone, Default)]
 pub struct ExportModalUi {
-    pub is_open: bool,
     pub target_folder_id: Option<String>,
     pub target_folder_name: Option<String>,
 }
@@ -82,9 +90,7 @@ pub struct ExportModalUi {
 #[derive(Debug, Clone)]
 pub struct ModalState {
     pub env_modal: EnvModalUi,
-    pub show_command_palette: bool,
-    pub show_settings_modal: bool,
-    pub show_about_modal: bool,
+    pub active_modal: Option<ModalKind>,
     pub update_status: UpdateStatus,
     pub settings_tab: SettingsTab,
     pub cookie_filter_query: String,
@@ -100,9 +106,7 @@ impl Default for ModalState {
     fn default() -> Self {
         Self {
             env_modal: EnvModalUi::default(),
-            show_command_palette: false,
-            show_settings_modal: false,
-            show_about_modal: false,
+            active_modal: None,
             update_status: UpdateStatus::Idle,
             settings_tab: SettingsTab::General,
             cookie_filter_query: String::new(),
@@ -163,29 +167,30 @@ impl ModalState {
     }
 
     pub fn toggle_env_modal(&mut self, cx: &mut Context<Self>) {
-        self.env_modal.is_open = !self.env_modal.is_open;
-        self.env_modal.target_variable = None;
-        if self.env_modal.is_open {
-            cx.emit(ModalEvent::EnvModalSelectionChanged);
+        if self.active_modal == Some(ModalKind::Environment) {
+            self.close_env_modal(cx);
+        } else {
+            self.open_env_modal(cx);
         }
-        cx.notify();
     }
 
     pub fn open_env_modal(&mut self, cx: &mut Context<Self>) {
-        self.env_modal.is_open = true;
+        self.active_modal = Some(ModalKind::Environment);
         self.env_modal.target_variable = None;
         cx.emit(ModalEvent::EnvModalSelectionChanged);
         cx.notify();
     }
 
     pub fn close_env_modal(&mut self, cx: &mut Context<Self>) {
-        self.env_modal.is_open = false;
+        if self.active_modal == Some(ModalKind::Environment) {
+            self.active_modal = None;
+        }
         self.env_modal.target_variable = None;
         cx.notify();
     }
 
     pub fn open_env_modal_with_id(&mut self, env_id: Option<String>, cx: &mut Context<Self>) {
-        self.env_modal.is_open = true;
+        self.active_modal = Some(ModalKind::Environment);
         self.env_modal.selected_id = env_id;
         self.env_modal.target_variable = None;
         cx.emit(ModalEvent::EnvModalSelectionChanged);
@@ -198,7 +203,7 @@ impl ModalState {
         var_name: String,
         cx: &mut Context<Self>,
     ) {
-        self.env_modal.is_open = true;
+        self.active_modal = Some(ModalKind::Environment);
         self.env_modal.selected_id = env_id;
         self.env_modal.target_variable = Some(var_name);
         cx.emit(ModalEvent::EnvModalSelectionChanged);
@@ -222,33 +227,41 @@ impl ModalState {
     }
 
     pub fn toggle_command_palette(&mut self, cx: &mut Context<Self>) {
-        self.show_command_palette = !self.show_command_palette;
-        cx.notify();
+        if self.active_modal == Some(ModalKind::CommandPalette) {
+            self.close_command_palette(cx);
+        } else {
+            self.open_command_palette(cx);
+        }
     }
 
     pub fn open_command_palette(&mut self, cx: &mut Context<Self>) {
-        self.show_command_palette = true;
+        self.active_modal = Some(ModalKind::CommandPalette);
         cx.notify();
     }
 
     pub fn close_command_palette(&mut self, cx: &mut Context<Self>) {
-        self.show_command_palette = false;
+        if self.active_modal == Some(ModalKind::CommandPalette) {
+            self.active_modal = None;
+        }
         cx.notify();
     }
 
     pub fn toggle_settings_modal(&mut self, cx: &mut Context<Self>) {
-        self.show_settings_modal = !self.show_settings_modal;
-        cx.notify();
+        if self.active_modal == Some(ModalKind::Settings) {
+            self.close_settings_modal(cx);
+        } else {
+            self.open_settings_modal(cx);
+        }
     }
 
     pub fn open_settings_modal(&mut self, cx: &mut Context<Self>) {
-        self.show_settings_modal = true;
+        self.active_modal = Some(ModalKind::Settings);
         cx.notify();
     }
 
     pub fn open_settings_tab(&mut self, tab: SettingsTab, cx: &mut Context<Self>) {
         self.settings_tab = tab;
-        self.show_settings_modal = true;
+        self.active_modal = Some(ModalKind::Settings);
         cx.notify();
     }
 
@@ -258,7 +271,9 @@ impl ModalState {
     }
 
     pub fn close_settings_modal(&mut self, cx: &mut Context<Self>) {
-        self.show_settings_modal = false;
+        if self.active_modal == Some(ModalKind::Settings) {
+            self.active_modal = None;
+        }
         cx.notify();
     }
 
@@ -268,28 +283,34 @@ impl ModalState {
         cx: &mut Context<Self>,
     ) {
         self.workspace_setting_target = Some(target);
+        self.active_modal = Some(ModalKind::WorkspaceSetting);
         cx.notify();
     }
 
     pub fn close_workspace_setting(&mut self, cx: &mut Context<Self>) {
         self.workspace_setting_target = None;
+        if self.active_modal == Some(ModalKind::WorkspaceSetting) {
+            self.active_modal = None;
+        }
         cx.notify();
     }
 
     pub fn open_import_modal(&mut self, target_folder_rel: Option<String>, cx: &mut Context<Self>) {
         self.import_modal.target_folder_rel = target_folder_rel;
-        self.import_modal.is_open = true;
+        self.active_modal = Some(ModalKind::Import);
         cx.notify();
     }
 
     pub fn close_import_modal(&mut self, cx: &mut Context<Self>) {
-        self.import_modal.is_open = false;
         self.import_modal.target_folder_rel = None;
+        if self.active_modal == Some(ModalKind::Import) {
+            self.active_modal = None;
+        }
         cx.notify();
     }
 
     pub fn open_export_modal(&mut self, cx: &mut Context<Self>) {
-        self.export_modal.is_open = true;
+        self.active_modal = Some(ModalKind::Export);
         self.export_modal.target_folder_id = None;
         self.export_modal.target_folder_name = None;
         cx.notify();
@@ -302,14 +323,18 @@ impl ModalState {
         folder_name: String,
         cx: &mut Context<Self>,
     ) {
-        self.export_modal.is_open = true;
+        self.active_modal = Some(ModalKind::Export);
         self.export_modal.target_folder_id = Some(folder_id);
         self.export_modal.target_folder_name = Some(folder_name);
         cx.notify();
     }
 
     pub fn close_export_modal(&mut self, cx: &mut Context<Self>) {
-        self.export_modal.is_open = false;
+        if self.active_modal == Some(ModalKind::Export) {
+            self.active_modal = None;
+        }
+        self.export_modal.target_folder_id = None;
+        self.export_modal.target_folder_name = None;
         cx.notify();
     }
 
@@ -333,18 +358,23 @@ impl ModalState {
     }
 
     pub fn open_about_modal(&mut self, cx: &mut Context<Self>) {
-        self.show_about_modal = true;
+        self.active_modal = Some(ModalKind::About);
         cx.notify();
     }
 
     pub fn close_about_modal(&mut self, cx: &mut Context<Self>) {
-        self.show_about_modal = false;
+        if self.active_modal == Some(ModalKind::About) {
+            self.active_modal = None;
+        }
         cx.notify();
     }
 
     pub fn toggle_about_modal(&mut self, cx: &mut Context<Self>) {
-        self.show_about_modal = !self.show_about_modal;
-        cx.notify();
+        if self.active_modal == Some(ModalKind::About) {
+            self.close_about_modal(cx);
+        } else {
+            self.open_about_modal(cx);
+        }
     }
 
     pub fn check_for_updates(&mut self, cx: &mut Context<Self>) {
@@ -395,54 +425,22 @@ impl ModalState {
     }
 
     pub fn dismiss_top_modal(&mut self, cx: &mut Context<Self>) -> bool {
-        if self.show_about_modal {
-            self.show_about_modal = false;
-            cx.notify();
-            return true;
+        let active = self.active_modal;
+        match active {
+            Some(ModalKind::Environment) => self.close_env_modal(cx),
+            Some(ModalKind::CommandPalette) => self.close_command_palette(cx),
+            Some(ModalKind::Settings) => self.close_settings_modal(cx),
+            Some(ModalKind::WorkspaceSetting) => self.close_workspace_setting(cx),
+            Some(ModalKind::Import) => self.close_import_modal(cx),
+            Some(ModalKind::Export) => self.close_export_modal(cx),
+            Some(ModalKind::About) => self.close_about_modal(cx),
+            None => return false,
         }
-        if self.show_command_palette {
-            self.show_command_palette = false;
-            cx.notify();
-            return true;
-        }
-        if self.import_modal.is_open {
-            self.import_modal.is_open = false;
-            self.import_modal.target_folder_rel = None;
-            cx.notify();
-            return true;
-        }
-        if self.export_modal.is_open {
-            self.export_modal.is_open = false;
-            cx.notify();
-            return true;
-        }
-        if self.show_settings_modal {
-            self.show_settings_modal = false;
-            cx.notify();
-            return true;
-        }
-        if self.workspace_setting_target.is_some() {
-            self.workspace_setting_target = None;
-            cx.notify();
-            return true;
-        }
-        if self.env_modal.is_open {
-            self.env_modal.is_open = false;
-            self.env_modal.target_variable = None;
-            cx.notify();
-            return true;
-        }
-        false
+        true
     }
 
     pub fn has_any_modal_open(&self) -> bool {
-        self.show_about_modal
-            || self.show_command_palette
-            || self.import_modal.is_open
-            || self.export_modal.is_open
-            || self.show_settings_modal
-            || self.workspace_setting_target.is_some()
-            || self.env_modal.is_open
+        self.active_modal.is_some()
     }
 }
 

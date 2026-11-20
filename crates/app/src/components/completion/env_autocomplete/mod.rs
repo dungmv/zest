@@ -686,7 +686,7 @@ mod tests {
         cx.update(|cx| {
             handle_variable_token_click(&env_state, &modal_state, "$guid", cx);
         });
-        assert!(modal_state.read_with(cx, |m, _| m.env_modal.is_open));
+        assert!(modal_state.read_with(cx, |m, _| m.has_any_modal_open()));
         assert_eq!(
             modal_state.read_with(cx, |m, _| m.env_modal.target_variable.clone()),
             None
@@ -696,7 +696,7 @@ mod tests {
         cx.update(|cx| {
             handle_variable_token_click(&env_state, &modal_state, "API_KEY", cx);
         });
-        assert!(modal_state.read_with(cx, |m, _| m.env_modal.is_open));
+        assert!(modal_state.read_with(cx, |m, _| m.has_any_modal_open()));
         assert_eq!(
             modal_state.read_with(cx, |m, _| m.env_modal.target_variable.clone()),
             Some("API_KEY".to_string())
