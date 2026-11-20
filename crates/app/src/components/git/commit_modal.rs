@@ -4,7 +4,7 @@ use super::common::{
 };
 use super::diff_parser::DiffViewMode;
 use super::diff_view::{render_diff_content, render_diff_view_toggle};
-use crate::components::modal_dialog::{DialogHeader, DialogTitle, ModalDialog};
+use crate::modals::modal_dialog::{DialogHeader, DialogTitle, ModalDialog};
 use crate::services::GitService;
 use crate::state::{GitState, WorkspaceDataState};
 use crate::theme::theme;

@@ -3,6 +3,7 @@
 
 mod app;
 mod components;
+mod modals;
 mod notify;
 mod platform;
 pub mod services;

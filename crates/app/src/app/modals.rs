@@ -1,4 +1,5 @@
 use crate::components::*;
+use crate::modals::*;
 use crate::services::GitService;
 use crate::state::{
     EnvironmentState, GitState, ModalKind, ModalState, PersistenceState, RequestSessionState,

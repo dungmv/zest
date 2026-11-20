@@ -4,7 +4,7 @@ mod var_table;
 
 pub use var_table::EnvVarTable;
 
-use crate::components::ModalDialog;
+use crate::modals::modal_dialog::ModalDialog;
 use crate::state::{EnvironmentState, ModalKind, ModalState, PersistenceState, SidebarState};
 use crate::theme::theme;
 use detail_header::{render_detail_header, DetailHeaderProps};

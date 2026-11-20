@@ -1,5 +1,5 @@
 use super::common::{render_error_banner, render_not_a_repo_view};
-use crate::components::ModalDialog;
+use crate::modals::modal_dialog::ModalDialog;
 use crate::services::GitService;
 use crate::state::GitState;
 use crate::theme::theme;

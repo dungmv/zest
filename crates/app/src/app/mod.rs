@@ -11,6 +11,7 @@ pub use modals::*;
 pub use subscriptions::*;
 
 use crate::components::*;
+use crate::modals::*;
 use crate::services::{HttpEngine, Runner};
 use crate::state::*;
 use crate::theme::theme;

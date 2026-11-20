@@ -1,6 +1,6 @@
 mod preview;
 
-use crate::components::ModalDialog;
+use crate::modals::modal_dialog::ModalDialog;
 use crate::state::{ModalKind, ModalState, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;

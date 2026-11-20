@@ -8,7 +8,7 @@ pub use auth_tab::*;
 pub use general_tab::*;
 pub use headers_tab::*;
 
-use crate::components::ModalDialog;
+use crate::modals::modal_dialog::ModalDialog;
 use crate::state::{
     EnvironmentState, ModalKind, ModalState, WorkspaceDataState, WorkspaceSettingTarget,
 };

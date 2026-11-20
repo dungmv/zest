@@ -4,7 +4,7 @@ mod general_tab;
 mod network_tab;
 mod shortcuts_tab;
 
-use crate::components::ModalDialog;
+use crate::modals::modal_dialog::ModalDialog;
 use crate::state::{ModalKind, ModalState, SettingsTab, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;

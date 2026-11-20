@@ -79,3 +79,14 @@ Hoàn thiện việc quản lý modal sau refactor `51fa08e` (centralize modal s
 1. `cargo fmt --check`, `cargo test`, `cargo clippy --all-targets -- -D warnings` — 0 warning sau mỗi step.
 2. Smoke test thủ công (`cargo run`): mỗi modal mở/đóng đúng qua đúng trigger — ctrl-k palette, ctrl-, settings, ctrl-i import, click token `{{var}}` → env modal focus đúng biến, folder context menu → Folder Settings / Export OpenAPI (scope folder), About từ Settings→About tab, Escape dismiss, Ctrl+Enter bị chặn khi modal mở.
 3. UI không đổi pixel-wise (không restyle — lesson TD-202).
+
+## Follow-up (cùng ngày, user request)
+
+Chuyển umbrella từ `components/modals/` lên **`src/modals/`** (đồng cấp với `components/`):
+
+1. `git mv crates/app/src/components/modals crates/app/src/modals` — nội dung verbatim.
+2. `main.rs` khai báo `mod modals;` (top-level, style private như các mod khác); `components/mod.rs` bỏ 2 dòng `pub mod modals;` + `pub use modals::*;`.
+3. Retarget import của consumer: `app/mod.rs` + `app/modals.rs` thêm `use crate::modals::*;` (bên cạnh glob components cho GitModal); 8 file đổi `crate::components::ModalDialog` → `crate::modals::modal_dialog::ModalDialog` (gồm 4 file git modals); `about_tab.rs` đổi `crate::modals::about_modal::render_update_section`.
+4. 2 `include_bytes!` lùi lại 1 cấp `../` (path tính từ vị trí file mới).
+5. `modals/mod.rs`: bỏ glob `pub use modal_dialog::*;` (dead — mọi consumer dùng full path sau retarget; cùng hiện tượng dead-glob như bước 2).
+6. Gate như trên → commit.

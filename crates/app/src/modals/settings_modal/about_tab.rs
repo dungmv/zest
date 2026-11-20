@@ -1,4 +1,4 @@
-use crate::components::about_modal::render_update_section;
+use crate::modals::about_modal::render_update_section;
 use crate::state::ModalKind;
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -14,7 +14,7 @@ fn settings_about_app_icon() -> Arc<Image> {
     ICON.get_or_init(|| {
         Arc::new(Image {
             format: ImageFormat::Png,
-            bytes: include_bytes!("../../../../resources/app_icon_128.png").to_vec(),
+            bytes: include_bytes!("../../../resources/app_icon_128.png").to_vec(),
             id: 3,
         })
     })

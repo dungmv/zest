@@ -17,6 +17,5 @@ pub use command_palette::*;
 pub use env_modal::*;
 pub use export_modal::*;
 pub use import_modal::*;
-pub use modal_dialog::*;
 pub use settings_modal::*;
 pub use workspace_setting_modal::*;
