@@ -1,7 +1,7 @@
 use super::common::{render_error_banner, render_not_a_repo_view};
 use super::diff_parser::{split_diff_into_file_slices, DiffViewMode};
 use super::diff_view::{render_diff_content, render_diff_view_toggle};
-use crate::modals::modal_dialog::{DialogHeader, DialogTitle, ModalDialog};
+use crate::modals::modal::{Dialog, DialogHeader, DialogTitle};
 use crate::services::GitService;
 use crate::state::GitState;
 use crate::theme::theme;
@@ -461,7 +461,7 @@ impl RenderOnce for GitHistoryModal {
                     }),
             );
 
-        ModalDialog::new("git-history-modal")
+        Dialog::new("git-history-modal")
             .w(px(1060.))
             .h(px(680.))
             .header(header_el)

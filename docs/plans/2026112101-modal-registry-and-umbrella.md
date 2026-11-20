@@ -90,3 +90,4 @@ Chuyển umbrella từ `components/modals/` lên **`src/modals/`** (đồng cấ
 4. 2 `include_bytes!` lùi lại 1 cấp `../` (path tính từ vị trí file mới).
 5. `modals/mod.rs`: bỏ glob `pub use modal_dialog::*;` (dead — mọi consumer dùng full path sau retarget; cùng hiện tượng dead-glob như bước 2).
 6. Gate như trên → commit.
+7. **Follow-up 2**: đổi `modal_dialog.rs` → `modal.rs`, struct `ModalDialog` → `Dialog` (tên `modals::modal::ModalDialog` lặp 3 lần "modal"); `DialogHeader/DialogTitle/DialogContent/DialogDescription` giữ nguyên (re-export từ `gpui_kit::component::dialog`). Lưu ý: `gpui_component::dialog::Dialog` tồn tại nhưng không file nào import trực tiếp — nếu sau này cần thì alias `as GpuiDialog`.

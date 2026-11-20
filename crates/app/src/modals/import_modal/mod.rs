@@ -1,6 +1,6 @@
 mod preview;
 
-use crate::modals::modal_dialog::ModalDialog;
+use crate::modals::modal::Dialog;
 use crate::state::{ModalKind, ModalState, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -125,7 +125,7 @@ impl RenderOnce for ImportModal {
             .target_folder_rel
             .clone();
 
-        ModalDialog::new("import-modal")
+        Dialog::new("import-modal")
             .w(px(640.))
             .h(px(520.))
             .title("Import into Workspace")

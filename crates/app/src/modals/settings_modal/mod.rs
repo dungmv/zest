@@ -4,7 +4,7 @@ mod general_tab;
 mod network_tab;
 mod shortcuts_tab;
 
-use crate::modals::modal_dialog::ModalDialog;
+use crate::modals::modal::Dialog;
 use crate::state::{ModalKind, ModalState, SettingsTab, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -71,7 +71,7 @@ impl RenderOnce for SettingsModal {
             (SettingsTab::About, IconName::Info, "About", None),
         ];
 
-        ModalDialog::new("settings-modal")
+        Dialog::new("settings-modal")
             .w(px(740.))
             .h(px(540.))
             .title("Settings")

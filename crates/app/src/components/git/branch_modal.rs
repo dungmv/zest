@@ -1,5 +1,5 @@
 use super::common::{render_error_banner, render_not_a_repo_view};
-use crate::modals::modal_dialog::ModalDialog;
+use crate::modals::modal::Dialog;
 use crate::services::GitService;
 use crate::state::GitState;
 use crate::theme::theme;
@@ -146,7 +146,7 @@ impl RenderOnce for GitBranchModal {
         );
         let branch_input = branch_input_holder.read(cx).0.clone();
 
-        ModalDialog::new("git-branch-modal")
+        Dialog::new("git-branch-modal")
             .w(px(420.))
             .title("Create New Branch")
             .icon(IconName::GitBranch)

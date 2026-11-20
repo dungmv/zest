@@ -8,7 +8,7 @@ pub mod command_palette;
 pub mod env_modal;
 pub mod export_modal;
 pub mod import_modal;
-pub mod modal_dialog;
+pub mod modal;
 pub mod settings_modal;
 pub mod workspace_setting_modal;
 

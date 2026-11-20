@@ -15,11 +15,12 @@ use std::rc::Rc;
 
 type CloseCallback = Rc<dyn Fn(&mut Window, &mut App) + 'static>;
 
-/// Reusable modal dialog overlay powered by gpui-kit tokens and dialog semantics.
-/// Provides a consistent backdrop dimming overlay, surface elevation, Escape key handling,
-/// backdrop click-to-dismiss, and semantic DialogHeader / DialogContent / DialogFooter integration.
+/// Reusable full-screen modal overlay powered by gpui-kit tokens and dialog
+/// semantics. Provides a consistent backdrop dimming overlay, surface
+/// elevation, Escape key handling, backdrop click-to-dismiss, and semantic
+/// DialogHeader / DialogContent / DialogFooter integration.
 #[derive(IntoElement)]
-pub struct ModalDialog {
+pub struct Dialog {
     id: ElementId,
     width: Pixels,
     height: Option<Pixels>,
@@ -33,7 +34,7 @@ pub struct ModalDialog {
     children: Vec<AnyElement>,
 }
 
-impl ModalDialog {
+impl Dialog {
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             id: id.into(),
@@ -98,13 +99,13 @@ impl ModalDialog {
     }
 }
 
-impl ParentElement for ModalDialog {
+impl ParentElement for Dialog {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
         self.children.extend(elements);
     }
 }
 
-impl RenderOnce for ModalDialog {
+impl RenderOnce for Dialog {
     fn render(self, _: &mut Window, _cx: &mut App) -> impl IntoElement {
         let t = theme();
         let close_cb_backdrop = self.on_close.clone();
