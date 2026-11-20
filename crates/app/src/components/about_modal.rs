@@ -1,5 +1,5 @@
 use crate::components::ModalDialog;
-use crate::state::{ModalState, ToastState, UpdateStatus};
+use crate::state::{ModalState, UpdateStatus};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -27,15 +27,11 @@ fn about_app_icon() -> Arc<Image> {
 #[derive(IntoElement)]
 pub struct AboutModal {
     modal_state: Entity<ModalState>,
-    toast_state: Entity<ToastState>,
 }
 
 impl AboutModal {
-    pub fn new(modal_state: Entity<ModalState>, toast_state: Entity<ToastState>) -> Self {
-        Self {
-            modal_state,
-            toast_state,
-        }
+    pub fn new(modal_state: Entity<ModalState>) -> Self {
+        Self { modal_state }
     }
 }
 
@@ -43,7 +39,6 @@ impl RenderOnce for AboutModal {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let t = theme();
         let modal_clone = self.modal_state.clone();
-        let toast_clone = self.toast_state;
 
         let version = crate::version::APP_VERSION;
         let commit_hash = crate::version::COMMIT_HASH;
@@ -132,7 +127,6 @@ impl RenderOnce for AboutModal {
                                             .child(format!("v{version}")),
                                     )
                                     .child({
-                                        let toast_c = toast_clone;
                                         let plat_c = platform_label.clone();
                                         Button::new("btn-copy-version")
                                             .ghost()
@@ -144,19 +138,18 @@ impl RenderOnce for AboutModal {
                                             .w(px(20.))
                                             .h(px(20.))
                                             .tooltip("Copy Version")
-                                            .on_click(move |_, _, cx| {
+                                            .on_click(move |_, window, cx| {
                                                 cx.write_to_clipboard(
                                                     gpui_kit::ClipboardItem::new_string(format!(
                                                         "Zest v{version} ({commit_hash}) - {plat_c}"
                                                     )),
                                                 );
-                                                toast_c.update(cx, |t, cx| {
-                                                    t.push_success(
-                                                        "Copied",
-                                                        "Version info copied to clipboard",
-                                                        cx,
-                                                    );
-                                                });
+                                                crate::notify::success_in(
+                                                    "Copied",
+                                                    "Version info copied to clipboard",
+                                                    window,
+                                                    cx,
+                                                );
                                             })
                                             .child(Icon::new(IconName::Copy).size(px(12.)))
                                     }),

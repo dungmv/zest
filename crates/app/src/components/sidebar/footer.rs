@@ -1,5 +1,5 @@
 use crate::services::GitService;
-use crate::state::{GitActiveModal, GitState, ToastState};
+use crate::state::{GitActiveModal, GitState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -19,7 +19,6 @@ pub fn render_sidebar_footer(
     is_syncing: bool,
     sync_message: Option<&str>,
     git: &Entity<GitState>,
-    toast: &Entity<ToastState>,
 ) -> AnyElement {
     let t = theme();
     let is_repo = git_status.map(|s| s.is_repo).unwrap_or(false);
@@ -27,7 +26,7 @@ pub fn render_sidebar_footer(
     let ahead = git_status.map(|s| s.ahead).unwrap_or(0);
 
     let git_footer = git.clone();
-    let git_service = GitService::new(git.clone(), toast.clone());
+    let git_service = GitService::new(git.clone());
     let current_branch_name = git_branch.to_string();
     let sync_label = sync_message.unwrap_or("syncing...").to_lowercase();
 

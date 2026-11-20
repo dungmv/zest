@@ -6,7 +6,7 @@ use crate::components::completion::env_autocomplete::{attach_missing_var_tokens,
 use crate::components::request_composer::composer_inputs::ComposerInputs;
 use crate::state::{
     EnvironmentEvent, EnvironmentState, GitState, ModalState, PersistenceState,
-    RequestSessionState, ResponseEvent, ResponseState, SessionEvent, SidebarState, ToastState,
+    RequestSessionState, ResponseEvent, ResponseState, SessionEvent, SidebarState,
     WorkspaceDataState, WorkspaceEvent,
 };
 use gpui_kit::component::input::InputEvent;
@@ -24,7 +24,6 @@ pub struct SubscriptionTargets<'a> {
     pub git_state: &'a Entity<GitState>,
     pub editor_state: &'a Entity<RequestSessionState>,
     pub response_state: &'a Entity<ResponseState>,
-    pub toast_state: &'a Entity<ToastState>,
     pub composer_inputs: &'a ComposerInputs,
 }
 
@@ -94,25 +93,23 @@ pub fn setup_app_subscriptions(
                             ed_url.update(cx, |ed, cx| {
                                 ed.notify_request_reloaded(cx);
                             });
-                            this.state.toast.update(cx, |t, cx| {
-                                t.push_success(
-                                    "cURL Imported",
-                                    format!("Parsed {} request to {}", method_name, target_url),
-                                    cx,
-                                );
-                            });
+                            crate::notify::success_in(
+                                "cURL Imported",
+                                format!("Parsed {} request to {}", method_name, target_url),
+                                window,
+                                cx,
+                            );
                             return;
                         }
                         Err(e) => {
                             if val.lines().count() > 1 || val.contains(" -") || val.contains(" --")
                             {
-                                this.state.toast.update(cx, |t, cx| {
-                                    t.push_error(
-                                        "cURL Parse Error",
-                                        format!("Failed to parse cURL: {}", e),
-                                        cx,
-                                    );
-                                });
+                                crate::notify::error_in(
+                                    "cURL Parse Error",
+                                    format!("Failed to parse cURL: {}", e),
+                                    window,
+                                    cx,
+                                );
                             }
                         }
                     }
@@ -531,7 +528,6 @@ pub fn setup_app_subscriptions(
     subscriptions.push(cx.observe(targets.git_state, |_, _, cx| cx.notify()));
     subscriptions.push(cx.observe(targets.env_state, |_, _, cx| cx.notify()));
     subscriptions.push(cx.observe(targets.persistence_state, |_, _, cx| cx.notify()));
-    subscriptions.push(cx.observe(targets.toast_state, |_, _, cx| cx.notify()));
 
     // 6. Observe OS appearance changes for System theme preference
     let modal_theme = targets.modal_state.clone();

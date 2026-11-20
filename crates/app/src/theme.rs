@@ -617,6 +617,9 @@ pub fn sync_component_theme(mode: ThemeMode, cx: &mut App) {
             highlight.style.status = status;
             c.highlight_theme = std::sync::Arc::new(highlight);
         }
+
+        c.notification.placement = gpui_kit::Anchor::BottomRight;
+        c.notification.max_items = 5;
     });
 }
 

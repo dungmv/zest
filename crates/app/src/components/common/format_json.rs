@@ -1,9 +1,9 @@
-use crate::state::{RequestSessionState, ToastState};
+use crate::state::RequestSessionState;
 use gpui_kit::component::input::EditorState as CodeEditorState;
 use gpui_kit::{App, Entity, Window};
 
 /// Pretty-prints the JSON currently in `editor`, saves it back into the
-/// editor and flags the active request dirty; toasts when the content is
+/// editor and flags the active request dirty; notifies when the content is
 /// not valid JSON. Shared by the HTTP Body (JSON) editor and the gRPC
 /// message editor.
 ///
@@ -15,7 +15,6 @@ use gpui_kit::{App, Entity, Window};
 pub fn format_json_editor(
     editor: &Entity<CodeEditorState>,
     session_state: &Entity<RequestSessionState>,
-    toast_state: Option<&Entity<ToastState>>,
     window: &mut Window,
     cx: &mut App,
 ) {
@@ -34,11 +33,7 @@ pub fn format_json_editor(
             }
         }
         Err(e) => {
-            if let Some(ts) = toast_state {
-                ts.update(cx, |toast, cx| {
-                    toast.push_error("Invalid JSON", e.to_string(), cx);
-                });
-            }
+            crate::notify::error_in("Invalid JSON", e.to_string(), window, cx);
         }
     }
 }

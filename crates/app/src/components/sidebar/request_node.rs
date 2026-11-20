@@ -218,7 +218,6 @@ pub fn render_request_inner_pill(
             let r_id_menu = r_id_menu.clone();
             let init_name_menu = initial_name_menu.clone();
             let ed_menu = ctx.ed.clone();
-            let toast_menu = ctx.toast.clone();
             let is_pinned = ctx.pins.contains(&r_id_menu);
             let is_dirty_git = req_git_status != SidebarGitStatus::Clean;
 
@@ -315,12 +314,11 @@ pub fn render_request_inner_pill(
 
                 if is_dirty_git {
                     let git_disc = git_menu.clone();
-                    let svc_disc = GitService::new(git_menu.clone(), toast_menu.clone());
+                    let svc_disc = GitService::new(git_menu.clone());
                     let ws_disc = ws_menu.clone();
                     let per_disc = per_menu.clone();
                     let ed_disc = ed_menu.clone();
                     let r_id_disc = r_id_menu.clone();
-                    let toast_disc = toast_menu.clone();
                     let r_name_disc = init_name_menu.clone();
 
                     m = m.separator().item(
@@ -373,7 +371,6 @@ pub fn render_request_inner_pill(
                                 let per_cb = per_disc.clone();
                                 let ws_cb = ws_disc.clone();
                                 let ed_cb = ed_disc.clone();
-                                let toast_cb = toast_disc.clone();
                                 let req_name_cb = req_name.clone();
                                 svc_disc.discard_file(&path_to_discard, false, cx, move |cx| {
                                     per_cb.update(cx, |per, cx| {
@@ -406,13 +403,11 @@ pub fn render_request_inner_pill(
                                         }
                                         cx.notify();
                                     });
-                                    toast_cb.update(cx, |ts, cx| {
-                                        ts.push_info(
-                                            "Git Discard",
-                                            format!("Discarded changes in '{}'", req_name_cb),
-                                            cx,
-                                        );
-                                    });
+                                    crate::notify::info(
+                                        "Git Discard",
+                                        format!("Discarded changes in '{}'", req_name_cb),
+                                        cx,
+                                    );
                                 });
                             }),
                     );

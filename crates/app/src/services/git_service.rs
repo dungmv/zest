@@ -1,24 +1,22 @@
-use crate::state::{GitState, ToastState};
+use crate::state::GitState;
 use gpui_kit::{App, Context, Entity};
 
 /// Command router for Git VCS operations.
 ///
-/// Stateless holder of the two handles git commands need: the state entity
-/// (status cache, reentrancy guards, UI selections) and the toast entity
-/// (user-facing feedback). Cheap to clone; construct at point of use.
+/// Stateless holder of the git state entity (status cache, reentrancy guards,
+/// UI selections). Cheap to clone; construct at point of use.
 ///
 /// State-side transitions (modal/tab switching, refreshes, selections) stay on
 /// [`GitState`]; this service only dispatches git CLI commands on the
-/// background executor and routes their results back into the entities.
+/// background executor and routes their results back into the entity.
 #[derive(Clone)]
 pub struct GitService {
     git: Entity<GitState>,
-    toast: Entity<ToastState>,
 }
 
 impl GitService {
-    pub fn new(git: Entity<GitState>, toast: Entity<ToastState>) -> Self {
-        Self { git, toast }
+    pub fn new(git: Entity<GitState>) -> Self {
+        Self { git }
     }
 
     /// Dispatch a `loading`-guarded command. Errors surface in
@@ -88,7 +86,6 @@ impl GitService {
         });
 
         let git = self.git.clone();
-        let toast = self.toast.clone();
         cx.spawn(async move |cx| {
             let res = cx.background_executor().spawn(async move { op() }).await;
             cx.update(|cx| {
@@ -102,9 +99,7 @@ impl GitService {
                             cx.notify();
                         }
                         Err(e) => {
-                            toast.update(cx, |ts, cx| {
-                                ts.push_error(error_title, e.clone(), cx);
-                            });
+                            crate::notify::error(error_title, e.clone(), cx);
                             git.error = Some(e);
                             cx.notify();
                         }
@@ -182,7 +177,6 @@ impl GitService {
         });
 
         let git = self.git.clone();
-        let toast = self.toast.clone();
         cx.spawn(async move |cx| {
             let p_task = p.clone();
             let res = cx
@@ -210,9 +204,7 @@ impl GitService {
                         Err(e) => {
                             let err_str = e.to_string();
                             git.error = Some(err_str.clone());
-                            toast.update(cx, |ts, cx| {
-                                ts.push_error("Git Discard Failed", err_str, cx);
-                            });
+                            crate::notify::error("Git Discard Failed", err_str, cx);
                             cx.notify();
                         }
                     }
@@ -256,7 +248,6 @@ impl GitService {
         });
 
         let git = self.git.clone();
-        let toast = self.toast.clone();
         let msg = message.to_string();
         cx.spawn(async move |cx| {
             let ws_commit = ws_path.clone();
@@ -297,9 +288,7 @@ impl GitService {
                             git.refresh_all(cx);
                             cx.notify();
                             if let Some(Err(e)) = push_res {
-                                toast.update(cx, |ts, cx| {
-                                    ts.push_error("Git Push Failed", e.to_string(), cx);
-                                });
+                                crate::notify::error("Git Push Failed", e.to_string(), cx);
                             }
                         }
                         Err(e) => {
@@ -328,7 +317,6 @@ impl GitService {
         });
 
         let git = self.git.clone();
-        let toast = self.toast.clone();
         cx.spawn(async move |cx| {
             let b_task = b.clone();
             let res = cx
@@ -350,9 +338,7 @@ impl GitService {
                         Err(e) => {
                             let err_str = e.to_string();
                             git.error = Some(err_str.clone());
-                            toast.update(cx, |ts, cx| {
-                                ts.push_error("Git Checkout Failed", err_str, cx);
-                            });
+                            crate::notify::error("Git Checkout Failed", err_str, cx);
                             cx.notify();
                         }
                     }

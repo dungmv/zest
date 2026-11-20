@@ -1,6 +1,6 @@
 use crate::components::format_json_editor;
 use crate::components::message_toolbar;
-use crate::state::{edit_active_request, RequestSessionState, ToastState, WorkspaceDataState};
+use crate::state::{edit_active_request, RequestSessionState, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -18,7 +18,6 @@ use zest_core::models::GrpcPayload;
 pub(super) struct GrpcMessageTabContext<'a> {
     pub workspace_state: &'a Entity<WorkspaceDataState>,
     pub editor_state: &'a Entity<RequestSessionState>,
-    pub toast_state: &'a Entity<ToastState>,
     pub message_editor: &'a Entity<CodeEditorState>,
     pub error_marks: &'a GutterDecorationCollection,
     pub diagnostics_hover: &'a std::rc::Rc<std::cell::Cell<bool>>,
@@ -58,7 +57,6 @@ pub(super) fn render_grpc_message_tab(
 
     let ed_format = ctx.editor_state.clone();
     let message_editor = ctx.message_editor.clone();
-    let toast_state = ctx.toast_state.clone();
 
     div()
         .size_full()
@@ -151,13 +149,7 @@ pub(super) fn render_grpc_message_tab(
                         .xsmall()
                         .label("Format JSON")
                         .on_click(move |_, window, cx: &mut App| {
-                            format_json_editor(
-                                &message_editor,
-                                &ed_format,
-                                Some(&toast_state),
-                                window,
-                                cx,
-                            );
+                            format_json_editor(&message_editor, &ed_format, window, cx);
                         }),
                 ),
         )

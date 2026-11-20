@@ -1,5 +1,5 @@
 use crate::components::ModalDialog;
-use crate::state::{ModalState, ToastState, WorkspaceDataState};
+use crate::state::{ModalState, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -37,19 +37,16 @@ impl ExportModalState {
 pub struct ExportModal {
     workspace_state: Entity<WorkspaceDataState>,
     modal_state: Entity<ModalState>,
-    toast_state: Entity<ToastState>,
 }
 
 impl ExportModal {
     pub fn new(
         workspace_state: Entity<WorkspaceDataState>,
         modal_state: Entity<ModalState>,
-        toast_state: Entity<ToastState>,
     ) -> Self {
         Self {
             workspace_state,
             modal_state,
-            toast_state,
         }
     }
 }
@@ -59,7 +56,6 @@ impl RenderOnce for ExportModal {
         let t = theme();
         let ws_entity = self.workspace_state.clone();
         let modal_entity_ref = self.modal_state.clone();
-        let toast_entity = self.toast_state.clone();
 
         let modal_entity = window
             .use_keyed_state(
@@ -293,7 +289,6 @@ impl RenderOnce for ExportModal {
                                 let file_name = default_file_name;
                                 let ws_exec = ws_entity.clone();
                                 let modal_exec = modal_entity_ref.clone();
-                                let toast_exec = toast_entity.clone();
                                 let st_exec = modal_entity.clone();
                                 let scope_exec = target_folder_id.clone();
 
@@ -311,7 +306,6 @@ impl RenderOnce for ExportModal {
                                         let ws_exec = ws_exec.clone();
                                         let scope = scope_exec.clone();
                                         let modal_exec = modal_exec.clone();
-                                        let toast_exec = toast_exec.clone();
 
                                         cx.spawn(async move |cx| {
                                             if let Some(file) = rfd::AsyncFileDialog::new()
@@ -344,8 +338,8 @@ impl RenderOnce for ExportModal {
                                                                 modal_exec.update(cx, |m, cx| {
                                                                     m.close_export_modal(cx);
                                                                 });
-                                                                toast_exec.update(cx, |ts, cx| {
-                                                                    ts.push_success(
+                                                                cx.update(|cx| {
+                                                                    crate::notify::success(
                                                                         "Export Complete",
                                                                         format!(
                                                                             "Saved {}",
@@ -354,7 +348,7 @@ impl RenderOnce for ExportModal {
                                                                         cx,
                                                                     );
                                                                     if !warnings.is_empty() {
-                                                                        ts.push_info(
+                                                                        crate::notify::info(
                                                                             "Export Warnings",
                                                                             warnings.join(" · "),
                                                                             cx,
@@ -363,8 +357,8 @@ impl RenderOnce for ExportModal {
                                                                 });
                                                             }
                                                             Err(e) => {
-                                                                toast_exec.update(cx, |ts, cx| {
-                                                                    ts.push_error(
+                                                                cx.update(|cx| {
+                                                                    crate::notify::error(
                                                                         "Export Failed",
                                                                         e.to_string(),
                                                                         cx,
@@ -374,8 +368,8 @@ impl RenderOnce for ExportModal {
                                                         }
                                                     }
                                                     Err(e) => {
-                                                        toast_exec.update(cx, |ts, cx| {
-                                                            ts.push_error(
+                                                        cx.update(|cx| {
+                                                            crate::notify::error(
                                                                 "Export Failed",
                                                                 e.to_string(),
                                                                 cx,

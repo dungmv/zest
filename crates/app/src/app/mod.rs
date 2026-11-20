@@ -82,7 +82,6 @@ impl AppView {
             state.workspace.clone(),
             state.env.clone(),
             state.response.clone(),
-            state.toast.clone(),
             state.modal.clone(),
             crate::services::Engines {
                 http: http_engine,
@@ -150,7 +149,6 @@ impl AppView {
                 git_state: &state.git,
                 editor_state: &state.session,
                 response_state: &state.response,
-                toast_state: &state.toast,
                 composer_inputs: &composer_inputs,
             },
             window,
@@ -163,13 +161,12 @@ impl AppView {
         _subscriptions.push(focus_lost_sub);
 
         if state.git.read(cx).tracked_warning {
-            state.toast.update(cx, |t, cx| {
-                t.push_error(
-                    "Security Warning",
-                    "A git repository was detected with .local/ or *.loc tracked in git. Secrets or response tokens may leak!",
-                    cx,
-                );
-            });
+            crate::notify::error_in(
+                "Security Warning",
+                "A git repository was detected with .local/ or *.loc tracked in git. Secrets or response tokens may leak!",
+                window,
+                cx,
+            );
         }
 
         Self {
@@ -217,9 +214,7 @@ impl AppView {
             .unwrap_or(false);
         if wants_json {
             if let Err(e) = serde_json::from_str::<serde_json::Value>(&text) {
-                self.state.toast.update(cx, |toast, cx| {
-                    toast.push_error("Invalid JSON", e.to_string(), cx);
-                });
+                crate::notify::error_in("Invalid JSON", e.to_string(), window, cx);
                 return;
             }
         }
@@ -299,7 +294,6 @@ impl Render for AppView {
         let git_entity = self.state.git.clone();
         let session_entity = self.state.session.clone();
         let resp_entity = self.state.response.clone();
-        let toast_entity = self.state.toast.clone();
         let app_view_entity = cx.entity().clone();
 
         let composer_pane = self.render_request_composer(window, cx);
@@ -344,7 +338,6 @@ impl Render for AppView {
                             git_state: git_entity.clone(),
                             editor_state: session_entity.clone(),
                             response_state: resp_entity.clone(),
-                            toast_state: toast_entity.clone(),
                         }),
                 )
                 .child(resizable_panel().child(main_content))
@@ -546,7 +539,6 @@ impl Render for AppView {
                 sidebar_state: &sidebar_entity,
                 git_state: &git_entity,
                 editor_state: &session_entity,
-                toast_state: &toast_entity,
                 env_var_table: &self.env_var_table,
             },
             move |_, cx| {

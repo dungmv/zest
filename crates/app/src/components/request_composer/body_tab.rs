@@ -14,8 +14,7 @@ pub(super) fn render_body_tab(av: &AppView) -> AnyElement {
             )
             .workspace_state(av.state.workspace.clone())
             .env_state(av.state.env.clone())
-            .modal_state(av.state.modal.clone())
-            .toast_state(av.state.toast.clone()),
+            .modal_state(av.state.modal.clone()),
         )
         .into_any_element()
 }

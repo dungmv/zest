@@ -129,9 +129,7 @@ pub fn handle_workspace_event(
             });
         }
         WorkspaceEvent::CrudFailed { title, message } => {
-            this.state.toast.update(cx, |t, cx| {
-                t.push_error(*title, message.clone(), cx);
-            });
+            crate::notify::error_in(*title, message.clone(), window, cx);
         }
         WorkspaceEvent::WorkspaceMetaModified => {
             let meta = this.state.workspace.read(cx).workspace_meta.clone();

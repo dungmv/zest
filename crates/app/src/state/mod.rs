@@ -9,7 +9,6 @@ pub mod persistence_tests;
 pub mod request_session_state;
 pub mod response_state;
 pub mod sidebar_state;
-pub mod toast_state;
 mod watcher_reconciler;
 #[cfg(test)]
 pub mod workspace_collision_tests;
@@ -29,7 +28,6 @@ pub use persistence_state::*;
 pub use request_session_state::*;
 pub use response_state::*;
 pub use sidebar_state::*;
-pub use toast_state::*;
 pub use workspace_crud::*;
 pub use workspace_data_state::*;
 pub use workspace_events::*;

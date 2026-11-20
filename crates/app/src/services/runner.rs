@@ -3,8 +3,7 @@ use super::http_engine::HttpEngine;
 use super::send_event::SendEvent;
 use super::ws_service::WsService;
 use crate::state::{
-    EnvironmentState, ModalState, RequestSessionState, ResponseState, ToastState,
-    WorkspaceDataState,
+    EnvironmentState, ModalState, RequestSessionState, ResponseState, WorkspaceDataState,
 };
 use gpui_kit::{App, Entity};
 use std::sync::Arc;
@@ -28,7 +27,6 @@ pub struct Runner {
     pub workspace_state: Entity<WorkspaceDataState>,
     pub env_state: Entity<EnvironmentState>,
     pub response_state: Entity<ResponseState>,
-    pub toast_state: Entity<ToastState>,
     pub modal_state: Entity<ModalState>,
     pub engines: Engines,
 }
@@ -53,7 +51,6 @@ impl Runner {
         workspace_state: Entity<WorkspaceDataState>,
         env_state: Entity<EnvironmentState>,
         response_state: Entity<ResponseState>,
-        toast_state: Entity<ToastState>,
         modal_state: Entity<ModalState>,
         engines: Engines,
     ) -> Self {
@@ -62,7 +59,6 @@ impl Runner {
             workspace_state,
             env_state,
             response_state,
-            toast_state,
             modal_state,
             engines,
         }
@@ -89,9 +85,7 @@ impl Runner {
             match ctx.req_item.to_graphql_http_item() {
                 Ok(http_item) => ctx.req_item = http_item,
                 Err(err) => {
-                    self.toast_state.update(cx, |ts, cx| {
-                        ts.push_error("GraphQL Failed", err, cx);
-                    });
+                    crate::notify::error("GraphQL Failed", err, cx);
                     return;
                 }
             }
@@ -185,7 +179,6 @@ impl Runner {
         let workspace_state = self.workspace_state.clone();
         let env_state = self.env_state.clone();
         let response_state = self.response_state.clone();
-        let toast_state = self.toast_state.clone();
         let ws_service = self.engines.ws.clone();
         let grpc_engine = self.engines.grpc.clone();
         let http_engine = self.engines.http.clone();
@@ -365,9 +358,7 @@ impl Runner {
                         session_state.update(cx, |ed, cx| {
                             ed.stop_sending(cx);
                         });
-                        toast_state.update(cx, |ts, cx| {
-                            ts.push_error("gRPC Error", status_message, cx);
-                        });
+                        crate::notify::error("gRPC Error", status_message, cx);
                     }
                     SendEvent::SchemaReady {
                         request_id,
@@ -413,19 +404,13 @@ impl Runner {
                                         );
                                     });
                                 }
-                                toast_state.update(cx, |ts, cx| {
-                                    ts.push_error("WebSocket Failed", error, cx);
-                                });
+                                crate::notify::error("WebSocket Failed", error, cx);
                             }
                             Protocol::Grpc => {
-                                toast_state.update(cx, |ts, cx| {
-                                    ts.push_error("gRPC Failed", error, cx);
-                                });
+                                crate::notify::error("gRPC Failed", error, cx);
                             }
                             Protocol::Http | Protocol::GraphQL | Protocol::Sse => {
-                                toast_state.update(cx, |ts, cx| {
-                                    ts.push_error("Send Failed", error, cx);
-                                });
+                                crate::notify::error("Send Failed", error, cx);
                             }
                         }
                     }
@@ -445,9 +430,7 @@ impl Runner {
                 });
             }
             Err(err) => {
-                self.toast_state.update(cx, |ts, cx| {
-                    ts.push_error("Send Failed", err, cx);
-                });
+                crate::notify::error("Send Failed", err, cx);
             }
         }
     }
@@ -456,9 +439,7 @@ impl Runner {
     pub fn send_ws_ping(&self, cx: &mut App) {
         let req_id = self.session_state.read(cx).active_request_id().to_string();
         if let Err(err) = self.engines.ws.send_ping(&req_id) {
-            self.toast_state.update(cx, |ts, cx| {
-                ts.push_error("Ping Failed", err, cx);
-            });
+            crate::notify::error("Ping Failed", err, cx);
         }
     }
 
@@ -485,7 +466,6 @@ impl Runner {
         };
 
         let session_state = self.session_state.clone();
-        let toast_state = self.toast_state.clone();
 
         let rx = self.engines.grpc.fetch_schema(
             req.url.clone(),
@@ -503,9 +483,7 @@ impl Runner {
                     });
                 }
                 Err(err) => {
-                    toast_state.update(cx, |ts, cx| {
-                        ts.push_error("Schema Fetch Failed", err, cx);
-                    });
+                    crate::notify::error("Schema Fetch Failed", err, cx);
                 }
             });
         })
@@ -526,7 +504,6 @@ impl Runner {
         let env = Some(self.env_state.read(cx).effective_environment());
 
         let session_state = self.session_state.clone();
-        let toast_state = self.toast_state.clone();
 
         let rx = self.engines.http.fetch_graphql_schema(req, env);
         cx.spawn(async move |cx| {
@@ -540,9 +517,7 @@ impl Runner {
                     });
                 }
                 Err(err) => {
-                    toast_state.update(cx, |ts, cx| {
-                        ts.push_error("Schema Fetch Failed", err, cx);
-                    });
+                    crate::notify::error("Schema Fetch Failed", err, cx);
                 }
             });
         })

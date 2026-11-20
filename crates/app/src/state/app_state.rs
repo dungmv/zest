@@ -1,6 +1,6 @@
 use crate::state::{
     EnvironmentState, GitState, ModalState, PersistenceState, RequestSessionState, ResponseState,
-    SidebarState, ToastState, WorkspaceDataState,
+    SidebarState, WorkspaceDataState,
 };
 use gpui_kit::{App, AppContext as _, Entity};
 
@@ -13,7 +13,6 @@ pub struct AppState {
     pub git: Entity<GitState>,
     pub session: Entity<RequestSessionState>,
     pub response: Entity<ResponseState>,
-    pub toast: Entity<ToastState>,
 }
 
 impl AppState {
@@ -47,7 +46,6 @@ impl AppState {
         let modal = cx.new(|_| ModalState::new());
         let session = cx.new(|_| RequestSessionState::new());
         let response = cx.new(|_| ResponseState::new());
-        let toast = cx.new(|_| ToastState::new());
 
         Self {
             workspace,
@@ -58,7 +56,6 @@ impl AppState {
             git,
             session,
             response,
-            toast,
         }
     }
 }

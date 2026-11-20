@@ -48,7 +48,6 @@ pub(super) fn render_message_tab(
                     super::grpc_message_tab::GrpcMessageTabContext {
                         workspace_state: &av.state.workspace,
                         editor_state: &av.state.session,
-                        toast_state: &av.state.toast,
                         message_editor: &av.composer_inputs.grpc.message_editor,
                         error_marks: &av.composer_inputs.grpc.error_marks,
                         diagnostics_hover: &av.composer_inputs.grpc.diagnostics_hover,

@@ -21,7 +21,6 @@ pub mod sidebar;
 pub mod status_badge;
 pub mod tabs_with_badge;
 pub mod titlebar;
-pub mod toast;
 pub mod workspace_setting_modal;
 
 pub use about_modal::*;
@@ -44,5 +43,4 @@ pub use sidebar::*;
 pub use status_badge::*;
 pub use tabs_with_badge::*;
 pub use titlebar::*;
-pub use toast::*;
 pub use workspace_setting_modal::*;

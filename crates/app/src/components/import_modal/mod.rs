@@ -1,7 +1,7 @@
 mod preview;
 
 use crate::components::ModalDialog;
-use crate::state::{ModalState, ToastState, WorkspaceDataState};
+use crate::state::{ModalState, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::alert::Alert;
@@ -79,19 +79,16 @@ impl ImportModalState {
 pub struct ImportModal {
     workspace_state: Entity<WorkspaceDataState>,
     modal_state: Entity<ModalState>,
-    toast_state: Entity<ToastState>,
 }
 
 impl ImportModal {
     pub fn new(
         workspace_state: Entity<WorkspaceDataState>,
         modal_state: Entity<ModalState>,
-        toast_state: Entity<ToastState>,
     ) -> Self {
         Self {
             workspace_state,
             modal_state,
-            toast_state,
         }
     }
 }
@@ -101,7 +98,6 @@ impl RenderOnce for ImportModal {
         let t = theme();
         let ws_entity = self.workspace_state.clone();
         let modal_entity_ref = self.modal_state.clone();
-        let toast_entity = self.toast_state.clone();
 
         let modal_entity = window
             .use_keyed_state(
@@ -362,7 +358,6 @@ impl RenderOnce for ImportModal {
                                 let is_valid = matches!(&parse_result, Some(Ok(r)) if !r.requests.is_empty());
                                 let ws_exec = ws_entity.clone();
                                 let modal_exec = modal_entity_ref.clone();
-                                let toast_exec = toast_entity.clone();
                                 let st_exec = modal_entity.clone();
 
                                 Button::new("btn-execute-import")
@@ -370,7 +365,7 @@ impl RenderOnce for ImportModal {
                                     .small()
                                     .disabled(!is_valid)
                                     .label("Import Now")
-                                    .on_click(move |_, _, cx: &mut App| {
+                                    .on_click(move |_, window, cx: &mut App| {
                                         if !is_valid {
                                             return;
                                         }
@@ -395,21 +390,23 @@ impl RenderOnce for ImportModal {
                                                 modal_exec.update(cx, |m, cx| {
                                                     m.close_import_modal(cx);
                                                 });
-                                                toast_exec.update(cx, |ts, cx| {
-                                                    ts.push_success(
-                                                        "Import Complete",
-                                                        format!(
-                                                            "Imported {} requests and {} folders into workspace",
-                                                            summary.total_requests, summary.total_folders
-                                                        ),
-                                                        cx,
-                                                    );
-                                                });
+                                                crate::notify::success_in(
+                                                    "Import Complete",
+                                                    format!(
+                                                        "Imported {} requests and {} folders into workspace",
+                                                        summary.total_requests, summary.total_folders
+                                                    ),
+                                                    window,
+                                                    cx,
+                                                );
                                             }
                                             Err(e) => {
-                                                toast_exec.update(cx, |ts, cx| {
-                                                    ts.push_error("Import Failed", e.to_string(), cx);
-                                                });
+                                                crate::notify::error_in(
+                                                    "Import Failed",
+                                                    e.to_string(),
+                                                    window,
+                                                    cx,
+                                                );
                                             }
                                         }
                                     })

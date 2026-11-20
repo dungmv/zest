@@ -13,8 +13,7 @@ pub use xml::*;
 use crate::components::format_json_editor;
 use crate::components::message_toolbar;
 use crate::state::{
-    edit_active_request, EnvironmentState, ModalState, RequestSessionState, ToastState,
-    WorkspaceDataState,
+    edit_active_request, EnvironmentState, ModalState, RequestSessionState, WorkspaceDataState,
 };
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -58,7 +57,6 @@ pub struct BodyEditor {
     workspace_state: Option<Entity<WorkspaceDataState>>,
     env_state: Option<Entity<EnvironmentState>>,
     modal_state: Option<Entity<ModalState>>,
-    toast_state: Option<Entity<ToastState>>,
 }
 
 impl BodyEditor {
@@ -76,7 +74,6 @@ impl BodyEditor {
             workspace_state: None,
             env_state: None,
             modal_state: None,
-            toast_state: None,
         }
     }
 
@@ -92,11 +89,6 @@ impl BodyEditor {
 
     pub fn modal_state(mut self, modal: Entity<ModalState>) -> Self {
         self.modal_state = Some(modal);
-        self
-    }
-
-    pub fn toast_state(mut self, ts: Entity<ToastState>) -> Self {
-        self.toast_state = Some(ts);
         self
     }
 }
@@ -425,25 +417,17 @@ impl RenderOnce for BodyEditor {
                         if is_json {
                             let ed_c = ed_entity.clone();
                             let j_text = self.json_editor.clone();
-                            let toast_opt = self.toast_state.clone();
                             Button::new("btn-format-json-body")
                                 .ghost()
                                 .xsmall()
                                 .label("Format JSON")
                                 .on_click(move |_, window, cx: &mut App| {
-                                    format_json_editor(
-                                        &j_text,
-                                        &ed_c,
-                                        toast_opt.as_ref(),
-                                        window,
-                                        cx,
-                                    );
+                                    format_json_editor(&j_text, &ed_c, window, cx);
                                 })
                                 .into_any_element()
                         } else if is_xml {
                             let ed_c = ed_entity.clone();
                             let xml_tx = self.xml_editor.clone();
-                            let toast_opt = self.toast_state.clone();
                             Button::new("btn-format-xml-body")
                                 .ghost()
                                 .xsmall()
@@ -460,15 +444,12 @@ impl RenderOnce for BodyEditor {
                                             });
                                         }
                                         Err(e) => {
-                                            if let Some(ts) = &toast_opt {
-                                                ts.update(cx, |toast, cx| {
-                                                    toast.push_error(
-                                                        "XML Format Error",
-                                                        e,
-                                                        cx,
-                                                    );
-                                                });
-                                            }
+                                            crate::notify::error_in(
+                                                "XML Format Error",
+                                                e,
+                                                window,
+                                                cx,
+                                            );
                                         }
                                     }
                                 })

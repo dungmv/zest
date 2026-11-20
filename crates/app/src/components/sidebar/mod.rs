@@ -18,7 +18,7 @@ pub const SIDEBAR_ROW_HEIGHT: f32 = 28.0;
 
 use crate::state::{
     GitState, ModalState, PersistenceState, RequestSessionState, ResponseState, SidebarState,
-    ToastState, WorkspaceDataState,
+    WorkspaceDataState,
 };
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -54,7 +54,6 @@ pub struct SidebarRenderContext<'a> {
     pub git: &'a Entity<GitState>,
     pub ed: &'a Entity<RequestSessionState>,
     pub resp: &'a Entity<ResponseState>,
-    pub toast: &'a Entity<ToastState>,
     pub is_multi_select: bool,
     pub selected_requests: &'a HashSet<String>,
     pub selected_folders: &'a HashSet<String>,
@@ -282,7 +281,6 @@ pub struct SidebarTree {
     pub git_state: Entity<GitState>,
     pub editor_state: Entity<RequestSessionState>,
     pub response_state: Entity<ResponseState>,
-    pub toast_state: Entity<ToastState>,
 }
 
 impl RenderOnce for SidebarTree {
@@ -305,7 +303,6 @@ impl RenderOnce for SidebarTree {
                 git.is_syncing,
                 git.sync_message.as_deref(),
                 &self.git_state,
-                &self.toast_state,
             );
 
             (
@@ -324,7 +321,6 @@ impl RenderOnce for SidebarTree {
         let git_clone = self.git_state.clone();
         let ed_clone = self.editor_state.clone();
         let resp_clone = self.response_state.clone();
-        let toast_clone = self.toast_state.clone();
 
         let sb_search = sb_clone.clone();
         let search_holder = window.use_keyed_state(
@@ -631,7 +627,6 @@ impl RenderOnce for SidebarTree {
                                         git: &git_clone,
                                         ed: &ed_clone,
                                         resp: &resp_clone,
-                                        toast: &toast_clone,
                                         is_multi_select: sb_ref.is_multi_selected(),
                                         selected_requests: &sb_ref.selected_requests,
                                         selected_folders: &sb_ref.selected_folders,

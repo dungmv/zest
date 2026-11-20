@@ -2,7 +2,7 @@ use crate::components::*;
 use crate::services::GitService;
 use crate::state::{
     EnvironmentState, GitState, ModalState, PersistenceState, RequestSessionState, SidebarState,
-    ToastState, WorkspaceDataState,
+    WorkspaceDataState,
 };
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{App, Div, Entity, ParentElement, Window};
@@ -15,7 +15,6 @@ pub struct ModalOverlayEntities<'a> {
     pub sidebar_state: &'a Entity<SidebarState>,
     pub git_state: &'a Entity<GitState>,
     pub editor_state: &'a Entity<RequestSessionState>,
-    pub toast_state: &'a Entity<ToastState>,
     pub env_var_table: &'a Entity<EnvVarTable>,
 }
 
@@ -32,7 +31,6 @@ pub fn attach_modal_overlays(
     let sidebar_state = entities.sidebar_state;
     let git_state = entities.git_state;
     let editor_state = entities.editor_state;
-    let toast_state = entities.toast_state;
     let env_var_table = entities.env_var_table;
 
     let modal = modal_state.read(cx);
@@ -53,7 +51,6 @@ pub fn attach_modal_overlays(
     let sidebar_entity = sidebar_state.clone();
     let git_entity = git_state.clone();
     let ed_entity = editor_state.clone();
-    let toast_entity = toast_state.clone();
     let var_table_entity = env_var_table.clone();
 
     root.when(show_env_modal, |this| {
@@ -79,25 +76,17 @@ pub fn attach_modal_overlays(
         this.child(GitModal::new(
             git_entity.clone(),
             ws_entity.clone(),
-            GitService::new(git_entity.clone(), toast_entity.clone()),
+            GitService::new(git_entity.clone()),
         ))
     })
     .when(show_import_modal, |this| {
-        this.child(ImportModal::new(
-            ws_entity.clone(),
-            modal_entity.clone(),
-            toast_entity.clone(),
-        ))
+        this.child(ImportModal::new(ws_entity.clone(), modal_entity.clone()))
     })
     .when(show_export_modal, |this| {
-        this.child(ExportModal::new(
-            ws_entity.clone(),
-            modal_entity.clone(),
-            toast_entity.clone(),
-        ))
+        this.child(ExportModal::new(ws_entity.clone(), modal_entity.clone()))
     })
     .when(show_about_modal, |this| {
-        this.child(AboutModal::new(modal_entity.clone(), toast_entity.clone()))
+        this.child(AboutModal::new(modal_entity.clone()))
     })
     .when(show_command_palette, move |this| {
         this.child(CommandPalette::new(
@@ -109,6 +98,4 @@ pub fn attach_modal_overlays(
             ed_entity.clone(),
         ))
     })
-    // Toast Notifications container bottom-right
-    .child(ToastContainer::new(toast_entity))
 }

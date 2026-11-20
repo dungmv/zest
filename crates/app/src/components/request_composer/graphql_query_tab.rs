@@ -1,7 +1,7 @@
 use crate::app::AppView;
 use crate::components::format_json_editor;
 use crate::components::message_toolbar;
-use crate::state::{RequestSessionState, ToastState};
+use crate::state::RequestSessionState;
 use crate::theme::theme;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{
@@ -28,7 +28,6 @@ pub(super) fn render_query_tab(
             render_graphql_query_tab(
                 GraphQLQueryTabContext {
                     editor_state: &av.state.session,
-                    toast_state: &av.state.toast,
                     query_editor: &av.composer_inputs.graphql.query_editor,
                     variables_editor: &av.composer_inputs.graphql.variables_editor,
                     variables_marks: &av.composer_inputs.graphql.variables_marks,
@@ -47,7 +46,6 @@ pub(super) fn render_query_tab(
 
 pub(super) struct GraphQLQueryTabContext<'a> {
     pub editor_state: &'a Entity<RequestSessionState>,
-    pub toast_state: &'a Entity<ToastState>,
     pub query_editor: &'a Entity<CodeEditorState>,
     pub variables_editor: &'a Entity<CodeEditorState>,
     pub variables_marks: &'a GutterDecorationCollection,
@@ -71,7 +69,6 @@ pub(super) fn render_graphql_query_tab(
 
     let ed_format = ctx.editor_state.clone();
     let variables_editor = ctx.variables_editor.clone();
-    let toast_state = ctx.toast_state.clone();
     let on_fetch_schema = ctx.on_fetch_schema.clone();
 
     div()
@@ -115,13 +112,7 @@ pub(super) fn render_graphql_query_tab(
                         .xsmall()
                         .label("Format JSON")
                         .on_click(move |_, window, cx: &mut App| {
-                            format_json_editor(
-                                &variables_editor,
-                                &ed_format,
-                                Some(&toast_state),
-                                window,
-                                cx,
-                            );
+                            format_json_editor(&variables_editor, &ed_format, window, cx);
                         }),
                 )
                 .child(
