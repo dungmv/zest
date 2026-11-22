@@ -8,7 +8,7 @@ pub use auth_tab::*;
 pub use general_tab::*;
 pub use headers_tab::*;
 
-use crate::modals::modal::Dialog;
+use crate::modals::Modal;
 use crate::state::{
     EnvironmentState, ModalKind, ModalState, WorkspaceDataState, WorkspaceSettingTarget,
 };
@@ -174,7 +174,7 @@ impl RenderOnce for WorkspaceSettingModal {
         let auth_inputs =
             use_scope_auth_inputs(window, cx, &target, &current_auth, &ws_clone, &env_clone);
 
-        Dialog::new("workspace-setting-modal")
+        Modal::new("workspace-setting-modal")
             .w(px(580.))
             .h(px(320.))
             .title(title)

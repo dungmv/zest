@@ -1,4 +1,4 @@
-use crate::modals::modal::Dialog;
+use crate::modals::Modal;
 use crate::state::{ModalKind, ModalState, WorkspaceDataState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -94,7 +94,7 @@ impl RenderOnce for ExportModal {
             format.extension()
         );
 
-        Dialog::new("export-modal")
+        Modal::new("export-modal")
             .w(px(560.))
             .h(px(320.))
             .title("Export OpenAPI 3.0")

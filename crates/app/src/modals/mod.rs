@@ -12,6 +12,8 @@ pub mod modal;
 pub mod settings_modal;
 pub mod workspace_setting_modal;
 
+pub use modal::{DialogHeader, DialogTitle, Modal};
+
 pub use about_modal::*;
 pub use command_palette::*;
 pub use env_modal::*;

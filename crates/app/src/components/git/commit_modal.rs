@@ -4,7 +4,7 @@ use super::common::{
 };
 use super::diff_parser::DiffViewMode;
 use super::diff_view::{render_diff_content, render_diff_view_toggle};
-use crate::modals::modal::{Dialog, DialogHeader, DialogTitle};
+use crate::modals::{DialogHeader, DialogTitle, Modal};
 use crate::services::GitService;
 use crate::state::{GitState, WorkspaceDataState};
 use crate::theme::theme;
@@ -531,7 +531,7 @@ impl RenderOnce for GitCommitModal {
                     }),
             );
 
-        Dialog::new("git-commit-modal")
+        Modal::new("git-commit-modal")
             .w(px(1060.))
             .h(px(680.))
             .header(header_el)

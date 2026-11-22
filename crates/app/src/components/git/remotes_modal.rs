@@ -1,5 +1,5 @@
 use super::common::{render_error_banner, render_not_a_repo_view};
-use crate::modals::modal::Dialog;
+use crate::modals::Modal;
 use crate::services::GitService;
 use crate::state::GitState;
 use crate::theme::theme;
@@ -227,7 +227,7 @@ impl RenderOnce for GitRemotesModal {
         );
         let remote_url_input = remote_url_holder.read(cx).0.clone();
 
-        Dialog::new("git-remotes-modal")
+        Modal::new("git-remotes-modal")
             .w(px(480.))
             .h(px(340.))
             .title("Manage Remotes")

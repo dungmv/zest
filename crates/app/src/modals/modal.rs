@@ -20,7 +20,7 @@ type CloseCallback = Rc<dyn Fn(&mut Window, &mut App) + 'static>;
 /// elevation, Escape key handling, backdrop click-to-dismiss, and semantic
 /// DialogHeader / DialogContent / DialogFooter integration.
 #[derive(IntoElement)]
-pub struct Dialog {
+pub struct Modal {
     id: ElementId,
     width: Pixels,
     height: Option<Pixels>,
@@ -34,7 +34,7 @@ pub struct Dialog {
     children: Vec<AnyElement>,
 }
 
-impl Dialog {
+impl Modal {
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             id: id.into(),
@@ -99,13 +99,13 @@ impl Dialog {
     }
 }
 
-impl ParentElement for Dialog {
+impl ParentElement for Modal {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
         self.children.extend(elements);
     }
 }
 
-impl RenderOnce for Dialog {
+impl RenderOnce for Modal {
     fn render(self, _: &mut Window, _cx: &mut App) -> impl IntoElement {
         let t = theme();
         let close_cb_backdrop = self.on_close.clone();

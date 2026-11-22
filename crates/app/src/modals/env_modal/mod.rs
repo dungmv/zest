@@ -4,7 +4,7 @@ mod var_table;
 
 pub use var_table::EnvVarTable;
 
-use crate::modals::modal::Dialog;
+use crate::modals::Modal;
 use crate::state::{EnvironmentState, ModalKind, ModalState, PersistenceState, SidebarState};
 use crate::theme::theme;
 use detail_header::{render_detail_header, DetailHeaderProps};
@@ -71,7 +71,7 @@ impl RenderOnce for EnvironmentModal {
         let rename_env_input = sidebar.rename_env_input().cloned();
         let modal_close = self.modal_state.clone();
 
-        Dialog::new("env-modal")
+        Modal::new("env-modal")
             .w(px(980.))
             .h(px(580.))
             .title("Environments & Variables")

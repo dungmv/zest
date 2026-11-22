@@ -1,4 +1,4 @@
-use crate::modals::modal::Dialog;
+use crate::modals::Modal;
 use crate::state::{ModalKind, ModalState, UpdateStatus};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -47,7 +47,7 @@ impl RenderOnce for AboutModal {
         let platform_label = format!("{os} ({arch})");
         let update_status = modal_clone.read(cx).update_status.clone();
 
-        Dialog::new("about-modal")
+        Modal::new("about-modal")
             .w(px(460.))
             .title("About Zest")
             .icon(IconName::Info)
