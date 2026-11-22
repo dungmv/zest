@@ -1,7 +1,8 @@
 # Plan 2026112202 — Hiệu chuẩn hiệu năng (Perf Remediation)
 
 > Ngày: 2026-11-22 · Nguồn: audit hiệu năng toàn workspace (clippy/test + 3 luồng audit: render-path, UI-thread blocking, memory growth)
-> Trạng thái: 📋 Chưa triển khai
+> Trạng thái: ✅ Đã triển khai P0–P2 + P3 (2026-11-23). Commits: `a4c677e` (P0), `a96991e` (P1.1), `0fa77f5` (P1.2), `9a797ee` (P2), P3 kèm debt registry. Nợ defer có chủ đích: TD-301..306 trong `docs/technical-debt.md` §0.2.
+> Lệch plan có chủ đích: T13 (memoize inherited rows) và T14 (memoize markdown) chuyển sang defer — chi phí thực tế thấp so với phức tạp cache-key; T9 dùng `BodyView` snapshot app-local thay vì `BodyKind` trong core (cần đúng dữ liệu nhỏ cho form/multipart/binary); T8 dùng `tree_version` làm key invalidation duy nhất thay vì `list_version` riêng (an toàn hơn, tận dụng contract sẵn có của sidebar cache).
 
 ## 1. Goal
 

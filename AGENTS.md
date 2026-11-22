@@ -48,7 +48,7 @@ These principles were forged through major refactoring milestones (SL-001..007, 
 
 ### 2.1 Multi-Entity State Architecture (No God Objects)
 - **Zero God Objects**: Monolithic structs like the legacy `WorkspaceState` (>3,300 LOC) or monolithic `AppView` (32 fields) are strictly forbidden.
-- **`AppState` Container**: `AppState` (`crates/app/src/state/app_state.rs`) is solely an initialization container that owns 9 decoupled GPUI entities:
+- **`AppState` Container**: `AppState` (`crates/app/src/state/app_state.rs`) is solely an initialization container that owns 8 decoupled GPUI entities:
   1. `workspace: Entity<WorkspaceDataState>`: Pure domain data (collections, requests, folders, pins, workspace metadata).
   2. `env: Entity<EnvironmentState>`: Environments, `globals`, active environment, cached variable merging.
   3. `persistence: Entity<PersistenceState>`: Coalesced write-behind persistence (`PersistenceCoordinator`), file watcher, conflict & dirty tracking.
@@ -57,7 +57,6 @@ These principles were forged through major refactoring milestones (SL-001..007, 
   6. `git: Entity<GitState>`: VCS status cache, staging, diff, branches, remotes (commands dispatched via `GitService`).
   7. `session: Entity<RequestSessionState>`: Active request pointer, active composer tabs, in-flight send status.
   8. `response: Entity<ResponseState>`: Active response, cached formatted bodies, test results, console logs, LRU cache.
-  9. `toast: Entity<ToastState>`: Notification toasts.
 - **No Prop-Drilling**: Do not pass `AppState` into child components. Child views must receive only the specific `Entity<*State>` handles they observe or mutate.
 
 ### 2.2 Single-Active Request & On-Demand Borrowing (SL-003)
