@@ -20,6 +20,9 @@ const MAX_FORMAT_LINES: usize = 2000;
 /// Maximum characters rendered per line: single-line megabyte bodies (e.g.
 /// minified JSON) would otherwise become one giant text node per frame.
 const MAX_FORMAT_LINE_CHARS: usize = 1000;
+/// View-side cap for script console logs within a single run (a runaway
+/// `console.log` loop must not grow the panel without bound).
+const MAX_CONSOLE_LOGS: usize = 1000;
 
 /// Splits at most [`MAX_FORMAT_LINES`] lines of at most
 /// [`MAX_FORMAT_LINE_CHARS`] chars each, appending truncation markers when
@@ -168,6 +171,8 @@ pub struct ResponseState {
     pub show_timing_popover: bool,
     pub test_results: Vec<TestResult>,
     pub console_logs: Vec<ConsoleLogEntry>,
+    /// Virtualized-list state backing the Console panel (tests then logs).
+    pub console_list: gpui_kit::ListState,
     pub console_filter: ConsoleFilter,
     pub formatted_body: Option<FormattedResponseBody>,
     pub scroll_handle: gpui_kit::UniformListScrollHandle,
@@ -193,6 +198,9 @@ impl ResponseState {
         // Auto-scroll along the tail while streaming, as long as the user
         // is scrolled to the bottom.
         frames_list.set_follow_mode(gpui_kit::FollowMode::Tail);
+        let console_list =
+            gpui_kit::ListState::new(0, gpui_kit::ListAlignment::Top, gpui_kit::px(600.));
+        console_list.set_follow_mode(gpui_kit::FollowMode::Tail);
         Self {
             current_response: None,
             cache: ResponseCache::default(),
@@ -205,6 +213,7 @@ impl ResponseState {
             show_timing_popover: false,
             test_results: Vec::new(),
             console_logs: Vec::new(),
+            console_list,
             console_filter: ConsoleFilter::All,
             formatted_body: None,
             scroll_handle: gpui_kit::UniformListScrollHandle::new(),
@@ -577,12 +586,31 @@ impl ResponseState {
     pub fn clear_console_logs(&mut self, cx: &mut Context<Self>) {
         self.test_results.clear();
         self.console_logs.clear();
+        self.sync_console_list();
         cx.notify();
     }
 
     pub fn set_pre_request_logs(&mut self, logs: Vec<ConsoleLogEntry>, cx: &mut Context<Self>) {
-        self.console_logs = logs;
+        self.console_logs = self.cap_console_logs(logs);
+        self.sync_console_list();
         cx.notify();
+    }
+
+    /// Caps the log vec to [`MAX_CONSOLE_LOGS`], keeping the most recent
+    /// entries (chronological order preserved, oldest dropped).
+    fn cap_console_logs(&self, mut logs: Vec<ConsoleLogEntry>) -> Vec<ConsoleLogEntry> {
+        if logs.len() > MAX_CONSOLE_LOGS {
+            let overflow = logs.len() - MAX_CONSOLE_LOGS;
+            logs.drain(..overflow);
+        }
+        logs
+    }
+
+    /// Rebuilds the Console panel's virtual list state after the tests/logs
+    /// vecs change.
+    fn sync_console_list(&mut self) {
+        self.console_list
+            .reset(self.test_results.len() + self.console_logs.len());
     }
 
     // --- WebSocket session view ------------------------------------------
@@ -646,13 +674,15 @@ impl ResponseState {
         cx: &mut Context<Self>,
     ) {
         self.test_results = results;
-        self.console_logs = logs;
+        self.console_logs = self.cap_console_logs(logs);
+        self.sync_console_list();
         cx.notify();
     }
 
     pub fn clear_test_results(&mut self, cx: &mut Context<Self>) {
         self.test_results.clear();
         self.console_logs.clear();
+        self.sync_console_list();
         cx.notify();
     }
 

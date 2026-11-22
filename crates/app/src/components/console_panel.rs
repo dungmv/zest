@@ -4,11 +4,10 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::empty::{
     Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyMediaVariant, EmptyTitle,
 };
-use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    div, px, App, Entity, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
+    div, list, px, App, Entity, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
     StatefulInteractiveElement as _, Styled, Window,
 };
 use zest_core::models::{ConsoleLogEntry, ConsoleLogLevel, ConsoleLogSource, TestResult};
@@ -27,30 +26,46 @@ impl ConsolePanel {
 impl RenderOnce for ConsolePanel {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let t = theme();
-        let resp_s = self.response_state.read(cx);
-        let all_tests = resp_s.test_results.clone();
-        let all_logs = resp_s.console_logs.clone();
-        let total_items = all_tests.len() + all_logs.len();
+        let resp_state = self.response_state.clone();
+        let (total_items, list_state) = {
+            let resp_s = self.response_state.read(cx);
+            (
+                resp_s.test_results.len() + resp_s.console_logs.len(),
+                resp_s.console_list.clone(),
+            )
+        };
 
         div().size_full().flex().flex_col().bg(t.bg_response).child(
-            div().flex_1().overflow_y_scrollbar().p(px(12.)).child({
-                if total_items == 0 {
-                    render_empty_state()
-                } else {
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap(px(6.))
-                        .children(all_tests.into_iter().map(render_test_card))
-                        .children(
-                            all_logs
-                                .into_iter()
-                                .enumerate()
-                                .map(|(idx, entry)| render_log_card(idx, entry)),
-                        )
+            div()
+                .flex_1()
+                .min_h_0()
+                .overflow_hidden()
+                .p(px(12.))
+                .child({
+                    if total_items == 0 {
+                        render_empty_state()
+                    } else {
+                        // Virtualized variable-height list: only visible cards
+                        // are built per frame (tests first, then logs).
+                        list(list_state, move |idx, _window, cx| {
+                            let resp_s = resp_state.read(cx);
+                            let tests_len = resp_s.test_results.len();
+                            if idx < tests_len {
+                                render_test_card(&resp_s.test_results[idx]).into_any_element()
+                            } else {
+                                let log_idx = idx - tests_len;
+                                match resp_s.console_logs.get(log_idx) {
+                                    Some(entry) => {
+                                        render_log_card(log_idx, entry).into_any_element()
+                                    }
+                                    // Stale index during a reset rebuild.
+                                    None => div().into_any_element(),
+                                }
+                            }
+                        })
                         .into_any_element()
-                }
-            }),
+                    }
+                }),
         )
     }
 }
@@ -96,7 +111,7 @@ fn render_empty_state() -> gpui_kit::AnyElement {
         .into_any_element()
 }
 
-fn render_test_card(res: TestResult) -> gpui_kit::Div {
+fn render_test_card(res: &TestResult) -> gpui_kit::Div {
     let t = theme();
     let status_color = if res.passed {
         t.method_post
@@ -105,6 +120,8 @@ fn render_test_card(res: TestResult) -> gpui_kit::Div {
     };
 
     div()
+        .w_full()
+        .mb(px(6.))
         .p(px(8.))
         .rounded(px(6.))
         .bg(if res.passed {
@@ -161,7 +178,7 @@ fn render_test_card(res: TestResult) -> gpui_kit::Div {
                                 .text_xs()
                                 .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                 .text_color(t.text_primary)
-                                .child(res.name),
+                                .child(res.name.clone()),
                         ),
                 )
                 .child(
@@ -172,7 +189,7 @@ fn render_test_card(res: TestResult) -> gpui_kit::Div {
                         .child(format!("{}ms", res.duration_ms)),
                 ),
         )
-        .when_some(res.error_message, |this, err| {
+        .when_some(res.error_message.clone(), |this, err| {
             this.child(
                 div()
                     .pl(px(12.))
@@ -185,7 +202,7 @@ fn render_test_card(res: TestResult) -> gpui_kit::Div {
         })
 }
 
-fn render_log_card(idx: usize, entry: ConsoleLogEntry) -> gpui_kit::Div {
+fn render_log_card(idx: usize, entry: &ConsoleLogEntry) -> gpui_kit::Div {
     let t = theme();
     let is_err = entry.level == ConsoleLogLevel::Error;
     let is_warn = entry.level == ConsoleLogLevel::Warn;
@@ -235,6 +252,8 @@ fn render_log_card(idx: usize, entry: ConsoleLogEntry) -> gpui_kit::Div {
     };
 
     div()
+        .w_full()
+        .mb(px(6.))
         .p(px(8.))
         .rounded(px(6.))
         .bg(card_bg)
@@ -258,7 +277,7 @@ fn render_log_card(idx: usize, entry: ConsoleLogEntry) -> gpui_kit::Div {
                                 .text_xs()
                                 .font_family(".SystemMonoFont")
                                 .text_color(t.text_muted)
-                                .child(entry.timestamp),
+                                .child(entry.timestamp.clone()),
                         )
                         .child(
                             div()
@@ -327,6 +346,6 @@ fn render_log_card(idx: usize, entry: ConsoleLogEntry) -> gpui_kit::Div {
                 } else {
                     t.text_primary
                 })
-                .child(entry.message),
+                .child(entry.message.clone()),
         )
 }

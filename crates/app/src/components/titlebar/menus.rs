@@ -207,7 +207,13 @@ pub(super) fn render_environment_switcher(
     let t = theme();
     let env_s = env_state.clone();
     let modal_settings_clone = modal_state.clone();
-    let envs = env_read.environments.clone();
+    // The menu only needs (id, name): avoid cloning every environment's
+    // full variable list on each frame.
+    let envs: Vec<(String, String)> = env_read
+        .environments
+        .iter()
+        .map(|e| (e.id.clone(), e.name.clone()))
+        .collect();
     let active_env_id = env_read.active_environment_id.clone();
     let has_active = env_read.active_environment().is_some();
 
@@ -255,12 +261,12 @@ pub(super) fn render_environment_switcher(
             );
 
             // 2. All workspace environments
-            for env in &envs {
-                let env_id = env.id.clone();
-                let is_act = active_env_id.as_deref() == Some(&env_id);
+            for (env_id, env_name) in &envs {
+                let is_act = active_env_id.as_deref() == Some(env_id.as_str());
                 let env_item = env_s.clone();
+                let env_id = env_id.clone();
                 m = m.item(
-                    PopupMenuItem::new(env.name.clone())
+                    PopupMenuItem::new(env_name.clone())
                         .checked(is_act)
                         .on_click(move |_, _, cx| {
                             env_item.update(cx, |state, cx| {

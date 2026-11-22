@@ -380,7 +380,7 @@ impl Runner {
                         auto_method,
                     } => {
                         session_state.update(cx, |ed, cx| {
-                            ed.set_grpc_schema(Some(summary), cx);
+                            ed.set_grpc_schema(Some(std::sync::Arc::new(summary)), cx);
                         });
                         if let (Some(svc), Some(mth)) = (auto_service, auto_method) {
                             workspace_state.update(cx, |ws, _| {
@@ -492,7 +492,7 @@ impl Runner {
             cx.update(|cx| match result {
                 Ok(summary) => {
                     session_state.update(cx, |ed, cx| {
-                        ed.set_grpc_schema(Some(summary), cx);
+                        ed.set_grpc_schema(Some(std::sync::Arc::new(summary)), cx);
                     });
                 }
                 Err(err) => {

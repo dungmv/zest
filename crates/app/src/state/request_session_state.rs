@@ -95,7 +95,7 @@ pub struct RequestSessionState {
     pub cancel_tx: Option<oneshot::Sender<()>>,
     pub script_error: Option<String>,
     /// Resolved gRPC schema for the service/method picker (session-only).
-    pub grpc_schema: Option<GrpcSchemaSummary>,
+    pub grpc_schema: Option<std::sync::Arc<GrpcSchemaSummary>>,
     /// Resolved GraphQL schema for the completion provider (session-only).
     pub graphql_schema: Option<GraphQLSchemaSummary>,
     input_refresh_task: Option<Task<()>>,
@@ -208,7 +208,11 @@ impl RequestSessionState {
         cx.notify();
     }
 
-    pub fn set_grpc_schema(&mut self, schema: Option<GrpcSchemaSummary>, cx: &mut Context<Self>) {
+    pub fn set_grpc_schema(
+        &mut self,
+        schema: Option<std::sync::Arc<GrpcSchemaSummary>>,
+        cx: &mut Context<Self>,
+    ) {
         self.grpc_schema = schema;
         cx.notify();
     }

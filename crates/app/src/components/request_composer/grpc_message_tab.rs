@@ -176,7 +176,11 @@ pub(super) fn render_grpc_message_tab(
                             .find_request(ed_hover.read(cx).active_request_id())
                             .and_then(|r| r.grpc.clone())
                             .unwrap_or_default();
-                        let schema = ed_hover.read(cx).grpc_schema.clone().unwrap_or_default();
+                        let schema = ed_hover
+                            .read(cx)
+                            .grpc_schema
+                            .clone()
+                            .unwrap_or_else(|| std::sync::Arc::new(Default::default()));
                         let text = editor_hover.read(cx).value().to_string();
                         crate::components::completion::validation::refresh_grpc_validation(
                             &editor_hover,

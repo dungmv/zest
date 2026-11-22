@@ -93,6 +93,32 @@ impl BodyEditor {
     }
 }
 
+/// Per-frame snapshot of the request body: the heavy content variants
+/// (Json/Raw) distill to a discriminant — their content lives in the editor
+/// entities and is never read during render — while the small structured
+/// variants are cloned for the renderer.
+enum BodyView {
+    None,
+    Json,
+    Raw { is_xml: bool },
+    Form(Vec<KeyValuePair>),
+    Multipart(Vec<MultipartItem>),
+    Binary(String),
+}
+
+fn body_view(body: &RequestBody) -> BodyView {
+    match body {
+        RequestBody::None => BodyView::None,
+        RequestBody::Json { .. } => BodyView::Json,
+        RequestBody::Raw { content_type, .. } => BodyView::Raw {
+            is_xml: content_type == "application/xml" || content_type == "text/xml",
+        },
+        RequestBody::FormUrlEncoded { params } => BodyView::Form(params.clone()),
+        RequestBody::Multipart { items } => BodyView::Multipart(items.clone()),
+        RequestBody::Binary { file_path } => BodyView::Binary(file_path.clone()),
+    }
+}
+
 impl RenderOnce for BodyEditor {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let t = theme();
@@ -100,27 +126,25 @@ impl RenderOnce for BodyEditor {
         let ed_entity = self.editor_state.clone();
 
         let req_id_str = ed.active_request_id().to_string();
-        let body_val = self.workspace_state.as_ref().and_then(|ws| {
+        let body_view = self.workspace_state.as_ref().and_then(|ws| {
             ws.read(cx)
                 .find_request(&req_id_str)
-                .map(|r| r.body.clone())
+                .map(|r| body_view(&r.body))
         });
-        let body_ref = body_val.as_ref();
+        let body_ref = body_view.as_ref();
 
         let (is_none, is_json, is_xml, is_text, is_multipart, is_form, is_binary) = match body_ref {
-            None | Some(RequestBody::None) => (true, false, false, false, false, false, false),
-            Some(RequestBody::Json { .. }) => (false, true, false, false, false, false, false),
-            Some(RequestBody::Raw { content_type, .. })
-                if content_type == "application/xml" || content_type == "text/xml" =>
-            {
+            None | Some(BodyView::None) => (true, false, false, false, false, false, false),
+            Some(BodyView::Json) => (false, true, false, false, false, false, false),
+            Some(BodyView::Raw { is_xml: true }) => {
                 (false, false, true, false, false, false, false)
             }
-            Some(RequestBody::Raw { .. }) => (false, false, false, true, false, false, false),
-            Some(RequestBody::Multipart { .. }) => (false, false, false, false, true, false, false),
-            Some(RequestBody::FormUrlEncoded { .. }) => {
-                (false, false, false, false, false, true, false)
+            Some(BodyView::Raw { is_xml: false }) => {
+                (false, false, false, true, false, false, false)
             }
-            Some(RequestBody::Binary { .. }) => (false, false, false, false, false, false, true),
+            Some(BodyView::Multipart(_)) => (false, false, false, false, true, false, false),
+            Some(BodyView::Form(_)) => (false, false, false, false, false, true, false),
+            Some(BodyView::Binary(_)) => (false, false, false, false, false, false, true),
         };
 
         let current_label = if is_none {
@@ -510,7 +534,7 @@ impl RenderOnce for BodyEditor {
                     .w_full()
                     .overflow_hidden()
                     .child(match body_ref {
-                        None | Some(RequestBody::None) => Empty::new()
+                        None | Some(BodyView::None) => Empty::new()
                             .header(
                                 EmptyHeader::new()
                                     .media(
@@ -529,7 +553,7 @@ impl RenderOnce for BodyEditor {
                                     ),
                             )
                             .into_any_element(),
-                        Some(RequestBody::Json { .. }) => div()
+                        Some(BodyView::Json) => div()
                             .size_full()
                             .child(
                                 Editor::new(&self.json_editor)
@@ -538,7 +562,7 @@ impl RenderOnce for BodyEditor {
                                     .h(gpui_kit::relative(1.)),
                             )
                             .into_any_element(),
-                        Some(RequestBody::FormUrlEncoded { params: pairs }) => {
+                        Some(BodyView::Form(pairs)) => {
                             render_form_editor(
                                 &req_id_str,
                                 pairs,
@@ -548,7 +572,7 @@ impl RenderOnce for BodyEditor {
                                 self.modal_state.as_ref(),
                             )
                         }
-                        Some(RequestBody::Multipart { items }) => {
+                        Some(BodyView::Multipart(items)) => {
                             render_multipart_editor(
                                 MultipartContext {
                                     req_id_str: &req_id_str,
@@ -562,10 +586,7 @@ impl RenderOnce for BodyEditor {
                                 cx,
                             )
                         }
-                        Some(RequestBody::Raw { content_type, .. })
-                            if content_type == "application/xml"
-                                || content_type == "text/xml" =>
-                        {
+                        Some(BodyView::Raw { is_xml: true }) => {
                             div()
                                 .size_full()
                                 .child(
@@ -576,7 +597,7 @@ impl RenderOnce for BodyEditor {
                                 )
                                 .into_any_element()
                         }
-                        Some(RequestBody::Raw { .. }) => div()
+                        Some(BodyView::Raw { is_xml: false }) => div()
                             .size_full()
                             .child(
                                 Textarea::new(&self.raw_textarea)
@@ -585,7 +606,7 @@ impl RenderOnce for BodyEditor {
                                     .h(gpui_kit::relative(1.)),
                             )
                             .into_any_element(),
-                        Some(RequestBody::Binary { file_path }) => {
+                        Some(BodyView::Binary(file_path)) => {
                             render_binary_editor(
                                 &req_id_str,
                                 file_path,

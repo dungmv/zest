@@ -203,7 +203,11 @@ pub fn setup_app_subscriptions(
             });
             // Validate and surface the error on the offending line: editor
             // diagnostic (hover tooltip) + red gutter mark.
-            let schema = ed_grpc.read(cx).grpc_schema.clone().unwrap_or_default();
+            let schema = ed_grpc
+                .read(cx)
+                .grpc_schema
+                .clone()
+                .unwrap_or_else(|| std::sync::Arc::new(Default::default()));
             let payload = ws_grpc
                 .read(cx)
                 .find_request(&active_id)
