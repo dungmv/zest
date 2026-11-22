@@ -4,10 +4,14 @@ use gpui_kit::component::empty::{Empty, EmptyDescription};
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::spinner::Spinner;
 use gpui_kit::component::Sizable as _;
-use gpui_kit::{div, px, AnyElement, App, IntoElement, ParentElement, Styled};
+use gpui_kit::{div, list, px, AnyElement, App, IntoElement, ParentElement, Styled};
 use zest_core::models::Protocol;
 use zest_core::transport::{FrameDirection, FrameKind, TransportFrame};
 use zest_core::ws::WebSocketStatus;
+
+/// Preview cap per message card: payloads render at most this many code
+/// points (wrapped), everything longer is marked with `…`.
+const MESSAGE_PREVIEW_CHARS: usize = 1000;
 
 /// Frame log for WebSocket/gRPC/SSE requests (Messages tab).
 pub(super) fn render_messages_tab(
@@ -16,9 +20,15 @@ pub(super) fn render_messages_tab(
     is_sending_this_request: bool,
 ) -> AnyElement {
     let t = theme();
-    let resp_s = ri.response_state.read(cx);
-    let status = resp_s.ws_status.clone();
-    let messages = resp_s.frames.clone();
+    let resp_state = ri.response_state.clone();
+    let (status, frame_count, frames_list) = {
+        let resp_s = ri.response_state.read(cx);
+        (
+            resp_s.ws_status.clone(),
+            resp_s.frames.len(),
+            resp_s.frames_list.clone(),
+        )
+    };
     let protocol = ri
         .workspace_state
         .read(cx)
@@ -54,18 +64,31 @@ pub(super) fn render_messages_tab(
         .flex()
         .flex_col()
         .bg(t.bg_response)
-        .child(div().flex_1().overflow_y_scrollbar().p(px(12.)).child({
-            if messages.is_empty() {
-                render_messages_empty_state(&status, is_sse)
-            } else {
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(6.))
-                    .children(messages.into_iter().map(render_message_card))
-                    .into_any_element()
-            }
-        }))
+        .child(
+            div()
+                .flex_1()
+                .min_h_0()
+                .overflow_hidden()
+                .p(px(12.))
+                .child({
+                    if frame_count == 0 {
+                        render_messages_empty_state(&status, is_sse)
+                    } else {
+                        // Virtualized variable-height list: only visible cards
+                        // are built per frame; the list tail-follows while the
+                        // user is scrolled to the bottom.
+                        list(frames_list, move |idx, _window, cx| {
+                            let state = resp_state.read(cx);
+                            match state.frames.get(idx) {
+                                Some(frame) => render_message_card(frame),
+                                // Stale index during a reset rebuild.
+                                None => div().into_any_element(),
+                            }
+                        })
+                        .into_any_element()
+                    }
+                }),
+        )
         .into_any_element()
 }
 
@@ -89,7 +112,7 @@ fn render_messages_empty_state(status: &WebSocketStatus, is_sse: bool) -> AnyEle
         .into_any_element()
 }
 
-fn render_message_card(msg: TransportFrame) -> AnyElement {
+fn render_message_card(msg: &TransportFrame) -> AnyElement {
     let t = theme();
     let is_inbound = msg.direction == FrameDirection::Inbound;
 
@@ -116,6 +139,8 @@ fn render_message_card(msg: TransportFrame) -> AnyElement {
         .unwrap_or_default();
 
     div()
+        .w_full()
+        .mb(px(6.))
         .rounded(px(6.))
         .border_1()
         .border_color(t.border_subtle)
@@ -148,7 +173,7 @@ fn render_message_card(msg: TransportFrame) -> AnyElement {
                     msg.size_bytes()
                 ))),
         )
-        .child(render_payload(&msg))
+        .child(render_payload(msg))
         .into_any_element()
 }
 
@@ -170,7 +195,7 @@ fn render_payload(msg: &TransportFrame) -> AnyElement {
             .into_any_element();
     }
 
-    let text = String::from_utf8_lossy(&msg.payload).to_string();
+    let text = msg.text_preview(MESSAGE_PREVIEW_CHARS);
     div()
         .font_family("monospace")
         .text_xs()

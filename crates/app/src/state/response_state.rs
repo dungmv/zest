@@ -177,6 +177,9 @@ pub struct ResponseState {
     /// Live frame log for the active request (mirrored from the WS/gRPC
     /// engines; shared by both realtime protocols).
     pub frames: Vec<TransportFrame>,
+    /// Virtualized-list state backing the Messages tab (variable-height
+    /// cards, tail-following while streaming).
+    pub frames_list: gpui_kit::ListState,
     /// Handshake response headers of the active WS session.
     pub ws_handshake_headers: Vec<(String, String)>,
     /// Summary of the most recent gRPC call (status, headers, duration).
@@ -185,6 +188,11 @@ pub struct ResponseState {
 
 impl ResponseState {
     pub fn new() -> Self {
+        let frames_list =
+            gpui_kit::ListState::new(0, gpui_kit::ListAlignment::Top, gpui_kit::px(600.));
+        // Auto-scroll along the tail while streaming, as long as the user
+        // is scrolled to the bottom.
+        frames_list.set_follow_mode(gpui_kit::FollowMode::Tail);
         Self {
             current_response: None,
             cache: ResponseCache::default(),
@@ -203,6 +211,7 @@ impl ResponseState {
             wrap_lines: false,
             ws_status: WebSocketStatus::default(),
             frames: Vec::new(),
+            frames_list,
             ws_handshake_headers: Vec::new(),
             grpc_last_call: None,
         }
@@ -262,6 +271,7 @@ impl ResponseState {
     /// around the same moment for WebSocket requests.
     fn reset_realtime(&mut self) {
         self.frames.clear();
+        self.frames_list.reset(0);
         self.ws_handshake_headers.clear();
         self.grpc_last_call = None;
     }
@@ -583,12 +593,16 @@ impl ResponseState {
     }
 
     pub fn push_frame(&mut self, message: TransportFrame, cx: &mut Context<Self>) {
+        let old_count = self.frames.len();
         self.frames.push(message);
         if self.frames.len() > MAX_VIEW_FRAMES {
             let overflow = self.frames.len() - MAX_VIEW_FRAMES;
             self.frames.drain(..overflow);
+            // Every index shifted: rebuild the virtual list state.
+            self.frames_list.reset(MAX_VIEW_FRAMES);
+        } else {
+            self.frames_list.splice(old_count..old_count, 1);
         }
-        self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
         cx.notify();
     }
 
@@ -619,6 +633,7 @@ impl ResponseState {
     ) {
         self.ws_status = status;
         self.frames = messages;
+        self.frames_list.reset(self.frames.len());
         self.ws_handshake_headers = handshake_headers;
         self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
         cx.notify();

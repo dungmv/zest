@@ -59,10 +59,16 @@ impl TransportFrame {
     }
 
     /// Payload decoded as UTF-8 when the frame is text-like, for previews.
+    /// Only the head of the payload is scanned (capped around `max_chars`
+    /// code points) so huge payloads never materialize during render; `…`
+    /// marks truncation.
     pub fn text_preview(&self, max_chars: usize) -> String {
-        let text = String::from_utf8_lossy(&self.payload);
+        // 4 bytes per code point is the UTF-8 worst case; +8 covers a
+        // trailing partial multi-byte sequence at the slice boundary.
+        let head_len = self.payload.len().min(max_chars * 4 + 8);
+        let text = String::from_utf8_lossy(&self.payload[..head_len]);
         let mut out: String = text.chars().take(max_chars).collect();
-        if text.chars().count() > max_chars {
+        if text.chars().nth(max_chars).is_some() {
             out.push('…');
         }
         out

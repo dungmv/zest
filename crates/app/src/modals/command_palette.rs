@@ -45,6 +45,117 @@ impl CommandPalette {
     }
 }
 
+/// One filtered request row: (rank, id, name, full_path, folder_path, method).
+type PaletteHit = (
+    usize,
+    String,
+    String,
+    String,
+    String,
+    zest_core::models::HttpMethod,
+);
+
+/// Cached palette filter results, keyed by (query, tree_version,
+/// url_version, recent_len). The expensive folder-path resolution is
+/// memoized inside each rebuild instead of re-walking the folder chain for
+/// every request on every keystroke.
+#[derive(Default)]
+struct PaletteCache {
+    key: Option<(String, usize, usize, usize)>,
+    requests: Vec<PaletteHit>,
+}
+
+fn rebuild_palette_cache(
+    cache: &mut PaletteCache,
+    ws: &WorkspaceDataState,
+    per: &PersistenceState,
+    q: &str,
+) {
+    let by_id: std::collections::HashMap<&str, &zest_core::models::Folder> =
+        ws.folders.iter().map(|f| (f.id.as_str(), f)).collect();
+
+    // Memoized folder-id -> display path; the depth cap also guards against
+    // corrupted parent chains forming cycles.
+    fn resolve_path(
+        fid: &str,
+        by_id: &std::collections::HashMap<&str, &zest_core::models::Folder>,
+        memo: &mut std::collections::HashMap<String, String>,
+        depth: usize,
+    ) -> String {
+        if depth > 32 {
+            return String::new();
+        }
+        if let Some(path) = memo.get(fid) {
+            return path.clone();
+        }
+        let path = match by_id.get(fid) {
+            Some(f) => match &f.parent_id {
+                Some(pid) => format!("{} / {}", resolve_path(pid, by_id, memo, depth + 1), f.name),
+                None => f.name.clone(),
+            },
+            None => String::new(),
+        };
+        memo.insert(fid.to_string(), path.clone());
+        path
+    }
+
+    let mut folder_paths: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+    for f in &ws.folders {
+        resolve_path(&f.id, &by_id, &mut folder_paths, 0);
+    }
+
+    let recent_len = per.local_state.recent.len();
+    let recent_index: std::collections::HashMap<&str, usize> = per
+        .local_state
+        .recent
+        .iter()
+        .enumerate()
+        .map(|(i, id)| (id.as_str(), i))
+        .collect();
+
+    cache.requests = ws
+        .requests
+        .iter()
+        .filter_map(|r| {
+            let folder_path = r
+                .folder_id
+                .as_ref()
+                .and_then(|fid| folder_paths.get(fid))
+                .cloned()
+                .unwrap_or_default();
+            let req_name = crate::state::effective_request_name(r);
+            let full_path = if folder_path.is_empty() {
+                req_name.clone()
+            } else {
+                format!("{} / {}", folder_path, req_name)
+            };
+
+            let matches = q.is_empty()
+                || full_path.to_lowercase().contains(q)
+                || r.url.to_lowercase().contains(q);
+            if !matches {
+                return None;
+            }
+
+            let rank = recent_index
+                .get(r.id.as_str())
+                .copied()
+                .unwrap_or(recent_len + 100);
+            Some((
+                rank,
+                r.id.clone(),
+                req_name,
+                full_path,
+                folder_path,
+                r.method,
+            ))
+        })
+        .collect();
+    cache.requests.sort_by_key(|(rank, _, _, _, _, _)| *rank);
+    cache.requests.truncate(50);
+}
+
 impl RenderOnce for CommandPalette {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let t = theme();
@@ -61,12 +172,18 @@ impl RenderOnce for CommandPalette {
                 let inp = cx.new(|cx| {
                     InputState::new(window, cx).placeholder("Search requests or environments...")
                 });
-                let sub = cx.subscribe_in(&inp, window, move |_, _, event, _, cx| {
-                    if let InputEvent::Change = event {
-                        cx.refresh_windows();
+                let sub = cx.subscribe_in(&inp, window, {
+                    let modal_s = modal_clone.clone();
+                    move |_, _, event, _, cx| {
+                        if let InputEvent::Change = event {
+                            // Scope the redraw through the modal state
+                            // (observed by AppView) instead of refreshing
+                            // every window on each keystroke.
+                            modal_s.update(cx, |_, cx| cx.notify());
+                        }
                     }
                 });
-                (inp, sub)
+                (inp, sub, std::cell::RefCell::new(PaletteCache::default()))
             },
         );
 
@@ -74,81 +191,32 @@ impl RenderOnce for CommandPalette {
         search_input.update(cx, |s, cx| s.focus(window, cx));
         let q = search_input.read(cx).value().to_lowercase();
 
-        let (matched_requests, envs) = {
+        let matched_requests: Vec<PaletteHit> = {
             let ws = self.workspace_state.read(cx);
             let per = self.persistence_state.read(cx);
-            let env = self.env_state.read(cx);
-            let recent_len = per.local_state.recent.len();
-            let recent_index: std::collections::HashMap<&str, usize> = per
-                .local_state
-                .recent
-                .iter()
-                .enumerate()
-                .map(|(i, id)| (id.as_str(), i))
-                .collect();
-
-            let mut filtered: Vec<(
-                usize,
-                String,
-                String,
-                String,
-                String,
-                zest_core::models::HttpMethod,
-            )> = ws
-                .requests
-                .iter()
-                .filter_map(|r| {
-                    let mut curr_fid = r.folder_id.clone();
-                    let mut folder_names = Vec::new();
-                    while let Some(fid) = curr_fid {
-                        if let Some(f) = ws.folders.iter().find(|f| f.id == fid) {
-                            folder_names.push(f.name.clone());
-                            curr_fid = f.parent_id.clone();
-                        } else {
-                            break;
-                        }
-                    }
-                    folder_names.reverse();
-                    let folder_path = folder_names.join(" / ");
-                    let req_name = crate::state::effective_request_name(r);
-                    let full_path = if folder_path.is_empty() {
-                        req_name.clone()
-                    } else {
-                        format!("{} / {}", folder_path, req_name)
-                    };
-
-                    let matches = q.is_empty()
-                        || full_path.to_lowercase().contains(&q)
-                        || r.url.to_lowercase().contains(&q);
-
-                    if !matches {
-                        return None;
-                    }
-
-                    let rank = recent_index
-                        .get(r.id.as_str())
-                        .copied()
-                        .unwrap_or(recent_len + 100);
-                    Some((
-                        rank,
-                        r.id.clone(),
-                        req_name,
-                        full_path,
-                        folder_path,
-                        r.method,
-                    ))
-                })
-                .collect();
-            filtered.sort_by_key(|(rank, _, _, _, _, _)| *rank);
-            filtered.truncate(50);
-
-            (filtered, env.environments.clone())
+            let cache = &cmd_holder.read(cx).2;
+            let mut cache = cache.borrow_mut();
+            let key = (
+                q.clone(),
+                ws.tree_version,
+                ws.url_version,
+                per.local_state.recent.len(),
+            );
+            if cache.key.as_ref() != Some(&key) {
+                rebuild_palette_cache(&mut cache, ws, per, &q);
+                cache.key = Some(key);
+            }
+            cache.requests.clone()
         };
 
-        let filtered_envs: Vec<_> = envs
-            .into_iter()
-            .filter(|e| q.is_empty() || e.name.to_lowercase().contains(&q))
-            .collect();
+        let filtered_envs: Vec<(String, String)> = {
+            let env = self.env_state.read(cx);
+            env.environments
+                .iter()
+                .filter(|e| q.is_empty() || e.name.to_lowercase().contains(&q))
+                .map(|e| (e.id.clone(), e.name.clone()))
+                .collect()
+        };
 
         let has_matched_requests = !matched_requests.is_empty();
         let has_filtered_envs = !filtered_envs.is_empty();
@@ -407,13 +475,12 @@ impl RenderOnce for CommandPalette {
                                         .text_color(t.text_muted)
                                         .child("SWITCH ENVIRONMENT"),
                                 )
-                                .children(filtered_envs.into_iter().map(|env| {
+                                .children(filtered_envs.into_iter().map(|(env_id, env_name)| {
                                     let env_s = env_clone.clone();
                                     let modal_s = modal_clone.clone();
-                                    let env_id = env.id.clone();
 
                                     div()
-                                        .id(format!("cmd-env-{}", env.id))
+                                        .id(format!("cmd-env-{}", env_id))
                                         .px(px(8.))
                                         .py(px(6.))
                                         .rounded(px(4.))
@@ -438,7 +505,7 @@ impl RenderOnce for CommandPalette {
                                             div()
                                                 .text_sm()
                                                 .text_color(t.text_primary)
-                                                .child(format!("Switch to: {}", env.name)),
+                                                .child(format!("Switch to: {}", env_name)),
                                         )
                                 }))
                             }),
