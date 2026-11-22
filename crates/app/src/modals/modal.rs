@@ -1,3 +1,4 @@
+use crate::state::{ModalKind, ModalState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariant, ButtonVariants as _};
@@ -7,7 +8,7 @@ pub use gpui_kit::component::dialog::{
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    div, px, AnyElement, App, ElementId, InteractiveElement as _, IntoElement, MouseButton,
+    div, px, AnyElement, App, ElementId, Entity, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement, Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled,
     Window,
 };
@@ -17,8 +18,10 @@ type CloseCallback = Rc<dyn Fn(&mut Window, &mut App) + 'static>;
 
 /// Reusable full-screen modal overlay powered by gpui-kit tokens and dialog
 /// semantics. Provides a consistent backdrop dimming overlay, surface
-/// elevation, Escape key handling, backdrop click-to-dismiss, and semantic
-/// DialogHeader / DialogContent / DialogFooter integration.
+/// elevation, backdrop click-to-dismiss, and semantic DialogHeader /
+/// DialogContent integration. Escape-to-dismiss is handled globally by the
+/// `DismissModal` action (see `crate::app`), which closes the active modal
+/// through the [`ModalState`] registry.
 #[derive(IntoElement)]
 pub struct Modal {
     id: ElementId,
@@ -49,6 +52,22 @@ impl Modal {
             on_close: None,
             children: Vec::new(),
         }
+    }
+
+    /// Convenience constructor pre-wiring `on_close` to close `kind` through
+    /// the [`ModalState`] registry, so backdrop click and the header close
+    /// button both dismiss the modal. Use [`Modal::new`] + [`Modal::on_close`]
+    /// for modals managed outside the registry, e.g. GitModal (owned by
+    /// `GitState`).
+    pub fn for_kind(
+        id: impl Into<ElementId>,
+        kind: ModalKind,
+        modal_state: &Entity<ModalState>,
+    ) -> Self {
+        let entity = modal_state.clone();
+        Self::new(id).on_close(move |_, cx| {
+            entity.update(cx, |state, cx| state.close(kind, cx));
+        })
     }
 
     pub fn w(mut self, width: impl Into<Pixels>) -> Self {
@@ -109,7 +128,6 @@ impl RenderOnce for Modal {
     fn render(self, _: &mut Window, _cx: &mut App) -> impl IntoElement {
         let t = theme();
         let close_cb_backdrop = self.on_close.clone();
-        let close_cb_escape = self.on_close.clone();
         let close_cb_button = self.on_close.clone();
 
         let overlay_id = SharedString::from(format!("{}-overlay", self.id));
@@ -132,15 +150,6 @@ impl RenderOnce for Modal {
             let cb = on_close.clone();
             overlay = overlay.on_click(move |_, window, cx| {
                 cb(window, cx);
-            });
-        }
-
-        if let Some(on_close) = close_cb_escape {
-            let cb = on_close.clone();
-            overlay = overlay.on_key_down(move |event, window, cx| {
-                if event.keystroke.key.as_str() == "escape" {
-                    cb(window, cx);
-                }
             });
         }
 

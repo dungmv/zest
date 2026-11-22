@@ -1,4 +1,5 @@
 use crate::modals::Modal;
+use crate::services::UpdateService;
 use crate::state::{ModalKind, ModalState, UpdateStatus};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -12,7 +13,8 @@ use gpui_kit::{
 };
 use std::sync::{Arc, OnceLock};
 
-fn about_app_icon() -> Arc<Image> {
+/// Shared app-icon loader for the About modal and the Settings About tab.
+pub fn about_app_icon() -> Arc<Image> {
     static ICON: OnceLock<Arc<Image>> = OnceLock::new();
     ICON.get_or_init(|| {
         Arc::new(Image {
@@ -47,18 +49,10 @@ impl RenderOnce for AboutModal {
         let platform_label = format!("{os} ({arch})");
         let update_status = modal_clone.read(cx).update_status.clone();
 
-        Modal::new("about-modal")
+        Modal::for_kind("about-modal", ModalKind::About, &self.modal_state)
             .w(px(460.))
             .title("About Zest")
             .icon(IconName::Info)
-            .on_close({
-                let modal_s = modal_clone.clone();
-                move |_, cx| {
-                    modal_s.update(cx, |state, cx| {
-                        state.close(ModalKind::About, cx);
-                    });
-                }
-            })
             .child(
                 div()
                     .w_full()
@@ -169,19 +163,19 @@ impl RenderOnce for AboutModal {
                             .flex()
                             .flex_col()
                             .gap(px(8.))
-                            .child(render_meta_row("Version", version, t.text_primary))
-                            .child(render_meta_row("Commit", commit_hash, t.text_secondary))
-                            .child(render_meta_row(
+                            .child(render_info_row("Version", version, t.text_primary))
+                            .child(render_info_row("Commit", commit_hash, t.text_secondary))
+                            .child(render_info_row(
                                 "Platform",
                                 &platform_label,
                                 t.text_secondary,
                             ))
-                            .child(render_meta_row(
+                            .child(render_info_row(
                                 "Engine",
                                 "GPUI (GPU-Accelerated)",
                                 t.text_secondary,
                             ))
-                            .child(render_meta_row(
+                            .child(render_info_row(
                                 "Architecture",
                                 "Local-first YAML & Git VCS",
                                 t.text_secondary,
@@ -272,9 +266,7 @@ pub fn render_update_section(
                             .py(px(3.))
                             .h(px(24.))
                             .on_click(move |_, _, cx| {
-                                m.update(cx, |state, cx| {
-                                    state.check_for_updates(cx);
-                                });
+                                UpdateService::new(m.clone()).check_for_updates(cx);
                             })
                             .child(
                                 div()
@@ -333,9 +325,7 @@ pub fn render_update_section(
                             .py(px(2.))
                             .h(px(22.))
                             .on_click(move |_, _, cx| {
-                                m.update(cx, |state, cx| {
-                                    state.check_for_updates(cx);
-                                });
+                                UpdateService::new(m.clone()).check_for_updates(cx);
                             })
                             .child(
                                 div()
@@ -430,9 +420,7 @@ pub fn render_update_section(
                             .py(px(2.))
                             .h(px(22.))
                             .on_click(move |_, _, cx| {
-                                m.update(cx, |state, cx| {
-                                    state.check_for_updates(cx);
-                                });
+                                UpdateService::new(m.clone()).check_for_updates(cx);
                             })
                             .child(div().text_xs().text_color(t.text_muted).child("Retry")),
                     )
@@ -441,7 +429,8 @@ pub fn render_update_section(
         })
 }
 
-fn render_meta_row(
+/// Shared label/value row used by both About surfaces.
+pub fn render_info_row(
     label: &'static str,
     value: &str,
     val_color: gpui_kit::Hsla,

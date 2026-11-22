@@ -5,6 +5,7 @@ pub mod pipeline;
 pub mod runner;
 pub mod runtime;
 pub mod send_event;
+pub mod update_service;
 pub mod ws_service;
 
 pub use git_service::*;
@@ -14,4 +15,5 @@ pub use pipeline::*;
 pub use runner::*;
 pub use runtime::*;
 pub use send_event::*;
+pub use update_service::*;
 pub use ws_service::*;

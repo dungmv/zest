@@ -8,6 +8,18 @@ pub enum WorkspaceSettingTarget {
     Folder(String),
 }
 
+/// Kinds of modal routed by `attach_modal_overlays` (`crate::app::modals`)
+/// and registered in [`ModalState::active_modal`].
+///
+/// Adding a variant touches 6 points — the compiler catches most, but on-open
+/// side effects are manual:
+/// 1. this enum;
+/// 2. a [`ModalPayload`] variant (when the modal takes open-time params);
+/// 3. an arm in [`ModalState::reset_transient_ui`];
+/// 4. an arm in [`ModalState::apply_payload`];
+/// 5. a match arm in `attach_modal_overlays`;
+/// 6. manual side effects on open (e.g. `Environment` emits
+///    `ModalEvent::EnvModalSelectionChanged` inside [`ModalState::open`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModalKind {
     Environment,
@@ -150,27 +162,29 @@ impl ModalState {
         state
     }
 
+    /// Loads, mutates via `f`, and saves [`AppSettings`] — shared plumbing
+    /// for the preference setters below.
+    fn persist_setting(&self, f: impl FnOnce(&mut AppSettings)) {
+        let mut settings = AppSettings::load();
+        f(&mut settings);
+        let _ = settings.save();
+    }
+
     pub fn set_request_timeout_secs(&mut self, secs: u64, cx: &mut Context<Self>) {
         self.network.request_timeout_secs = secs;
-        let mut settings = AppSettings::load();
-        settings.request_timeout_secs = secs;
-        let _ = settings.save();
+        self.persist_setting(|s| s.request_timeout_secs = secs);
         cx.notify();
     }
 
     pub fn set_follow_redirects(&mut self, follow: bool, cx: &mut Context<Self>) {
         self.network.follow_redirects = follow;
-        let mut settings = AppSettings::load();
-        settings.follow_redirects = follow;
-        let _ = settings.save();
+        self.persist_setting(|s| s.follow_redirects = follow);
         cx.notify();
     }
 
     pub fn set_validate_tls(&mut self, validate: bool, cx: &mut Context<Self>) {
         self.network.validate_tls = validate;
-        let mut settings = AppSettings::load();
-        settings.validate_tls = validate;
-        let _ = settings.save();
+        self.persist_setting(|s| s.validate_tls = validate);
         cx.notify();
     }
 
@@ -289,59 +303,11 @@ impl ModalState {
         crate::theme::set_theme(pref, mode);
         crate::theme::sync_component_theme(mode, cx);
 
-        let mut settings = AppSettings::load();
-        settings.theme = Some(pref.as_str().to_string());
-        let _ = settings.save();
+        let pref_str = pref.as_str().to_string();
+        self.persist_setting(|s| s.theme = Some(pref_str));
 
         cx.refresh_windows();
         cx.notify();
-    }
-
-    pub fn check_for_updates(&mut self, cx: &mut Context<Self>) {
-        if self.update_status == UpdateStatus::Checking {
-            return;
-        }
-        self.update_status = UpdateStatus::Checking;
-        cx.notify();
-
-        let current_version = crate::version::APP_VERSION;
-        let (tx, rx) = tokio::sync::oneshot::channel();
-
-        crate::services::global_tokio_runtime().spawn(async move {
-            let res =
-                zest_core::updater::check_github_release("dungmv", "zest", current_version).await;
-            let _ = tx.send(res);
-        });
-
-        cx.spawn(async move |this, cx| {
-            let result = rx
-                .await
-                .unwrap_or_else(|_| Err("Background update task was cancelled".to_string()));
-
-            let _ = this.update(cx, |state, cx| {
-                state.update_status = match result {
-                    Ok(zest_core::updater::UpdateCheckResult::UpToDate { current_version }) => {
-                        UpdateStatus::UpToDate {
-                            checked_version: current_version,
-                        }
-                    }
-                    Ok(zest_core::updater::UpdateCheckResult::UpdateAvailable {
-                        current_version,
-                        latest_version,
-                        release_url,
-                        release_name,
-                    }) => UpdateStatus::UpdateAvailable {
-                        current_version,
-                        latest_version,
-                        release_url,
-                        release_name,
-                    },
-                    Err(err) => UpdateStatus::Error(err),
-                };
-                cx.notify();
-            });
-        })
-        .detach();
     }
 
     /// Dismisses the currently active modal, if any. Returns whether a modal

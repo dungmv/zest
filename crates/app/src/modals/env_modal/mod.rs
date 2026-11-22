@@ -69,18 +69,11 @@ impl RenderOnce for EnvironmentModal {
 
         let renaming_env_id = sidebar.renaming_env_id().map(ToString::to_string);
         let rename_env_input = sidebar.rename_env_input().cloned();
-        let modal_close = self.modal_state.clone();
-
-        Modal::new("env-modal")
+        Modal::for_kind("env-modal", ModalKind::Environment, &self.modal_state)
             .w(px(980.))
             .h(px(580.))
             .title("Environments & Variables")
             .icon(IconName::Globe)
-            .on_close(move |_, cx| {
-                modal_close.update(cx, |state, cx| {
-                    state.close(ModalKind::Environment, cx);
-                });
-            })
             .child(
                 div()
                     .flex_1()

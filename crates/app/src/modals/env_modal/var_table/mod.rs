@@ -1,15 +1,11 @@
+mod rows;
+
 use crate::state::{EnvironmentEvent, EnvironmentState, ModalEvent, ModalState};
-use crate::theme::theme;
-use gpui_kit::assets::IconName;
-use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::{Icon, Sizable as _};
-use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::{
-    div, px, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, ParentElement,
-    Render, ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled, Subscription,
-    Window,
+    AppContext as _, Context, Entity, IntoElement, Render, ScrollHandle, Subscription, Window,
 };
+use rows::render_var_table;
 use zest_core::models::EnvironmentVariable;
 
 struct EnvVarRowInputs {
@@ -357,232 +353,7 @@ impl EnvVarTable {
 
 impl Render for EnvVarTable {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let t = theme();
-        let selected_id = self.bound_env_id.clone();
-        let is_empty = self.rows.is_empty();
-        let table_entity = cx.entity();
-
-        div()
-            .flex_1()
-            .flex()
-            .flex_col()
-            .overflow_hidden()
-            // Table Header
-            .child(
-                div()
-                    .h(px(30.))
-                    .px(px(16.))
-                    .bg(t.bg_card)
-                    .border_b_1()
-                    .border_color(t.border)
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .text_xs()
-                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                    .text_color(t.text_muted)
-                    .child(div().w(px(180.)).child("VARIABLE NAME"))
-                    .child(div().flex_1().child("INITIAL VALUE (GIT)"))
-                    .child(div().flex_1().child("CURRENT VALUE (LOCAL)"))
-                    .child(div().w(px(64.)).text_center().child("SECRET"))
-                    .child(div().w(px(24.)).child("")),
-            )
-            // Table Rows
-            .child(
-                div()
-                    .id("env-var-table-scroll")
-                    .flex_1()
-                    .px(px(12.))
-                    .py(px(6.))
-                    .track_scroll(&self.scroll_handle)
-                    .overflow_y_scrollbar()
-                    .flex()
-                    .flex_col()
-                    .gap(px(4.))
-                    .when(is_empty, |this| {
-                        this.child(
-                            div()
-                                .py(px(60.))
-                                .flex()
-                                .flex_col()
-                                .items_center()
-                                .justify_center()
-                                .gap(px(8.))
-                                .text_xs()
-                                .text_color(t.text_muted)
-                                .child("No variables yet.")
-                                .child(
-                                    div().text_xs().text_color(t.primary).child(
-                                        "Click '+ Add Variable' above to add a new variable.",
-                                    ),
-                                ),
-                        )
-                    })
-                    .children(self.rows.iter().enumerate().map(|(idx, row)| {
-                        let row_id = format!("{}-row-{}", selected_id, idx);
-                        let k_input = row.key_input.clone();
-                        let init_input = row.init_input.clone();
-                        let curr_input = row.curr_input.clone();
-                        let secret = row.secret;
-
-                        let tbl_sec = table_entity.clone();
-                        let kin_sec = k_input.clone();
-                        let tbl_del = table_entity.clone();
-                        let kin_del = k_input.clone();
-
-                        let is_target = self
-                            .target_variable
-                            .as_deref()
-                            .is_some_and(|tv| tv == row.key_input.read(cx).value().as_ref());
-
-                        div()
-                            .id(SharedString::from(format!("env-row-item-{}", idx)))
-                            .flex()
-                            .items_center()
-                            .px(px(4.))
-                            .py(px(2.))
-                            .gap(px(8.))
-                            .rounded(px(4.))
-                            .hover(|s| s.bg(t.bg_hover))
-                            .when(is_target, |s| {
-                                s.bg(t.bg_hover).border_1().border_color(t.primary)
-                            })
-                            // Key Input
-                            .child(
-                                div()
-                                    .w(px(180.))
-                                    .h(px(28.))
-                                    .px(px(6.))
-                                    .rounded(px(4.))
-                                    .bg(t.bg_input)
-                                    .border_1()
-                                    .border_color(t.border)
-                                    .flex()
-                                    .items_center()
-                                    .child(
-                                        Input::new(&k_input)
-                                            .id(SharedString::from(format!("{}-key", row_id)))
-                                            .appearance(false)
-                                            .bordered(false)
-                                            .focus_bordered(false)
-                                            .px(px(0.))
-                                            .text_sm()
-                                            .font_family(".SystemMonoFont"),
-                                    ),
-                            )
-                            // Initial Value Input
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .h(px(28.))
-                                    .px(px(6.))
-                                    .rounded(px(4.))
-                                    .bg(t.bg_input)
-                                    .border_1()
-                                    .border_color(t.border)
-                                    .flex()
-                                    .items_center()
-                                    .child(
-                                        Input::new(&init_input)
-                                            .id(SharedString::from(format!("{}-init-val", row_id)))
-                                            .appearance(false)
-                                            .bordered(false)
-                                            .focus_bordered(false)
-                                            .px(px(0.))
-                                            .text_sm()
-                                            .font_family(".SystemMonoFont"),
-                                    ),
-                            )
-                            // Current Value Input
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .h(px(28.))
-                                    .px(px(6.))
-                                    .rounded(px(4.))
-                                    .bg(t.bg_input)
-                                    .border_1()
-                                    .border_color(t.border)
-                                    .flex()
-                                    .items_center()
-                                    .child(
-                                        Input::new(&curr_input)
-                                            .id(SharedString::from(format!("{}-curr-val", row_id)))
-                                            .appearance(false)
-                                            .bordered(false)
-                                            .focus_bordered(false)
-                                            .px(px(0.))
-                                            .text_sm()
-                                            .font_family(".SystemMonoFont"),
-                                    ),
-                            )
-                            // Secret toggle button
-                            .child(
-                                div()
-                                    .id(SharedString::from(format!("{}-secret", row_id)))
-                                    .w(px(64.))
-                                    .h(px(24.))
-                                    .rounded(px(4.))
-                                    .bg(if secret {
-                                        gpui_kit::Hsla {
-                                            a: 0.15,
-                                            ..t.status_4xx
-                                        }
-                                    } else {
-                                        gpui_kit::transparent_black()
-                                    })
-                                    .hover(|s| s.bg(t.bg_card))
-                                    .cursor_pointer()
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .text_xs()
-                                    .text_color(if secret { t.status_4xx } else { t.text_muted })
-                                    .on_click(move |_, _, cx| {
-                                        tbl_sec.update(cx, |this, cx| {
-                                            this.toggle_row_secret_by_key(&kin_sec, cx);
-                                        });
-                                    })
-                                    .child(if secret {
-                                        div()
-                                            .flex()
-                                            .items_center()
-                                            .gap(px(4.))
-                                            .child(Icon::new(IconName::Lock).size(px(14.)))
-                                            .child(" Secret")
-                                            .into_any_element()
-                                    } else {
-                                        div()
-                                            .flex()
-                                            .items_center()
-                                            .gap(px(4.))
-                                            .child(Icon::new(IconName::LockOpen).size(px(14.)))
-                                            .child(" Visible")
-                                            .into_any_element()
-                                    }),
-                            )
-                            // Delete row button
-                            .child(
-                                div()
-                                    .id(SharedString::from(format!("{}-del", row_id)))
-                                    .w(px(24.))
-                                    .h(px(24.))
-                                    .rounded(px(4.))
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .cursor_pointer()
-                                    .hover(|s| s.bg(t.bg_card).text_color(t.status_5xx))
-                                    .text_color(t.text_muted)
-                                    .on_click(move |_, _, cx| {
-                                        tbl_del.update(cx, |this, cx| {
-                                            this.delete_row_by_key(&kin_del, cx);
-                                        });
-                                    })
-                                    .child(Icon::new(IconName::Trash).small()),
-                            )
-                    })),
-            )
+        render_var_table(self, cx)
     }
 }
 
@@ -590,7 +361,7 @@ impl Render for EnvVarTable {
 mod tests {
     use super::*;
     use crate::state::{ModalKind, ModalPayload};
-    use gpui_kit::{TestAppContext, VisualTestContext};
+    use gpui_kit::{div, ParentElement, TestAppContext, VisualTestContext};
     use std::sync::Arc;
     use tempfile::tempdir;
     use zest_core::storage::{FsWorkspaceStore, WorkspaceStore};

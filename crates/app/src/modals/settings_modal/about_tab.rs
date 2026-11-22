@@ -1,25 +1,10 @@
-use crate::modals::about_modal::render_update_section;
+use crate::modals::about_modal::{about_app_icon, render_info_row, render_update_section};
 use crate::state::ModalKind;
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::Icon;
-use gpui_kit::{
-    div, img, px, App, Entity, FontWeight, Image, ImageFormat, IntoElement, ParentElement, Styled,
-};
-use std::sync::{Arc, OnceLock};
-
-fn settings_about_app_icon() -> Arc<Image> {
-    static ICON: OnceLock<Arc<Image>> = OnceLock::new();
-    ICON.get_or_init(|| {
-        Arc::new(Image {
-            format: ImageFormat::Png,
-            bytes: include_bytes!("../../../resources/app_icon_128.png").to_vec(),
-            id: 3,
-        })
-    })
-    .clone()
-}
+use gpui_kit::{div, img, px, App, Entity, FontWeight, IntoElement, ParentElement, Styled};
 
 pub fn render_about_tab(
     modal_state: &Entity<crate::state::ModalState>,
@@ -87,7 +72,7 @@ pub fn render_about_tab(
                                         .items_center()
                                         .justify_center()
                                         .child(
-                                            img(settings_about_app_icon())
+                                            img(about_app_icon())
                                                 .w(px(52.))
                                                 .h(px(52.))
                                                 .rounded(px(12.)),
@@ -193,51 +178,28 @@ pub fn render_about_tab(
                         .flex()
                         .flex_col()
                         .gap(px(10.))
-                        .child(render_spec_row("App Version", version, t.text_primary))
-                        .child(render_spec_row("Git Commit", commit_hash, t.text_secondary))
-                        .child(render_spec_row(
+                        .child(render_info_row("App Version", version, t.text_primary))
+                        .child(render_info_row("Git Commit", commit_hash, t.text_secondary))
+                        .child(render_info_row(
                             "Target Platform",
                             &platform_label,
                             t.text_secondary,
                         ))
-                        .child(render_spec_row(
+                        .child(render_info_row(
                             "Rendering Engine",
                             "GPUI GPU-Accelerated (60/120 FPS)",
                             t.text_secondary,
                         ))
-                        .child(render_spec_row(
+                        .child(render_info_row(
                             "Storage Architecture",
                             "Local-first YAML with Write-behind Coalescing",
                             t.text_secondary,
                         ))
-                        .child(render_spec_row(
+                        .child(render_info_row(
                             "Version Control",
                             "Integrated Git Subprocess Engine",
                             t.text_secondary,
                         )),
                 ),
-        )
-}
-
-fn render_spec_row(label: &'static str, val: &str, val_color: gpui_kit::Hsla) -> impl IntoElement {
-    let t = theme();
-    div()
-        .w_full()
-        .flex()
-        .items_center()
-        .justify_between()
-        .text_xs()
-        .child(
-            div()
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(t.text_muted)
-                .child(label),
-        )
-        .child(
-            div()
-                .font_weight(FontWeight::SEMIBOLD)
-                .font_family(".SystemMonoFont")
-                .text_color(val_color)
-                .child(val.to_string()),
         )
 }

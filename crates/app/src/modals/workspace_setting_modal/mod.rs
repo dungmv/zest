@@ -174,84 +174,82 @@ impl RenderOnce for WorkspaceSettingModal {
         let auth_inputs =
             use_scope_auth_inputs(window, cx, &target, &current_auth, &ws_clone, &env_clone);
 
-        Modal::new("workspace-setting-modal")
-            .w(px(580.))
-            .h(px(320.))
-            .title(title)
-            .icon(IconName::Settings)
-            .on_close({
-                let modal_c = modal_clone.clone();
-                move |_, cx| {
-                    modal_c.update(cx, |m, cx| m.close(ModalKind::WorkspaceSetting, cx));
-                }
-            })
-            // Tab Bar
-            .child({
-                let kinds: Vec<WorkspaceSettingTab> =
-                    visible_tabs.iter().map(|(tab, _)| *tab).collect();
-                TabBar::new("workspace-setting-tabs")
-                    .underline()
-                    .px(px(16.))
-                    .selected_index(selected_index)
-                    .on_click(move |&idx, window, cx| {
-                        if let Some(tab) = kinds.get(idx) {
-                            let tab = *tab;
-                            tab_state.update(cx, |state, _| *state = tab);
-                            window.refresh();
-                        }
-                    })
-                    .children(
-                        visible_tabs
-                            .iter()
-                            .map(|(_, label)| Tab::new().label(label.clone())),
+        Modal::for_kind(
+            "workspace-setting-modal",
+            ModalKind::WorkspaceSetting,
+            &self.modal_state,
+        )
+        .w(px(580.))
+        .h(px(320.))
+        .title(title)
+        .icon(IconName::Settings)
+        // Tab Bar
+        .child({
+            let kinds: Vec<WorkspaceSettingTab> =
+                visible_tabs.iter().map(|(tab, _)| *tab).collect();
+            TabBar::new("workspace-setting-tabs")
+                .underline()
+                .px(px(16.))
+                .selected_index(selected_index)
+                .on_click(move |&idx, window, cx| {
+                    if let Some(tab) = kinds.get(idx) {
+                        let tab = *tab;
+                        tab_state.update(cx, |state, _| *state = tab);
+                        window.refresh();
+                    }
+                })
+                .children(
+                    visible_tabs
+                        .iter()
+                        .map(|(_, label)| Tab::new().label(label.clone())),
+                )
+        })
+        // Tab Body
+        .child(
+            div()
+                .flex_1()
+                .min_h(px(0.))
+                .p(px(16.))
+                .overflow_y_scrollbar()
+                .child(match active_tab {
+                    WorkspaceSettingTab::General => render_general_tab(
+                        &ws_clone,
+                        &ws_name_input,
+                        &workspace_name,
+                        &workspace_path_str,
+                        cx,
                     )
-            })
-            // Tab Body
-            .child(
-                div()
-                    .flex_1()
-                    .min_h(px(0.))
-                    .p(px(16.))
-                    .overflow_y_scrollbar()
-                    .child(match active_tab {
-                        WorkspaceSettingTab::General => render_general_tab(
-                            &ws_clone,
-                            &ws_name_input,
-                            &workspace_name,
-                            &workspace_path_str,
-                            cx,
-                        )
-                        .into_any_element(),
-                        WorkspaceSettingTab::Headers => render_headers_tab(
-                            &ws_clone,
-                            &self.env_state,
-                            &modal_clone,
-                            &target,
-                            &current_headers,
+                    .into_any_element(),
+                    WorkspaceSettingTab::Headers => render_headers_tab(
+                        &ws_clone,
+                        &self.env_state,
+                        &modal_clone,
+                        &target,
+                        &current_headers,
+                        is_folder,
+                    )
+                    .into_any_element(),
+                    WorkspaceSettingTab::Auth => render_auth_tab(
+                        AuthTabContext {
+                            ws_state: &ws_clone,
+                            env_state: &self.env_state,
+                            modal_state: &modal_clone,
+                            target: &target,
+                            current_auth: &current_auth,
                             is_folder,
-                        )
-                        .into_any_element(),
-                        WorkspaceSettingTab::Auth => render_auth_tab(
-                            AuthTabContext {
-                                ws_state: &ws_clone,
-                                env_state: &self.env_state,
-                                modal_state: &modal_clone,
-                                target: &target,
-                                current_auth: &current_auth,
-                                is_folder,
-                                folder_id_opt: folder_id_opt.as_deref(),
-                                bearer_input: &auth_inputs.bearer_input,
-                                basic_user_input: &auth_inputs.basic_user_input,
-                                basic_pass_input: &auth_inputs.basic_pass_input,
-                                api_key_input: &auth_inputs.api_key_input,
-                                api_val_input: &auth_inputs.api_val_input,
-                            },
-                            window,
-                            cx,
-                        )
-                        .into_any_element(),
-                    }),
-            )
-            .into_any_element()
+                            folder_id_opt: folder_id_opt.as_deref(),
+                            bearer_input: &auth_inputs.bearer_input,
+                            basic_user_input: &auth_inputs.basic_user_input,
+                            basic_pass_input: &auth_inputs.basic_pass_input,
+                            api_key_input: &auth_inputs.api_key_input,
+                            api_val_input: &auth_inputs.api_val_input,
+                        },
+                        window,
+                        cx,
+                    )
+                    .into_any_element(),
+                }),
+        )
+        .into_any_element()
     }
 }

@@ -71,19 +71,11 @@ impl RenderOnce for SettingsModal {
             (SettingsTab::About, IconName::Info, "About", None),
         ];
 
-        Modal::new("settings-modal")
+        Modal::for_kind("settings-modal", ModalKind::Settings, &self.modal_state)
             .w(px(740.))
             .h(px(540.))
             .title("Settings")
             .icon(IconName::Settings)
-            .on_close({
-                let modal_s = modal_clone.clone();
-                move |_, cx| {
-                    modal_s.update(cx, |state, cx| {
-                        state.close(ModalKind::Settings, cx);
-                    });
-                }
-            })
             // Main Split Body: Left Sidebar + Right Content
             .child(
                 div()

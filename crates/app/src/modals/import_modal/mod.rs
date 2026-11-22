@@ -125,17 +125,11 @@ impl RenderOnce for ImportModal {
             .target_folder_rel
             .clone();
 
-        Modal::new("import-modal")
+        Modal::for_kind("import-modal", ModalKind::Import, &self.modal_state)
             .w(px(640.))
             .h(px(520.))
             .title("Import into Workspace")
             .icon(IconName::Download)
-            .on_close({
-                let modal_c = modal_entity_ref.clone();
-                move |_, cx| {
-                    modal_c.update(cx, |m, cx| m.close(ModalKind::Import, cx));
-                }
-            })
             // Content Body (Scrollable)
             .child(
                 div()

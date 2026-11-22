@@ -535,7 +535,6 @@ impl Render for AppView {
                     .child(workspace_content),
             );
 
-        let send_view = app_view_entity.clone();
         attach_modal_overlays(
             root,
             ModalOverlayEntities {
@@ -547,11 +546,6 @@ impl Render for AppView {
                 git_state: &git_entity,
                 editor_state: &session_entity,
                 env_var_table: &self.env_var_table,
-            },
-            move |_, cx| {
-                send_view.update(cx, |view, cx| {
-                    view.send_current_request(cx);
-                });
             },
             cx,
         )

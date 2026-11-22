@@ -94,17 +94,11 @@ impl RenderOnce for ExportModal {
             format.extension()
         );
 
-        Modal::new("export-modal")
+        Modal::for_kind("export-modal", ModalKind::Export, &self.modal_state)
             .w(px(560.))
             .h(px(320.))
             .title("Export OpenAPI 3.0")
             .icon(IconName::Upload)
-            .on_close({
-                let modal_c = modal_entity_ref.clone();
-                move |_, cx| {
-                    modal_c.update(cx, |m, cx| m.close(ModalKind::Export, cx));
-                }
-            })
             // Content Body
             .child(
                 div()
