@@ -17,7 +17,24 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(cx: &mut App) -> Self {
-        let workspace = cx.new(|_| WorkspaceDataState::new());
+        let workspace = cx.new(|cx| {
+            let mut ws = WorkspaceDataState::new();
+            // The full store scan (meta + every environment/request YAML) is
+            // O(tree bytes) — run it on the background executor; the initial
+            // selection replays via `RequestsReloaded` once it lands.
+            ws.load_workspace_async(cx, false);
+            ws
+        });
+        // .gitignore upkeep shells out to `git` (up to 30s) — keep it off the
+        // UI thread.
+        {
+            let store = workspace.read(cx).store.clone();
+            cx.background_executor()
+                .spawn(async move {
+                    let _ = store.ensure_gitignore();
+                })
+                .detach();
+        }
         let (ws_dir, ws_store, ws_name) = {
             let ws = workspace.read(cx);
             (

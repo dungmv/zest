@@ -28,6 +28,10 @@ pub struct AppView {
     pub(crate) runner: Runner,
     pub(crate) focus_handle: FocusHandle,
     pub(crate) _subscriptions: Vec<Subscription>,
+    /// Startup restore guard: the workspace loads asynchronously, so the
+    /// initial request selection is replayed once (in the `RequestsReloaded`
+    /// handler) when the first scan lands.
+    pub(crate) initial_restore_done: bool,
 }
 
 impl Focusable for AppView {
@@ -58,7 +62,7 @@ impl AppView {
             _ => None,
         });
 
-        let mut composer_inputs = ComposerInputs::new(
+        let composer_inputs = ComposerInputs::new(
             window,
             state.env.clone(),
             state.session.clone(),
@@ -66,7 +70,7 @@ impl AppView {
             highlighter_factory.clone(),
             cx,
         );
-        let mut inspector_displays = InspectorDisplays::new(window, highlighter_factory, cx);
+        let inspector_displays = InspectorDisplays::new(window, highlighter_factory, cx);
         let env_var_table = {
             let env_ent = state.env.clone();
             let modal_ent = state.modal.clone();
@@ -91,53 +95,12 @@ impl AppView {
             },
         );
 
-        // Select initial request from workspace if the user has saved requests
-        let (initial_req, ws_store) = {
-            let ws_read = state.workspace.read(cx);
-            let per_read = state.persistence.read(cx);
-            let req = per_read
-                .local_state
-                .active_request
-                .as_ref()
-                .and_then(|act_id| ws_read.requests.iter().find(|r| &r.id == act_id).cloned())
-                .or_else(|| ws_read.requests.first().cloned());
-            (req, ws_read.store.clone())
-        };
-        if let Some(req) = &initial_req {
-            state.session.update(cx, |ed, cx| {
-                ed.set_active_request_id(&req.id, cx);
-                // The `ActiveRequestChanged` event emitted above has no
-                // subscriber yet (subscriptions are installed below), so the
-                // protocol clamp in `workspace_event_handler` never runs on
-                // startup. Clamp here as well or a restored gRPC/WS request
-                // renders the HTTP Body tab (default kind) under its strip.
-                let clamped = RequestTabKind::clamp_for(ed.active_tab_kind, req.protocol);
-                if clamped != ed.active_tab_kind {
-                    ed.set_active_tab_kind(clamped, cx);
-                }
-            });
-            composer_inputs.sync_inputs(
-                &req.id,
-                ComposerSyncScope::All,
-                &state.workspace,
-                &state.env,
-                window,
-                cx,
-            );
-            let req_id = req.id.clone();
-            state.response.update(cx, |resp, cx| {
-                resp.load_for_request(&req_id, ws_store.as_ref(), cx);
-                // Same pre-subscription clamp as above, for the response
-                // strip: the runtime clamp lives in the
-                // `ActiveRequestChanged` handler which startup bypasses.
-                let clamped_tab = ResponseTabKind::clamp_for(resp.active_tab, req.protocol);
-                if clamped_tab != resp.active_tab {
-                    resp.set_active_tab(clamped_tab, cx);
-                }
-            });
-            inspector_displays.sync_response_editor(&state.response, window, cx);
-            inspector_displays.sync_sent_request_preview(&state.response, window, cx);
-        }
+        // The workspace data loads asynchronously (background scan); the
+        // initial request selection + composer/response sync replay through
+        // the `WorkspaceEvent::RequestsReloaded` handler once it lands —
+        // subscriptions are live by then, so the runtime
+        // `ActiveRequestChanged` path (clamps, realtime restore, .loc cache)
+        // covers everything the old synchronous startup block did.
 
         // Set up subscriptions:
         let mut _subscriptions = setup_app_subscriptions(
@@ -178,6 +141,7 @@ impl AppView {
             runner,
             focus_handle,
             _subscriptions,
+            initial_restore_done: false,
         }
     }
 

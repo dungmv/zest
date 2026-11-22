@@ -98,6 +98,38 @@ pub fn handle_workspace_event(
             });
         }
         WorkspaceEvent::RequestsReloaded { req_ids } => {
+            // Startup restore replay: the workspace scans asynchronously, so
+            // the first `RequestsReloaded` after AppView::new carries the
+            // initial data. Select the persisted (or first) request here —
+            // subscriptions are live, so the `ActiveRequestChanged` handler
+            // performs the composer sync, protocol clamps, realtime restore
+            // and .loc cache load exactly like the old synchronous startup
+            // block did.
+            if !this.initial_restore_done {
+                this.initial_restore_done = true;
+                let next_id = {
+                    let ws_ref = this.state.workspace.read(cx);
+                    let per_ref = this.state.persistence.read(cx);
+                    per_ref
+                        .local_state
+                        .active_request
+                        .as_ref()
+                        .and_then(|act_id| {
+                            ws_ref
+                                .requests
+                                .iter()
+                                .find(|r| &r.id == act_id)
+                                .map(|r| r.id.clone())
+                        })
+                        .or_else(|| ws_ref.requests.first().map(|r| r.id.clone()))
+                };
+                if let Some(next_id) = next_id {
+                    this.state.session.update(cx, |ed, cx| {
+                        ed.set_active_request_id(&next_id, cx);
+                    });
+                }
+            }
+
             let active_id = this.state.session.read(cx).active_request_id().to_string();
             let should_sync = match req_ids {
                 None => !this.state.persistence.read(cx).is_dirty(&active_id),

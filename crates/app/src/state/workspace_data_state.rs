@@ -8,7 +8,7 @@ use zest_core::http::ReqwestExecutor;
 use zest_core::models::{
     Auth, Folder, KeyValuePair, Protocol, RequestItem, StoredCookie, Workspace,
 };
-use zest_core::storage::models::{FolderNode, WorkspaceMeta};
+use zest_core::storage::models::{FolderNode, WorkspaceMeta, WorkspaceTree};
 use zest_core::storage::{FsWorkspaceStore, WorkspaceStore};
 use zest_core::transport::{resolve_inherited_headers, InheritedHeader};
 
@@ -31,6 +31,34 @@ pub struct WorkspaceDataState {
     /// Monotonically increasing counter bumped when a request URL changes (only affects
     /// the sidebar tree when a non-empty search filter query is active).
     pub url_version: usize,
+    /// Set while the initial workspace load (background scan) is in flight.
+    load_in_flight: bool,
+    /// A load was requested while one was already in flight; carries the
+    /// `announce_opened` flag of the latest request for the follow-up.
+    load_pending: Option<bool>,
+    /// Set while a watcher-driven tree rescan runs on the background executor.
+    rescan_in_flight: bool,
+    /// A rescan was requested while one was already in flight; one follow-up
+    /// scan runs after the current one completes.
+    rescan_pending: bool,
+    /// Lazily rebuilt id→position index for `find_request`; valid while
+    /// `tree_version` is unchanged. Interior-mutable so the read-only
+    /// `find_request` can rebuild it on demand.
+    request_index: std::cell::RefCell<Option<(usize, HashMap<String, usize>)>>,
+}
+
+/// Read-only snapshot of everything the workspace store holds. Produced by
+/// [`WorkspaceDataState::scan_workspace_blocking`] on a background thread and
+/// applied on the UI thread via [`WorkspaceDataState::apply_workspace_scan`].
+pub(crate) struct WorkspaceScan {
+    pub(crate) workspace_meta: Option<WorkspaceMeta>,
+    pub(crate) pins: Vec<String>,
+    pub(crate) cookies: Vec<StoredCookie>,
+    pub(crate) tree: Option<WorkspaceTree>,
+    pub(crate) folder_name: String,
+    /// Identity of the scanned store: a scan for a workspace the user has
+    /// already switched away from is dropped on apply.
+    pub(crate) store: Arc<dyn WorkspaceStore>,
 }
 
 fn default_workspace_dir() -> PathBuf {
@@ -88,9 +116,11 @@ impl WorkspaceDataState {
         }
 
         settings.add_recent_workspace(&ws_dir.to_string_lossy());
-        let _ = store.ensure_gitignore();
+        // Note: `.gitignore` upkeep shells out to `git` (up to 30s) and the
+        // full workspace scan is O(tree); both run off the UI thread —
+        // `AppState::new` spawns `ensure_gitignore` and `load_workspace_async`.
 
-        let mut state = Self {
+        Self {
             store,
             executor: Arc::new(ReqwestExecutor::new()),
             workspace_path: ws_dir,
@@ -110,10 +140,12 @@ impl WorkspaceDataState {
             recent_workspaces: settings.recent_workspaces,
             tree_version: 0,
             url_version: 0,
-        };
-
-        state.reload_all();
-        state
+            load_in_flight: false,
+            load_pending: None,
+            rescan_in_flight: false,
+            rescan_pending: false,
+            request_index: std::cell::RefCell::new(None),
+        }
     }
 
     pub fn new_for_path(path: PathBuf, store: Arc<dyn WorkspaceStore>) -> Self {
@@ -137,6 +169,11 @@ impl WorkspaceDataState {
             recent_workspaces: Vec::new(),
             tree_version: 0,
             url_version: 0,
+            load_in_flight: false,
+            load_pending: None,
+            rescan_in_flight: false,
+            rescan_pending: false,
+            request_index: std::cell::RefCell::new(None),
         };
         state.reload_all();
         state
@@ -156,7 +193,15 @@ impl WorkspaceDataState {
                 .unwrap_or("Workspace");
             let _ = store.init_workspace(name);
         }
-        let _ = store.ensure_gitignore();
+        // .gitignore upkeep shells out to `git` (up to 30s) — background it.
+        {
+            let s = store.clone();
+            cx.background_executor()
+                .spawn(async move {
+                    let _ = s.ensure_gitignore();
+                })
+                .detach();
+        }
         self.store = store;
         self.workspace_path = path.clone();
 
@@ -164,17 +209,22 @@ impl WorkspaceDataState {
         settings.add_recent_workspace(&path.to_string_lossy());
         self.recent_workspaces = settings.recent_workspaces;
 
-        self.reload_all();
-        let workspace_name = self
-            .active_workspace
-            .as_ref()
-            .map(|w| w.name.clone())
-            .unwrap_or_else(|| "Workspace".to_string());
-        cx.emit(WorkspaceEvent::WorkspaceOpened {
-            path: self.workspace_path.clone(),
-            workspace_name,
-            store: self.store.clone(),
-        });
+        // Drop the previous workspace's data immediately (the scan is async);
+        // `WorkspaceOpened` fires once the new scan lands so consumers see a
+        // populated workspace.
+        self.workspace_meta = WorkspaceMeta::default();
+        self.folders.clear();
+        self.requests.clear();
+        self.parse_errors.clear();
+        self.active_workspace = Some(Workspace::new(
+            self.workspace_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("Workspace"),
+        ));
+        self.bump_tree_version();
+
+        self.load_workspace_async(cx, true);
         cx.notify();
     }
 
@@ -393,6 +443,147 @@ impl WorkspaceDataState {
         self.reload_tree();
     }
 
+    /// Runs the full read-side scan of the workspace store (meta, pins,
+    /// cookies, collection tree). Blocking fs + YAML work — must run on a
+    /// background executor, never on the UI thread.
+    pub(crate) fn scan_workspace_blocking(
+        store: Arc<dyn WorkspaceStore>,
+        folder_name: String,
+    ) -> WorkspaceScan {
+        WorkspaceScan {
+            workspace_meta: store.load_workspace_meta().ok(),
+            pins: store.load_pins().unwrap_or_default(),
+            cookies: store
+                .load_cookies()
+                .ok()
+                .and_then(|val| serde_json::from_value::<Vec<StoredCookie>>(val).ok())
+                .unwrap_or_default(),
+            tree: store.scan_tree().ok(),
+            folder_name,
+            store: store.clone(),
+        }
+    }
+
+    /// Applies a background scan to in-memory state (meta, workspace shell,
+    /// pins, cookies, collection tree). Scans for a workspace the user has
+    /// already switched away from are dropped.
+    pub(crate) fn apply_workspace_scan(&mut self, scan: WorkspaceScan) {
+        if !Arc::ptr_eq(&scan.store, &self.store) {
+            return;
+        }
+        if let Some(meta) = scan.workspace_meta {
+            self.workspace_meta = meta;
+        }
+        let initial_name = if self.workspace_meta.name.trim().is_empty() {
+            scan.folder_name
+        } else {
+            self.workspace_meta.name.clone()
+        };
+        self.active_workspace = Some(Workspace {
+            id: self.workspace_path.to_string_lossy().to_string(),
+            name: initial_name,
+            description: String::new(),
+            active_environment_id: None,
+            headers: self.workspace_meta.headers.clone(),
+            auth: self.workspace_meta.auth.clone(),
+        });
+
+        self.pins = scan.pins;
+        self.cookies = scan.cookies;
+        self.executor.restore_stored_cookies(&self.cookies);
+        if let Some(tree) = scan.tree {
+            self.apply_tree(tree, HashMap::new());
+        }
+    }
+
+    /// Loads the workspace off the UI thread: the blocking store scan runs on
+    /// the background executor and the result is applied on the UI thread,
+    /// followed by a `RequestsReloaded` announcement. With `announce_opened`,
+    /// a `WorkspaceOpened` event (consumed by the open-workspace flow) fires
+    /// once the real metadata is available. Loads requested while one is in
+    /// flight coalesce into a single follow-up load.
+    pub fn load_workspace_async(&mut self, cx: &mut Context<Self>, announce_opened: bool) {
+        if self.load_in_flight {
+            self.load_pending = Some(announce_opened);
+            return;
+        }
+        self.load_in_flight = true;
+        let store = self.store.clone();
+        let folder_name = self
+            .workspace_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("Workspace")
+            .to_string();
+        let workspace_path = self.workspace_path.clone();
+        cx.spawn(async move |this, cx| {
+            let scan = cx
+                .background_executor()
+                .spawn(async move { Self::scan_workspace_blocking(store, folder_name) })
+                .await;
+            this.update(cx, |ws, cx| {
+                ws.load_in_flight = false;
+                ws.apply_workspace_scan(scan);
+                cx.emit(WorkspaceEvent::RequestsReloaded { req_ids: None });
+                if announce_opened {
+                    let workspace_name = ws
+                        .active_workspace
+                        .as_ref()
+                        .map(|w| w.name.clone())
+                        .unwrap_or_else(|| "Workspace".to_string());
+                    cx.emit(WorkspaceEvent::WorkspaceOpened {
+                        path: workspace_path,
+                        workspace_name,
+                        store: ws.store.clone(),
+                    });
+                }
+                cx.notify();
+                if let Some(announce) = std::mem::take(&mut ws.load_pending) {
+                    ws.load_workspace_async(cx, announce);
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// Watcher-driven tree rescan: identical to [`Self::reload_tree_preserving`]
+    /// but the blocking `scan_tree` runs on the background executor. Rescans
+    /// requested while one is in flight coalesce into one follow-up scan.
+    pub fn reload_tree_preserving_async(
+        &mut self,
+        dirty: std::collections::HashSet<String>,
+        cx: &mut Context<Self>,
+    ) {
+        if self.rescan_in_flight {
+            self.rescan_pending = true;
+            return;
+        }
+        self.rescan_in_flight = true;
+        let kept_requests = self.capture_kept_requests(&dirty);
+        let store = self.store.clone();
+        cx.spawn(async move |this, cx| {
+            let tree = cx
+                .background_executor()
+                .spawn(async move { store.scan_tree() })
+                .await;
+            this.update(cx, |ws, cx| {
+                ws.rescan_in_flight = false;
+                if let Ok(tree) = tree {
+                    ws.apply_tree(tree, kept_requests);
+                }
+                let rerun = std::mem::take(&mut ws.rescan_pending);
+                cx.emit(WorkspaceEvent::RequestsReloaded { req_ids: None });
+                cx.notify();
+                if rerun {
+                    ws.reload_tree_preserving_async(std::collections::HashSet::new(), cx);
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
     pub fn reload_tree(&mut self) {
         self.reload_tree_preserving(&std::collections::HashSet::new());
     }
@@ -402,7 +593,20 @@ impl WorkspaceDataState {
     /// on disk. Prevents `TreeChanged` events from clobbering active typing in
     /// the request composer.
     pub fn reload_tree_preserving(&mut self, dirty: &std::collections::HashSet<String>) {
-        let mut kept_requests: HashMap<String, RequestItem> = if dirty.is_empty() {
+        let kept_requests = self.capture_kept_requests(dirty);
+
+        if let Ok(tree) = self.store.scan_tree() {
+            self.apply_tree(tree, kept_requests);
+        }
+    }
+
+    /// Snapshot of the in-memory requests whose on-disk files are dirty, to
+    /// be merged back after a tree rescan.
+    fn capture_kept_requests(
+        &self,
+        dirty: &std::collections::HashSet<String>,
+    ) -> HashMap<String, RequestItem> {
+        if dirty.is_empty() {
             HashMap::new()
         } else {
             self.requests
@@ -410,18 +614,49 @@ impl WorkspaceDataState {
                 .filter(|r| dirty.contains(&r.id))
                 .map(|r| (r.id.clone(), r.clone()))
                 .collect()
-        };
+        }
+    }
 
-        if let Ok(tree) = self.store.scan_tree() {
-            let ws_name = self.workspace_meta.name.clone();
-            let total_reqs = tree.count_requests();
-            let total_folders = tree.count_folders();
-            let mut all_requests = Vec::with_capacity(total_reqs);
-            let mut all_folders = Vec::with_capacity(total_folders);
-            let mut errors = HashMap::new();
+    /// Applies a scanned collection tree to in-memory state, merging back
+    /// `kept_requests` (dirty in-memory edits) over the scanned items.
+    fn apply_tree(&mut self, tree: WorkspaceTree, mut kept_requests: HashMap<String, RequestItem>) {
+        let ws_name = self.workspace_meta.name.clone();
+        let total_reqs = tree.count_requests();
+        let total_folders = tree.count_folders();
+        let mut all_requests = Vec::with_capacity(total_reqs);
+        let mut all_folders = Vec::with_capacity(total_folders);
+        let mut errors = HashMap::new();
 
-            for req_node in tree.root_requests {
-                let mut item = req_node.file.into_item(&req_node.rel_path, &ws_name, None);
+        for req_node in tree.root_requests {
+            let mut item = req_node.file.into_item(&req_node.rel_path, &ws_name, None);
+            item.last_status_code = req_node.last_status_code;
+            all_requests.push(item);
+            if let Some(err) = req_node.parse_error {
+                errors.insert(req_node.rel_path, err);
+            }
+        }
+
+        fn process_folder(
+            folder_node: FolderNode,
+            parent_id: Option<String>,
+            ws_name: &str,
+            all_folders: &mut Vec<Folder>,
+            all_requests: &mut Vec<RequestItem>,
+            errors: &mut HashMap<String, String>,
+        ) {
+            let mut f = Folder::new(ws_name, &folder_node.file.name);
+            f.id = folder_node.rel_path.clone();
+            f.parent_id = parent_id;
+            f.headers = folder_node.file.headers;
+            f.auth = folder_node.file.auth;
+            all_folders.push(f);
+
+            let folder_rel = folder_node.rel_path;
+            for req_node in folder_node.requests {
+                let mut item =
+                    req_node
+                        .file
+                        .into_item(&req_node.rel_path, ws_name, Some(folder_rel.clone()));
                 item.last_status_code = req_node.last_status_code;
                 all_requests.push(item);
                 if let Some(err) = req_node.parse_error {
@@ -429,90 +664,96 @@ impl WorkspaceDataState {
                 }
             }
 
-            fn process_folder(
-                folder_node: FolderNode,
-                parent_id: Option<String>,
-                ws_name: &str,
-                all_folders: &mut Vec<Folder>,
-                all_requests: &mut Vec<RequestItem>,
-                errors: &mut HashMap<String, String>,
-            ) {
-                let mut f = Folder::new(ws_name, &folder_node.file.name);
-                f.id = folder_node.rel_path.clone();
-                f.parent_id = parent_id;
-                f.headers = folder_node.file.headers;
-                f.auth = folder_node.file.auth;
-                all_folders.push(f);
-
-                let folder_rel = folder_node.rel_path;
-                for req_node in folder_node.requests {
-                    let mut item = req_node.file.into_item(
-                        &req_node.rel_path,
-                        ws_name,
-                        Some(folder_rel.clone()),
-                    );
-                    item.last_status_code = req_node.last_status_code;
-                    all_requests.push(item);
-                    if let Some(err) = req_node.parse_error {
-                        errors.insert(req_node.rel_path, err);
-                    }
-                }
-
-                for sub in folder_node.subfolders {
-                    process_folder(
-                        sub,
-                        Some(folder_rel.clone()),
-                        ws_name,
-                        all_folders,
-                        all_requests,
-                        errors,
-                    );
-                }
-            }
-
-            for f_node in tree.folders {
+            for sub in folder_node.subfolders {
                 process_folder(
-                    f_node,
-                    None,
-                    &ws_name,
-                    &mut all_folders,
-                    &mut all_requests,
-                    &mut errors,
+                    sub,
+                    Some(folder_rel.clone()),
+                    ws_name,
+                    all_folders,
+                    all_requests,
+                    errors,
                 );
             }
+        }
 
-            if !kept_requests.is_empty() {
-                for req in &mut all_requests {
-                    if let Some(mut kept) = kept_requests.remove(&req.id) {
-                        kept.folder_id = req.folder_id.clone();
-                        kept.last_status_code = kept.last_status_code.or(req.last_status_code);
-                        errors.remove(&req.id);
-                        *req = kept;
-                    }
+        for f_node in tree.folders {
+            process_folder(
+                f_node,
+                None,
+                &ws_name,
+                &mut all_folders,
+                &mut all_requests,
+                &mut errors,
+            );
+        }
+
+        if !kept_requests.is_empty() {
+            for req in &mut all_requests {
+                if let Some(mut kept) = kept_requests.remove(&req.id) {
+                    kept.folder_id = req.folder_id.clone();
+                    kept.last_status_code = kept.last_status_code.or(req.last_status_code);
+                    errors.remove(&req.id);
+                    *req = kept;
                 }
             }
-
-            self.requests = all_requests;
-            self.folders = all_folders;
-            self.parse_errors = errors;
-            self.bump_tree_version();
         }
+
+        self.requests = all_requests;
+        self.folders = all_folders;
+        self.parse_errors = errors;
+        self.bump_tree_version();
     }
 
     pub fn find_request(&self, req_id: &str) -> Option<&RequestItem> {
         if req_id == "scratch" {
-            Some(&self.scratch_request)
-        } else {
-            self.requests.iter().find(|r| r.id == req_id)
+            return Some(&self.scratch_request);
         }
+        if !self.request_index_is_fresh() {
+            self.rebuild_request_index();
+        }
+        let pos = self
+            .request_index
+            .borrow()
+            .as_ref()
+            .and_then(|(_, map)| map.get(req_id))
+            .copied()?;
+        self.requests.get(pos)
     }
 
     pub fn find_request_mut(&mut self, req_id: &str) -> Option<&mut RequestItem> {
         if req_id == "scratch" {
-            Some(&mut self.scratch_request)
-        } else {
-            self.requests.iter_mut().find(|r| r.id == req_id)
+            return Some(&mut self.scratch_request);
         }
+        if !self.request_index_is_fresh() {
+            self.rebuild_request_index();
+        }
+        let pos = self
+            .request_index
+            .borrow()
+            .as_ref()
+            .and_then(|(_, map)| map.get(req_id))
+            .copied()?;
+        self.requests.get_mut(pos)
+    }
+
+    /// The id→position index stays valid while `tree_version` is unchanged:
+    /// every mutation of the request list bumps it (the sidebar flat-cache
+    /// relies on the same contract).
+    fn request_index_is_fresh(&self) -> bool {
+        self.request_index
+            .borrow()
+            .as_ref()
+            .map(|(version, _)| *version == self.tree_version)
+            .unwrap_or(false)
+    }
+
+    fn rebuild_request_index(&self) {
+        // First occurrence wins to match the previous linear-scan semantics.
+        let mut map = HashMap::with_capacity(self.requests.len());
+        for (i, r) in self.requests.iter().enumerate() {
+            map.entry(r.id.clone()).or_insert(i);
+        }
+        *self.request_index.borrow_mut() = Some((self.tree_version, map));
     }
 
     pub fn mutate_request<F, R>(&mut self, req_id: &str, f: F) -> Option<R>
@@ -783,6 +1024,11 @@ mod openapi_export_scope_tests {
             recent_workspaces: Vec::new(),
             tree_version: 0,
             url_version: 0,
+            load_in_flight: false,
+            load_pending: None,
+            rescan_in_flight: false,
+            rescan_pending: false,
+            request_index: std::cell::RefCell::new(None),
         };
         // Keep the tempdir alive for the whole test run by leaking it: the
         // store never touches disk during export (pure in-memory projection).

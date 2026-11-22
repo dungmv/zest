@@ -449,6 +449,9 @@ fn test_fs_batch_recreated_request_not_dropped(cx: &mut gpui_kit::TestAppContext
         per_state.update(cx, |per, cx| {
             per.handle_fs_events_batch(events, ws, env, git, cx);
         });
+        // Tree rescans run on the background executor; flush pending tasks so
+        // a triggered rescan applies before the caller asserts.
+        cx.run_until_parked();
     };
 
     // 1. Atomic replace in one batch (`git restore`): Remove + Create. The

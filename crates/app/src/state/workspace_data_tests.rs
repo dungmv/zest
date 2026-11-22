@@ -968,4 +968,38 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
+
+    #[test]
+    fn test_find_request_index_stays_fresh_across_list_mutations() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut ws = WorkspaceDataState::new_for_path(
+            tmp.path().to_path_buf(),
+            Arc::new(FsWorkspaceStore::new(tmp.path())),
+        );
+        // RequestItem::new generates a UUID id — assign deterministic ones.
+        let mut a = RequestItem::new("ws", "A", HttpMethod::Get, "");
+        a.id = "a".to_string();
+        let mut b = RequestItem::new("ws", "B", HttpMethod::Get, "");
+        b.id = "b".to_string();
+        ws.requests.push(a);
+        ws.requests.push(b);
+        ws.bump_tree_version();
+
+        assert!(ws.find_request("a").is_some());
+        assert!(ws.find_request("b").is_some());
+        assert!(ws.find_request("missing").is_none());
+        assert!(ws.find_request("scratch").is_some());
+
+        // Reorder: the index must invalidate on the version bump.
+        ws.requests.reverse();
+        ws.bump_tree_version();
+        assert!(ws.find_request("a").is_some());
+        assert!(ws.find_request("b").is_some());
+
+        // Remove one: a stale index entry must not resurrect it.
+        ws.requests.retain(|r| r.id != "a");
+        ws.bump_tree_version();
+        assert!(ws.find_request("a").is_none());
+        assert!(ws.find_request("b").is_some());
+    }
 }

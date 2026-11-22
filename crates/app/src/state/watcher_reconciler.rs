@@ -161,8 +161,9 @@ impl PersistenceState {
 
         if tree_changed {
             workspace_data.update(cx, |ws, cx| {
-                ws.reload_tree_preserving(&dirty_requests);
-                cx.emit(WorkspaceEvent::RequestsReloaded { req_ids: None });
+                // The blocking scan runs on the background executor; the
+                // reload announcement is emitted when it applies.
+                ws.reload_tree_preserving_async(dirty_requests, cx);
                 cx.notify();
             });
         } else {
@@ -212,8 +213,7 @@ impl PersistenceState {
 
                     ws.bump_tree_version();
                     if needs_rescan {
-                        ws.reload_tree_preserving(&dirty_requests);
-                        cx.emit(WorkspaceEvent::RequestsReloaded { req_ids: None });
+                        ws.reload_tree_preserving_async(dirty_requests, cx);
                     } else if !reloaded_ids.is_empty() {
                         cx.emit(WorkspaceEvent::RequestsReloaded {
                             req_ids: Some(reloaded_ids),
