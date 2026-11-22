@@ -312,13 +312,22 @@ impl EnvironmentFile {
                     secret: true,
                     enabled: true,
                 });
+                // Duplicate keys serialize first-wins, matching runtime
+                // resolution: a stale duplicate row must never overwrite the
+                // value of the row that actually resolves.
                 if !v.current_value.is_empty() {
-                    secrets.insert(v.key.clone(), v.current_value.clone());
+                    secrets
+                        .entry(v.key.clone())
+                        .or_insert_with(|| v.current_value.clone());
                     if !v.initial_value.is_empty() && v.initial_value != v.current_value {
-                        secrets.insert(format!("{}:init", v.key), v.initial_value.clone());
+                        secrets
+                            .entry(format!("{}:init", v.key))
+                            .or_insert_with(|| v.initial_value.clone());
                     }
                 } else if !v.initial_value.is_empty() {
-                    secrets.insert(v.key.clone(), v.initial_value.clone());
+                    secrets
+                        .entry(v.key.clone())
+                        .or_insert_with(|| v.initial_value.clone());
                 }
             } else {
                 env_file.variables.push(EnvVarFile {
@@ -328,7 +337,9 @@ impl EnvironmentFile {
                     enabled: true,
                 });
                 if !v.current_value.is_empty() {
-                    secrets.insert(v.key.clone(), v.current_value.clone());
+                    secrets
+                        .entry(v.key.clone())
+                        .or_insert_with(|| v.current_value.clone());
                 }
             }
         }

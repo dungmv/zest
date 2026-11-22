@@ -240,13 +240,23 @@ impl EnvironmentState {
         let mut effective = Environment::new(ws_name, "Effective");
         let mut key_map = HashMap::<&str, usize>::new();
 
+        // Duplicate keys resolve first-wins within a layer (matching the
+        // variable tooltip, autocomplete and interpolator), while the active
+        // environment still overrides globals.
         for v in &self.global_environment.variables {
+            if key_map.contains_key(v.key.as_str()) {
+                continue;
+            }
             key_map.insert(v.key.as_str(), effective.variables.len());
             effective.variables.push(v.clone());
         }
 
         if let Some(active_env) = self.active_environment() {
+            let mut seen_active = HashSet::new();
             for v in &active_env.variables {
+                if !seen_active.insert(v.key.as_str()) {
+                    continue;
+                }
                 if let Some(&idx) = key_map.get(v.key.as_str()) {
                     effective.variables[idx] = v.clone();
                 } else {

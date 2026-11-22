@@ -406,7 +406,10 @@ fn build_environment_object<'js>(
 ) -> rquickjs::Result<Object<'js>> {
     let mut initial_map = HashMap::new();
     for v in env_vars {
-        initial_map.insert(v.key.clone(), v.resolved_value().to_string());
+        // First-wins for duplicate keys, consistent with UI resolution.
+        initial_map
+            .entry(v.key.clone())
+            .or_insert_with(|| v.resolved_value().to_string());
     }
     let map_cell = Rc::new(RefCell::new(initial_map));
 
@@ -453,7 +456,10 @@ fn build_variables_object<'js>(
 ) -> rquickjs::Result<Object<'js>> {
     let mut var_map = HashMap::new();
     for v in env_vars {
-        var_map.insert(v.key.clone(), v.resolved_value().to_string());
+        // First-wins for duplicate keys, consistent with UI resolution.
+        var_map
+            .entry(v.key.clone())
+            .or_insert_with(|| v.resolved_value().to_string());
     }
     let map_cell = Rc::new(RefCell::new(var_map));
 

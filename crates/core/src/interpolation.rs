@@ -34,7 +34,10 @@ impl<'a> VariableInterpolator<'a> {
         let mut var_map = HashMap::new();
         if let Some(env) = env {
             for v in &env.variables {
-                var_map.insert(v.key.as_str(), v.resolved_value());
+                // Duplicate keys resolve first-wins, matching the variable
+                // tooltip, autocomplete list and script `z.environment`
+                // lookups so the displayed value is always the sent value.
+                var_map.entry(v.key.as_str()).or_insert(v.resolved_value());
             }
         }
         Self { var_map }
@@ -43,7 +46,7 @@ impl<'a> VariableInterpolator<'a> {
     pub fn from_vars(vars: &'a [EnvironmentVariable]) -> Self {
         let mut var_map = HashMap::new();
         for v in vars {
-            var_map.insert(v.key.as_str(), v.resolved_value());
+            var_map.entry(v.key.as_str()).or_insert(v.resolved_value());
         }
         Self { var_map }
     }
@@ -183,7 +186,8 @@ pub fn scan_variables(raw_text: &str, env: Option<&Environment>) -> Vec<Variable
     let mut var_map = HashMap::new();
     if let Some(env) = env {
         for v in &env.variables {
-            var_map.insert(v.key.as_str(), v.resolved_value());
+            // First-wins for duplicate keys, consistent with the interpolator.
+            var_map.entry(v.key.as_str()).or_insert(v.resolved_value());
         }
     }
 
@@ -313,6 +317,41 @@ mod tests {
         let res = interpolate("http://{{host}}/test", Some(&env));
         assert_eq!(res.text, "http://localhost:8000/test");
         assert!(res.unresolved_variables.is_empty());
+    }
+
+    /// Regression guard: duplicate keys must resolve first-wins everywhere.
+    /// The variable tooltip, autocomplete and script `z.environment` lookups
+    /// all use the first matching row; a last-wins interpolator map made the
+    /// displayed value differ from the value actually sent.
+    #[test]
+    fn test_interpolation_duplicate_keys_first_wins() {
+        let mut env = Environment::new("ws1", "prod");
+        env.variables.push(EnvironmentVariable {
+            key: "admin_token".to_string(),
+            initial_value: String::new(),
+            current_value: "new-token".to_string(),
+            secret: false,
+        });
+        env.variables.push(EnvironmentVariable {
+            key: "admin_token".to_string(),
+            initial_value: "stale-init".to_string(),
+            current_value: "stale-token".to_string(),
+            secret: true,
+        });
+
+        let res = interpolate("Bearer {{admin_token}}", Some(&env));
+        assert_eq!(res.text, "Bearer new-token");
+
+        let interpolator = VariableInterpolator::from_vars(&env.variables);
+        assert_eq!(
+            interpolator.interpolate("{{admin_token}}").text,
+            "new-token"
+        );
+
+        // The editor scan used for token chips must agree with the interpolator.
+        let spans = scan_variables("{{admin_token}}", Some(&env));
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].value.as_deref(), Some("new-token"));
     }
 
     #[test]
