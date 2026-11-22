@@ -271,8 +271,21 @@ impl Runner {
                                 r.last_status_code = Some(status);
                             }
                             ws.bump_tree_version();
-                            let _ = ws.store.save_response_cache(&req_id, &loc_file);
-                            ws.sync_cookies_from_executor();
+                            // Disk writes (response cache + cookies) serialize
+                            // and hash sizable payloads; run them on the
+                            // background executor in one sequential task so
+                            // response-arrival frames never hitch on I/O.
+                            let store = ws.store.clone();
+                            let req_id_for_disk = req_id.clone();
+                            let cookies = ws.sync_cookies_in_memory();
+                            cx.background_executor()
+                                .spawn(async move {
+                                    let _ = store.save_response_cache(&req_id_for_disk, &loc_file);
+                                    if let Ok(val) = serde_json::to_value(&cookies) {
+                                        let _ = store.save_cookies(&val);
+                                    }
+                                })
+                                .detach();
                             cx.notify();
                         });
 

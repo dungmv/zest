@@ -37,7 +37,7 @@ fn test_pre_request_env_and_headers() {
             console.log("Pre-request finished with token:", z.environment.get("token"));
         "#;
 
-    let output = ScriptSandbox::run_pre_request(script, ctx_data);
+    let output = ScriptSandbox::run_pre_request(script, ctx_data, None);
     assert!(output.error.is_none(), "Error: {:?}", output.error);
 
     // Verify env mutations
@@ -101,7 +101,7 @@ fn test_post_response_test_assertions_and_chaining() {
             z.environment.set("access_token", data.access_token);
         "#;
 
-    let output = ScriptSandbox::run_post_response(script, ctx_data);
+    let output = ScriptSandbox::run_post_response(script, ctx_data, None);
     assert!(output.error.is_none(), "Error: {:?}", output.error);
 
     // All 3 tests must pass
@@ -138,7 +138,7 @@ fn test_post_response_failing_assertion() {
             });
         "#;
 
-    let output = ScriptSandbox::run_post_response(script, ctx_data);
+    let output = ScriptSandbox::run_post_response(script, ctx_data, None);
     assert_eq!(output.test_results.len(), 1);
     assert!(!output.test_results[0].passed);
     assert!(output.test_results[0]
@@ -164,7 +164,7 @@ fn test_crypto_utilities() {
             z.assert(dec === "Antigravity Client");
         "#;
 
-    let output = ScriptSandbox::run_pre_request(script, ctx_data);
+    let output = ScriptSandbox::run_pre_request(script, ctx_data, None);
     assert!(output.error.is_none(), "Error: {:?}", output.error);
 
     let hmac = output
@@ -195,7 +195,7 @@ fn test_z_primary() {
             z.environment.set("from_z", "success");
         "#;
 
-    let output = ScriptSandbox::run_pre_request(script, ctx_data);
+    let output = ScriptSandbox::run_pre_request(script, ctx_data, None);
     assert!(output.error.is_none());
     assert_eq!(
         output.env_mutations[0],
@@ -213,7 +213,7 @@ fn test_console_logging_levels() {
             console.error("error log");
         "#;
 
-    let output = ScriptSandbox::run_pre_request(script, ctx_data);
+    let output = ScriptSandbox::run_pre_request(script, ctx_data, None);
     assert!(output.error.is_none());
     assert_eq!(output.console_entries.len(), 4);
     assert_eq!(output.console_entries[0].level, ConsoleLogLevel::Log);
@@ -231,4 +231,41 @@ fn test_console_logging_levels() {
 
     assert_eq!(output.console_entries[3].level, ConsoleLogLevel::Error);
     assert_eq!(output.console_entries[3].message, "error log");
+}
+
+#[test]
+fn test_cancel_flag_interrupts_script() {
+    let ctx_data = PreRequestContext::default();
+    let cancel = ScriptCancel::new();
+    cancel.cancel();
+
+    let output = ScriptSandbox::run_pre_request("while (true) {}", ctx_data, Some(&cancel));
+    let err = output.error.expect("cancelled script must error");
+    assert!(err.contains("cancelled"), "unexpected error: {err}");
+}
+
+#[test]
+fn test_eval_timeout_interrupts_infinite_loop() {
+    let ctx_data = PreRequestContext::default();
+    let output = ScriptSandbox::run_pre_request_with_timeout(
+        "while (true) {}",
+        ctx_data,
+        std::time::Duration::from_millis(150),
+    );
+    let err = output.error.expect("runaway script must error");
+    assert!(err.contains("timed out"), "unexpected error: {err}");
+}
+
+#[test]
+fn test_memory_limit_aborts_allocation_bomb() {
+    let ctx_data = PreRequestContext::default();
+    // A single ~300MB string allocation exceeds the 256MB runtime cap;
+    // QuickJS rejects it before touching memory.
+    let script = r#"var s = "x".repeat(300 * 1024 * 1024);"#;
+    let output = ScriptSandbox::run_pre_request(script, ctx_data, None);
+    let err = output.error.expect("allocation bomb must error");
+    assert!(
+        err.to_lowercase().contains("memory"),
+        "unexpected error: {err}"
+    );
 }

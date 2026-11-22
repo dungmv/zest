@@ -129,7 +129,7 @@ impl GrpcEngine {
 
         self.tokio_rt.spawn(async move {
             // 1. Fake vars + pre-request script (shared first stage)
-            let pre_output = run_pre_request_stage(&mut req_item, env.as_deref());
+            let pre_output = run_pre_request_stage(&mut req_item, env.as_deref(), None);
             let request_id = req_item.id.clone();
 
             let _ = event_tx.send(SendEvent::Started {

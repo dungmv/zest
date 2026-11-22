@@ -7,21 +7,23 @@ use std::sync::Arc;
 
 use zest_core::models::{Environment, EnvironmentVariable, RequestItem};
 use zest_core::scripting::{
-    resolve_fake_vars_in_request, PreRequestContext, PreRequestOutput, ScriptSandbox,
+    resolve_fake_vars_in_request, PreRequestContext, PreRequestOutput, ScriptCancel, ScriptSandbox,
 };
 
 /// Stage 1 of every engine pipeline: resolve dynamic fake variables in the
 /// request, then run the pre-request script when one is configured.
+/// `cancel`, when provided, interrupts a long-running script mid-eval.
 pub fn run_pre_request_stage(
     req_item: &mut RequestItem,
     env: Option<&Environment>,
+    cancel: Option<&ScriptCancel>,
 ) -> PreRequestOutput {
     resolve_fake_vars_in_request(req_item);
     let pre_script_code = req_item.script.as_ref().and_then(|s| s.pre_request.clone());
     match pre_script_code {
         Some(code) => {
             let ctx = PreRequestContext::from_request_and_env(req_item, env);
-            ScriptSandbox::run_pre_request(&code, ctx)
+            ScriptSandbox::run_pre_request(&code, ctx, cancel)
         }
         None => PreRequestOutput::default(),
     }

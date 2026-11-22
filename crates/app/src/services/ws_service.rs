@@ -81,7 +81,7 @@ impl WsService {
 
         self.tokio_rt.spawn(async move {
             // 1. Resolve dynamic fake variables + run the pre-request script
-            let pre_output = run_pre_request_stage(&mut req_item, env.as_deref());
+            let pre_output = run_pre_request_stage(&mut req_item, env.as_deref(), None);
 
             let _ = event_tx.send(SendEvent::Started {
                 request_id: req_item.id.clone(),

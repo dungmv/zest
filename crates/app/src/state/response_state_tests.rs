@@ -461,3 +461,61 @@ fn test_jsonpath_incomplete_query_keeps_base_display() {
     assert_eq!(&*fmt_valid.display_text, "3");
     assert_eq!(fmt_valid.match_count, Some(1));
 }
+
+#[test]
+fn test_oversized_body_skips_pretty_print_and_caps_lines() {
+    // > MAX_FORMAT_BODY_BYTES: JSON must NOT be parsed/pretty-printed and
+    // line materialization is bounded with a truncation marker.
+    let big_body = "{\"a\":1}".repeat(350_000); // ~2.45 MB of JSON
+    let rec = Arc::new(HttpResponseRecord {
+        id: "resp-big".to_string(),
+        request_id: "req-big".to_string(),
+        status_code: 200,
+        status_text: "OK".to_string(),
+        duration_ms: 25,
+        size_bytes: big_body.len(),
+        headers: vec![("content-type".to_string(), "application/json".to_string())],
+        cookies: vec![],
+        body: big_body.into_bytes(),
+        timing: zest_core::models::TimingBreakdown::default(),
+        request_sent: None,
+        test_results: vec![],
+        console_logs: vec![],
+        created_at: chrono::Utc::now(),
+    });
+
+    let fmt = ResponseState::build_cached_format(&rec);
+    assert!(!fmt.is_json, "oversized body must skip JSON detection");
+    assert!(fmt.parsed_json.is_none());
+    assert!(fmt.pretty_lines.len() <= 2001);
+    assert!(fmt
+        .pretty_lines
+        .last()
+        .map(|l| l.contains("truncated"))
+        .unwrap_or(false));
+}
+
+#[test]
+fn test_small_body_keeps_full_format() {
+    let rec = Arc::new(HttpResponseRecord {
+        id: "resp-small".to_string(),
+        request_id: "req-small".to_string(),
+        status_code: 200,
+        status_text: "OK".to_string(),
+        duration_ms: 25,
+        size_bytes: 10,
+        headers: vec![("content-type".to_string(), "application/json".to_string())],
+        cookies: vec![],
+        body: b"{\"a\":1}".to_vec(),
+        timing: zest_core::models::TimingBreakdown::default(),
+        request_sent: None,
+        test_results: vec![],
+        console_logs: vec![],
+        created_at: chrono::Utc::now(),
+    });
+
+    let fmt = ResponseState::build_cached_format(&rec);
+    assert!(fmt.is_json);
+    assert!(fmt.parsed_json.is_some());
+    assert!(fmt.pretty_lines.len() > 1, "pretty-printed multi-line JSON");
+}

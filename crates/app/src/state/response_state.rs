@@ -10,6 +10,40 @@ use zest_core::ws::WebSocketStatus;
 
 /// View-side cap for the live WS frame log (service keeps its own copy).
 const MAX_VIEW_FRAMES: usize = 1000;
+/// Bodies above this size skip JSON/XML pretty-printing entirely: parsing
+/// and re-serializing multi-megabyte payloads runs on the UI thread on every
+/// response arrival and request switch.
+const MAX_FORMAT_BODY_BYTES: usize = 2 * 1024 * 1024;
+/// Maximum number of lines materialized for the (virtualized) body view;
+/// payloads beyond the cap end with a truncation marker line.
+const MAX_FORMAT_LINES: usize = 2000;
+/// Maximum characters rendered per line: single-line megabyte bodies (e.g.
+/// minified JSON) would otherwise become one giant text node per frame.
+const MAX_FORMAT_LINE_CHARS: usize = 1000;
+
+/// Splits at most [`MAX_FORMAT_LINES`] lines of at most
+/// [`MAX_FORMAT_LINE_CHARS`] chars each, appending truncation markers when
+/// the payload continues beyond either cap.
+fn bounded_lines(text: &str) -> Vec<String> {
+    let mut lines: Vec<String> = text
+        .lines()
+        .take(MAX_FORMAT_LINES)
+        .map(|s| {
+            if s.chars().count() > MAX_FORMAT_LINE_CHARS {
+                let mut cut: String = s.chars().take(MAX_FORMAT_LINE_CHARS).collect();
+                cut.push_str("… (line truncated)");
+                cut
+            } else {
+                s.to_string()
+            }
+        })
+        .collect();
+    let total = text.lines().count();
+    if total > MAX_FORMAT_LINES {
+        lines.push(format!("… (truncated, {} lines total)", total));
+    }
+    lines
+}
 use zest_core::storage::models::RequestExampleFile;
 use zest_core::storage::WorkspaceStore;
 
@@ -386,19 +420,28 @@ impl ResponseState {
     }
 
     fn build_cached_format(resp: &Arc<HttpResponseRecord>) -> CachedResponseFormat {
+        let oversized = resp.body.len() > MAX_FORMAT_BODY_BYTES;
         let raw_str = String::from_utf8_lossy(&resp.body).to_string();
-        let parsed_json = serde_json::from_str::<serde_json::Value>(&raw_str).ok();
-        let is_json = parsed_json.is_some()
-            || resp.is_json()
-            || raw_str.trim_start().starts_with('{')
-            || raw_str.trim_start().starts_with('[');
+        let parsed_json = if oversized {
+            None
+        } else {
+            serde_json::from_str::<serde_json::Value>(&raw_str).ok()
+        };
+        let is_json = !oversized
+            && (parsed_json.is_some()
+                || resp.is_json()
+                || raw_str.trim_start().starts_with('{')
+                || raw_str.trim_start().starts_with('['));
 
-        let is_xml = !is_json
+        let is_xml = !oversized
+            && !is_json
             && (resp.is_xml()
                 || raw_str.trim_start().starts_with("<?xml")
                 || (raw_str.trim_start().starts_with('<') && raw_str.trim_end().ends_with('>')));
 
-        let pretty_str = if let Some(parsed) = &parsed_json {
+        let pretty_str = if oversized {
+            raw_str.clone()
+        } else if let Some(parsed) = &parsed_json {
             serde_json::to_string_pretty(parsed).unwrap_or_else(|_| raw_str.clone())
         } else if is_xml {
             crate::components::body_editor::format_xml(&raw_str).unwrap_or_else(|_| raw_str.clone())
@@ -406,19 +449,19 @@ impl ResponseState {
             raw_str.clone()
         };
 
-        let raw_lines: Vec<String> = raw_str.lines().map(|s| s.to_string()).collect();
-        let pretty_lines: Vec<String> = if pretty_str == raw_str {
+        let raw_lines: Arc<Vec<String>> = Arc::new(bounded_lines(&raw_str));
+        let pretty_lines: Arc<Vec<String>> = if pretty_str == raw_str {
             raw_lines.clone()
         } else {
-            pretty_str.lines().map(|s| s.to_string()).collect()
+            Arc::new(bounded_lines(&pretty_str))
         };
 
         CachedResponseFormat {
             response_ptr: Arc::as_ptr(resp) as usize,
             raw_text: Arc::new(raw_str),
-            raw_lines: Arc::new(raw_lines),
+            raw_lines,
             pretty_text: Arc::new(pretty_str),
-            pretty_lines: Arc::new(pretty_lines),
+            pretty_lines,
             parsed_json: parsed_json.map(Arc::new),
             is_json,
             is_xml,

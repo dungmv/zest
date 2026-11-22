@@ -1,7 +1,9 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::time::Instant;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use rquickjs::function::{Opt, Rest};
 use rquickjs::{Context, Function, Object, Runtime, Value};
@@ -15,11 +17,107 @@ use crate::scripting::api::{
 
 type EnvMutations = Rc<RefCell<Vec<(String, Option<String>)>>>;
 
+/// Wall-clock budget for a single script evaluation. User scripts run as
+/// sandboxed CPU work on the tokio runtime; an unbounded loop must never
+/// occupy a worker thread longer than this.
+pub const SCRIPT_EVAL_TIMEOUT: Duration = Duration::from_secs(30);
+/// Hard heap cap for the QuickJS runtime (guards allocation-bomb scripts).
+pub const SCRIPT_MEMORY_LIMIT: usize = 256 * 1024 * 1024;
+/// JS stack cap (guards runaway recursion).
+pub const SCRIPT_STACK_LIMIT: usize = 1024 * 1024;
+
+/// Shared, thread-safe cancellation flag for user scripts. Engines set it
+/// when the user cancels an in-flight request; the QuickJS interrupt
+/// handler stops script execution as soon as it is observed.
+#[derive(Clone, Default)]
+pub struct ScriptCancel(Arc<AtomicBool>);
+
+impl ScriptCancel {
+    pub fn new() -> Self {
+        Self(Arc::new(AtomicBool::new(false)))
+    }
+
+    /// Marks the script as cancelled (safe to call from any thread).
+    pub fn cancel(&self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(Ordering::SeqCst)
+    }
+}
+
+/// Applies the sandbox resource limits (memory, stack, wall-clock deadline,
+/// optional cancellation) to a freshly created runtime. Returns the eval
+/// deadline so callers can attribute eval errors to a timeout.
+fn configure_runtime(rt: &Runtime, timeout: Duration, cancel: Option<&ScriptCancel>) -> Instant {
+    rt.set_memory_limit(SCRIPT_MEMORY_LIMIT);
+    rt.set_max_stack_size(SCRIPT_STACK_LIMIT);
+    let deadline = Instant::now() + timeout;
+    let flag = cancel.cloned();
+    // The handler runs on the JS thread on every loop back-edge; rquickjs
+    // contract: returning `true` interrupts the interpreter with an
+    // un-catchable "interrupted" error.
+    rt.set_interrupt_handler(Some(Box::new(move || {
+        if Instant::now() >= deadline {
+            return true;
+        }
+        match &flag {
+            Some(f) => f.is_cancelled(),
+            None => false,
+        }
+    })));
+    deadline
+}
+
+/// Maps an eval failure to a user-facing message, overriding the generic
+/// interrupt error with an explicit timeout/cancellation reason.
+fn eval_error_message(
+    ctx: &rquickjs::Ctx<'_>,
+    e: rquickjs::Error,
+    deadline: Instant,
+    cancel: Option<&ScriptCancel>,
+) -> String {
+    if let Some(c) = cancel {
+        if c.is_cancelled() {
+            return "Script cancelled by user".to_string();
+        }
+    }
+    if Instant::now() >= deadline {
+        return format!("Script timed out after {}s", SCRIPT_EVAL_TIMEOUT.as_secs());
+    }
+    format_js_error(ctx, e)
+}
+
 pub struct ScriptSandbox;
 
 impl ScriptSandbox {
     /// Execute Pre-request Script in an isolated QuickJS runtime
-    pub fn run_pre_request(code: &str, ctx_data: PreRequestContext) -> PreRequestOutput {
+    pub fn run_pre_request(
+        code: &str,
+        ctx_data: PreRequestContext,
+        cancel: Option<&ScriptCancel>,
+    ) -> PreRequestOutput {
+        Self::run_pre_request_inner(code, ctx_data, cancel, SCRIPT_EVAL_TIMEOUT)
+    }
+
+    /// Test-only variant with an injectable deadline so the interrupt path
+    /// can be exercised without waiting for the full [`SCRIPT_EVAL_TIMEOUT`].
+    #[cfg(test)]
+    pub(crate) fn run_pre_request_with_timeout(
+        code: &str,
+        ctx_data: PreRequestContext,
+        timeout: Duration,
+    ) -> PreRequestOutput {
+        Self::run_pre_request_inner(code, ctx_data, None, timeout)
+    }
+
+    fn run_pre_request_inner(
+        code: &str,
+        ctx_data: PreRequestContext,
+        cancel: Option<&ScriptCancel>,
+        timeout: Duration,
+    ) -> PreRequestOutput {
         let rt = match Runtime::new() {
             Ok(r) => r,
             Err(e) => {
@@ -29,6 +127,7 @@ impl ScriptSandbox {
                 }
             }
         };
+        let deadline = configure_runtime(&rt, timeout, cancel);
 
         let ctx = match Context::full(&rt) {
             Ok(c) => c,
@@ -115,7 +214,7 @@ impl ScriptSandbox {
 
             let eval_result: Result<Value, _> = ctx.eval(code.as_bytes());
             if let Err(e) = eval_result {
-                return Err(format_js_error(&ctx, e));
+                return Err(eval_error_message(&ctx, e, deadline, cancel));
             }
 
             Ok(())
@@ -147,7 +246,11 @@ impl ScriptSandbox {
     }
 
     /// Execute Post-response / Test Script after server response is received
-    pub fn run_post_response(code: &str, ctx_data: PostResponseContext) -> PostResponseOutput {
+    pub fn run_post_response(
+        code: &str,
+        ctx_data: PostResponseContext,
+        cancel: Option<&ScriptCancel>,
+    ) -> PostResponseOutput {
         let rt = match Runtime::new() {
             Ok(r) => r,
             Err(e) => {
@@ -157,6 +260,7 @@ impl ScriptSandbox {
                 }
             }
         };
+        let deadline = configure_runtime(&rt, SCRIPT_EVAL_TIMEOUT, cancel);
 
         let ctx = match Context::full(&rt) {
             Ok(c) => c,
@@ -265,7 +369,7 @@ impl ScriptSandbox {
 
             let eval_result: Result<Value, _> = ctx.eval(code.as_bytes());
             if let Err(e) = eval_result {
-                return Err(format_js_error(&ctx, e));
+                return Err(eval_error_message(&ctx, e, deadline, cancel));
             }
 
             Ok(())

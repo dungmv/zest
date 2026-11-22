@@ -4,7 +4,7 @@ use tokio::sync::{mpsc, oneshot};
 use zest_core::graphql::{parse_introspection, GraphQLSchemaSummary, INTROSPECTION_QUERY};
 use zest_core::http::{HttpExecutor, HttpProgress, ReqwestExecutor};
 use zest_core::models::{Environment, HttpMethod, Protocol, RequestBody, RequestItem};
-use zest_core::scripting::{PostResponseContext, PostResponseOutput, ScriptSandbox};
+use zest_core::scripting::{PostResponseContext, PostResponseOutput, ScriptCancel, ScriptSandbox};
 use zest_core::sse::SseOutput;
 use zest_core::transport::{
     FrameDirection, FrameKind, RequestError, ResolvedRequest, TransportFrame,
@@ -74,8 +74,27 @@ impl HttpEngine {
         let send_event_tx = event_tx.clone();
 
         self.tokio_rt.spawn(async move {
+            // 0. Bridge the one-shot cancel into a shared flag so long-running
+            //    user scripts (pre/post) can be interrupted mid-eval, even
+            //    after the transport phase has already completed. The
+            //    transport keeps a dedicated one-shot to preserve the
+            //    existing cancel semantics (send OR sender-drop).
+            let script_cancel = ScriptCancel::new();
+            let (transport_cancel_tx, transport_cancel_rx) = oneshot::channel();
+            tokio::spawn({
+                let flag = script_cancel.clone();
+                async move {
+                    let cancelled = cancel_rx.await.is_ok();
+                    if cancelled {
+                        flag.cancel();
+                    }
+                    let _ = transport_cancel_tx.send(());
+                }
+            });
+
             // 1. Resolve dynamic fake variables + run the pre-request script
-            let pre_output = run_pre_request_stage(&mut req_item, env.as_deref());
+            let pre_output =
+                run_pre_request_stage(&mut req_item, env.as_deref(), Some(&script_cancel));
             let post_script_code = req_item
                 .script
                 .as_ref()
@@ -140,12 +159,12 @@ impl HttpEngine {
                     resolved,
                     progress_tx,
                     send_event_tx.clone(),
-                    cancel_rx,
+                    transport_cancel_rx,
                 )
                 .await
             } else {
                 tokio::select! {
-                    _ = cancel_rx => Err(RequestError::Cancelled),
+                    _ = transport_cancel_rx => Err(RequestError::Cancelled),
                     res = executor.send(resolved, Some(progress_tx)) => res,
                 }
             };
@@ -158,7 +177,7 @@ impl HttpEngine {
                             &record,
                             eff_env_for_post.as_deref(),
                         );
-                        ScriptSandbox::run_post_response(&code, post_ctx)
+                        ScriptSandbox::run_post_response(&code, post_ctx, Some(&script_cancel))
                     } else {
                         PostResponseOutput::default()
                     };
@@ -267,7 +286,7 @@ impl HttpEngine {
         let (tx, rx) = oneshot::channel();
         let executor = self.executor.clone();
         self.tokio_rt.spawn(async move {
-            let pre_output = run_pre_request_stage(&mut req_item, env.as_deref());
+            let pre_output = run_pre_request_stage(&mut req_item, env.as_deref(), None);
             let effective_env = merge_env_mutations(&env, &pre_output.env_mutations);
             req_item.method = HttpMethod::Post;
             req_item.body =

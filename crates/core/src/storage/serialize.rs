@@ -25,18 +25,25 @@ pub fn to_yaml_string<T: Serialize>(value: &T) -> Result<String> {
     Ok(yaml)
 }
 
-/// Windows sharing-violation retry helper: retries 5x with delay (50ms, 100ms, ...).
+/// Windows sharing-violation retry helper. The budget is intentionally
+/// short (~60ms total: 10ms, 20ms, 30ms) because this helper also runs on
+/// the UI thread for folder/file mutations — a long spin-sleep there would
+/// hitch the frame; AV/OneDrive lock windows are usually shorter than that.
 pub fn with_retry<T, F: FnMut() -> std::io::Result<T>>(mut op: F) -> std::io::Result<T> {
+    const MAX_ATTEMPTS: u32 = 4;
+    const RETRY_DELAY_MS: u64 = 10;
     let mut attempts = 0;
     loop {
         match op() {
             Ok(val) => return Ok(val),
             Err(e) => {
                 attempts += 1;
-                if attempts >= 5 {
+                if attempts >= MAX_ATTEMPTS {
                     return Err(e);
                 }
-                std::thread::sleep(std::time::Duration::from_millis(50 * attempts as u64));
+                std::thread::sleep(std::time::Duration::from_millis(
+                    RETRY_DELAY_MS * attempts as u64,
+                ));
             }
         }
     }

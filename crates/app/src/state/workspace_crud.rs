@@ -2,7 +2,7 @@ use super::{RequestSessionState, WorkspaceDataState, WorkspaceEvent};
 use crate::settings::AppSettings;
 use gpui_kit::{App, Context, Entity};
 use std::path::PathBuf;
-use zest_core::models::{HttpMethod, Protocol, RequestItem};
+use zest_core::models::{HttpMethod, Protocol, RequestItem, StoredCookie};
 use zest_core::storage::models::RequestFile;
 
 /// Pairs `update_active_request` with a `mark_dirty` on the session state —
@@ -351,9 +351,17 @@ impl WorkspaceDataState {
         cx.notify();
     }
 
-    pub fn sync_cookies_from_executor(&mut self) {
+    /// Refreshes the in-memory cookie snapshot from the executor without
+    /// touching disk. Returns the snapshot so the caller can persist it on
+    /// the background executor (disk writes must not run on the UI thread).
+    pub fn sync_cookies_in_memory(&mut self) -> Vec<StoredCookie> {
         self.cookies = self.executor.get_stored_cookies();
-        if let Ok(val) = serde_json::to_value(&self.cookies) {
+        self.cookies.clone()
+    }
+
+    pub fn sync_cookies_from_executor(&mut self) {
+        let cookies = self.sync_cookies_in_memory();
+        if let Ok(val) = serde_json::to_value(&cookies) {
             let _ = self.store.save_cookies(&val);
         }
     }
