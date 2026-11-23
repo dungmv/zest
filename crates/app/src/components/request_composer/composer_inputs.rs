@@ -114,7 +114,7 @@ impl ComposerInputs {
             let mut state = CodeEditorState::new(window, cx);
             state.set_highlighter_factory(highlighter_factory.clone(), cx);
             state.lsp_mut().completion_provider = Some(Rc::new(
-                crate::components::completion::proto_json::ProtoJsonCompletionProvider::new(
+                super::grpc_completion::ProtoJsonCompletionProvider::new(
                     env_state.clone(),
                     session_state.clone(),
                     workspace_state.clone(),
@@ -138,7 +138,7 @@ impl ComposerInputs {
             let mut state = CodeEditorState::new(window, cx);
             state.set_highlighter_factory(highlighter_factory.clone(), cx);
             state.lsp_mut().completion_provider = Some(Rc::new(
-                crate::components::completion::graphql_query::GraphQLQueryCompletionProvider::new(
+                super::graphql_completion::GraphQLQueryCompletionProvider::new(
                     env_state_for_graphql.clone(),
                     session_state.clone(),
                 ),

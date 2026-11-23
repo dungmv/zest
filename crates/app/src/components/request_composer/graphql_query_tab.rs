@@ -175,12 +175,11 @@ pub(super) fn render_graphql_query_tab(
                                 let hovered = *hovered;
                                 hover_cell.set(hovered);
                                 let text = editor_hover.read(cx).value().to_string();
-                                crate::components::completion::graphql_query::refresh_variables_validation(
+                                super::refresh_graphql_variables_validation(
                                     &editor_hover,
                                     &marks_hover,
                                     hovered,
                                     &text,
-                                    crate::theme::theme().status_5xx,
                                     cx,
                                 );
                             }

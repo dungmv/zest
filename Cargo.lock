@@ -10170,8 +10170,6 @@ dependencies = [
  "embed-resource",
  "gpui-kit",
  "lsp-types",
- "prost",
- "protox",
  "quick-xml",
  "rfd",
  "serde",

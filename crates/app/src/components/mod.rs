@@ -1,6 +1,5 @@
 pub mod body_editor;
 pub mod common;
-pub mod completion;
 pub mod console_panel;
 pub mod env_input;
 pub mod git;

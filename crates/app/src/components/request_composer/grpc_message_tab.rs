@@ -171,26 +171,14 @@ pub(super) fn render_grpc_message_tab(
                     move |hovered: &bool, _window, cx| {
                         let hovered = *hovered;
                         hover_cell.set(hovered);
-                        let payload = ws_hover
-                            .read(cx)
-                            .find_request(ed_hover.read(cx).active_request_id())
-                            .and_then(|r| r.grpc.clone())
-                            .unwrap_or_default();
-                        let schema = ed_hover
-                            .read(cx)
-                            .grpc_schema
-                            .clone()
-                            .unwrap_or_else(|| std::sync::Arc::new(Default::default()));
                         let text = editor_hover.read(cx).value().to_string();
-                        crate::components::completion::validation::refresh_grpc_validation(
+                        super::refresh_grpc_validation(
                             &editor_hover,
                             &marks_hover,
                             hovered,
-                            &schema.pool,
-                            &payload.service,
-                            &payload.method,
                             &text,
-                            crate::theme::theme().status_5xx,
+                            &ed_hover,
+                            &ws_hover,
                             cx,
                         );
                     }

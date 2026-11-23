@@ -1,18 +1,18 @@
-//! Pure JSON-prefix walking: given the input message descriptor and the text
-//! before the cursor, locate which message the cursor is inside and which
-//! fields are suggested there. No editor or GPUI state involved.
+//! Pure JSON-prefix walking for gRPC message completion: given the input
+//! protobuf message descriptor and the JSON text before the cursor, locate
+//! which message the cursor is inside and suggest matching field keys.
 
-use zest_core::grpc::MessageDescriptor;
-
-use super::proto_fields::{field_as_message, find_field, type_label};
+use prost_reflect::{FieldDescriptor, Kind, MessageDescriptor};
 
 /// One suggested JSON key (owned so suggestions survive the context walk).
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeySuggestion {
     pub name: String,
     pub type_label: String,
 }
 
 /// Where a key completion applies and how the inserted text must look.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct KeyCompletionSpan {
     pub replace_start: usize,
     pub replace_end: usize,
@@ -25,7 +25,7 @@ pub struct KeyCompletionSpan {
 /// typed message, tracking nested objects through the typed JSON. Returns
 /// the span the completion replaces (the partially typed key — with or
 /// without its opening quote) plus the matching fields.
-pub(super) fn json_field_candidates(
+pub fn json_field_candidates(
     root: &MessageDescriptor,
     prefix: &str,
 ) -> Option<(KeyCompletionSpan, Vec<KeySuggestion>)> {
@@ -188,3 +188,61 @@ fn locate_message_context(
         },
     ))
 }
+
+fn find_field(desc: &MessageDescriptor, name: &str) -> Option<FieldDescriptor> {
+    desc.fields().find(|f| f.name() == name)
+}
+
+/// The message type a field points at, if any (map entries excluded —
+/// key/value suggestions inside a map literal are noise).
+fn field_as_message(field: &FieldDescriptor) -> Option<MessageDescriptor> {
+    if field.is_map() {
+        return None;
+    }
+    match field.kind() {
+        Kind::Message(m) => Some(m),
+        _ => None,
+    }
+}
+
+/// Human-readable type of a field for the completion detail line.
+fn type_label(field: &FieldDescriptor) -> String {
+    let cardinality = if field.is_list() {
+        "repeated "
+    } else if field.is_map() {
+        "map "
+    } else {
+        ""
+    };
+    let kind = match field.kind() {
+        Kind::Message(m) => m.full_name().to_string(),
+        Kind::Enum(e) => e.full_name().to_string(),
+        other => scalar_label(&other).to_string(),
+    };
+    format!("{cardinality}{kind}")
+}
+
+fn scalar_label(kind: &Kind) -> &'static str {
+    match kind {
+        Kind::Double => "double",
+        Kind::Float => "float",
+        Kind::Int32 => "int32",
+        Kind::Int64 => "int64",
+        Kind::Uint32 => "uint32",
+        Kind::Uint64 => "uint64",
+        Kind::Sint32 => "sint32",
+        Kind::Sint64 => "sint64",
+        Kind::Fixed32 => "fixed32",
+        Kind::Fixed64 => "fixed64",
+        Kind::Sfixed32 => "sfixed32",
+        Kind::Sfixed64 => "sfixed64",
+        Kind::Bool => "bool",
+        Kind::String => "string",
+        Kind::Bytes => "bytes",
+        Kind::Message(_) | Kind::Enum(_) => "",
+    }
+}
+
+#[cfg(test)]
+#[path = "completion_tests.rs"]
+mod tests;

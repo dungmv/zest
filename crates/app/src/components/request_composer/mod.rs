@@ -2,7 +2,10 @@ mod auth_tab;
 mod banners;
 mod body_tab;
 pub(crate) mod composer_inputs;
+mod editor_diagnostics;
+mod graphql_completion;
 mod graphql_query_tab;
+mod grpc_completion;
 mod grpc_message_tab;
 mod grpc_proto_tab;
 mod headers_tab;
@@ -12,6 +15,10 @@ mod proto_tab;
 mod scripts_tab;
 mod tab_strip;
 mod ws_message_tab;
+
+pub(crate) use editor_diagnostics::{
+    refresh_graphql_variables_validation, refresh_grpc_validation,
+};
 
 use crate::app::AppView;
 use crate::components::*;

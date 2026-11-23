@@ -212,25 +212,13 @@ pub fn setup_app_subscriptions(
             });
             // Validate and surface the error on the offending line: editor
             // diagnostic (hover tooltip) + red gutter mark.
-            let schema = ed_grpc
-                .read(cx)
-                .grpc_schema
-                .clone()
-                .unwrap_or_else(|| std::sync::Arc::new(Default::default()));
-            let payload = ws_grpc
-                .read(cx)
-                .find_request(&active_id)
-                .and_then(|r| r.grpc.clone())
-                .unwrap_or_default();
-            crate::components::completion::validation::refresh_grpc_validation(
+            crate::components::request_composer::refresh_grpc_validation(
                 &txt,
                 &grpc_marks,
                 grpc_hover.get(),
-                &schema.pool,
-                &payload.service,
-                &payload.method,
                 &val,
-                crate::theme::theme().status_5xx,
+                &ed_grpc,
+                &ws_grpc,
                 cx,
             );
             ed_grpc.update(cx, |ed, cx| ed.mark_dirty(cx));
@@ -286,12 +274,11 @@ pub fn setup_app_subscriptions(
                         r.graphql_mut().variables = val.clone();
                     });
                 });
-                crate::components::completion::graphql_query::refresh_variables_validation(
+                crate::components::request_composer::refresh_graphql_variables_validation(
                     &txt,
                     &gvar_marks,
                     gvar_hover.get(),
                     &val,
-                    crate::theme::theme().status_5xx,
                     cx,
                 );
                 ed_gvar.update(cx, |ed, cx| ed.mark_dirty(cx));

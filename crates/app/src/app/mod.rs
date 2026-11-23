@@ -210,21 +210,6 @@ impl AppView {
     /// diagnostics + gutter mark. Called when the active request changes so
     /// the marks follow the editor's restored content.
     pub fn refresh_grpc_message_diagnostics(&self, cx: &mut App) {
-        let req_id = self.state.session.read(cx).active_request_id().to_string();
-        let schema = self
-            .state
-            .session
-            .read(cx)
-            .grpc_schema
-            .clone()
-            .unwrap_or_default();
-        let payload = self
-            .state
-            .workspace
-            .read(cx)
-            .find_request(&req_id)
-            .and_then(|r| r.grpc.clone())
-            .unwrap_or_default();
         let text = self
             .composer_inputs
             .grpc
@@ -232,15 +217,13 @@ impl AppView {
             .read(cx)
             .value()
             .to_string();
-        crate::components::completion::validation::refresh_grpc_validation(
+        crate::components::request_composer::refresh_grpc_validation(
             &self.composer_inputs.grpc.message_editor,
             &self.composer_inputs.grpc.error_marks,
             self.composer_inputs.grpc.diagnostics_hover.get(),
-            &schema.pool,
-            &payload.service,
-            &payload.method,
             &text,
-            crate::theme::theme().status_5xx,
+            &self.state.session,
+            &self.state.workspace,
             cx,
         );
     }

@@ -11,9 +11,11 @@ mod complete;
 mod introspection;
 mod lexer;
 mod schema;
+mod validation;
 
 pub use complete::{completions_at, Completion, CompletionKind};
 pub use introspection::{parse_introspection, INTROSPECTION_QUERY};
 pub use schema::{
     GraphQLFieldDef, GraphQLInputValueDef, GraphQLSchemaSummary, GraphQLTypeDef, GraphQLTypeKind,
 };
+pub use validation::{validate_variables, VariablesValidationError};
