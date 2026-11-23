@@ -327,4 +327,70 @@ fn test_http_response_record_suggested_filename() {
         ..Default::default()
     };
     assert_eq!(resp_lower.suggested_filename(), "data file.csv");
+
+    // Falls back to URL endpoint when Content-Disposition is absent
+    let resp_from_url = HttpResponseRecord {
+        request_sent: Some(RequestSentInfo {
+            url: "https://cdn.prod.website-files.com/6a020fca21245d64af2c19d8/6a020fca21245d64af2c392a_6720dff9eada99162c95b2d5_6720d2aac712d878f3a3eb97_2%252520-%25252029.10-min.jpeg".to_string(),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    assert_eq!(
+        resp_from_url.suggested_filename(),
+        "6a020fca21245d64af2c392a_6720dff9eada99162c95b2d5_6720d2aac712d878f3a3eb97_2%2520-%252029.10-min.jpeg"
+    );
+
+    // Content-Disposition takes precedence over URL endpoint
+    let resp_both = HttpResponseRecord {
+        headers: vec![(
+            "Content-Disposition".to_string(),
+            "attachment; filename=\"override.png\"".to_string(),
+        )],
+        request_sent: Some(RequestSentInfo {
+            url: "https://example.com/files/original.jpeg".to_string(),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    assert_eq!(resp_both.suggested_filename(), "override.png");
+
+    // Root URL without path segment falls back to response.json
+    let resp_root = HttpResponseRecord {
+        request_sent: Some(RequestSentInfo {
+            url: "https://example.com/".to_string(),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    assert_eq!(resp_root.suggested_filename(), "response.json");
+}
+
+#[test]
+fn test_extract_filename_from_url() {
+    assert_eq!(
+        extract_filename_from_url("https://cdn.prod.website-files.com/6a020fca21245d64af2c19d8/6a020fca21245d64af2c392a_6720dff9eada99162c95b2d5_6720d2aac712d878f3a3eb97_2%252520-%25252029.10-min.jpeg"),
+        Some("6a020fca21245d64af2c392a_6720dff9eada99162c95b2d5_6720d2aac712d878f3a3eb97_2%2520-%252029.10-min.jpeg".to_string())
+    );
+    assert_eq!(
+        extract_filename_from_url(
+            "https://api.example.com/v1/files/report%202026.pdf?download=1#page=2"
+        ),
+        Some("report 2026.pdf".to_string())
+    );
+    assert_eq!(
+        extract_filename_from_url("https://api.example.com/v1/users/"),
+        Some("users".to_string())
+    );
+    assert_eq!(extract_filename_from_url("https://example.com/"), None);
+    assert_eq!(extract_filename_from_url("https://example.com"), None);
+    assert_eq!(extract_filename_from_url("not-a-valid-url"), None);
+    assert_eq!(
+        extract_filename_from_url("https://example.com/files/..%2F..%2Fetc%2Fpasswd"),
+        Some("passwd".to_string())
+    );
+    assert_eq!(
+        extract_filename_from_url("https://example.com/files/%2E%2E"),
+        None
+    );
 }

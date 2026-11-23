@@ -216,12 +216,36 @@ impl HttpResponseRecord {
         })
     }
 
+    /// Extracts the filename from the last non-empty path segment of the request URL, if available.
+    pub fn url_filename(&self) -> Option<String> {
+        self.request_sent
+            .as_ref()
+            .and_then(|sent| extract_filename_from_url(&sent.url))
+    }
+
     /// Returns the suggested filename when saving this response body to disk.
-    /// Uses the `Content-Disposition` header filename when available, otherwise defaults to `"response.json"`.
+    ///
+    /// Precedence:
+    /// 1. `Content-Disposition` response header filename
+    /// 2. Last non-empty path segment of the request URL (percent-decoded once)
+    /// 3. Fallback `"response.json"`
     pub fn suggested_filename(&self) -> String {
         self.content_disposition_filename()
+            .or_else(|| self.url_filename())
             .unwrap_or_else(|| "response.json".to_string())
     }
+}
+
+/// Extracts and sanitizes a filename from the last non-empty path segment of a URL.
+///
+/// Performs a single pass of percent-decoding (matching browser download behavior)
+/// and sanitizes the result to prevent path traversal or control characters.
+pub fn extract_filename_from_url(url_str: &str) -> Option<String> {
+    let parsed = url::Url::parse(url_str.trim()).ok()?;
+    let last_segment = parsed.path_segments()?.rfind(|s| !s.is_empty())?;
+    let decoded_bytes = urlencoding::decode_binary(last_segment.as_bytes());
+    let decoded = String::from_utf8_lossy(&decoded_bytes);
+    sanitize_filename(&decoded)
 }
 
 /// Parses a `Content-Disposition` header value and extracts the filename,
