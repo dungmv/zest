@@ -11,9 +11,127 @@ use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    deferred, div, px, App, Entity, Focusable as _, InteractiveElement as _, IntoElement,
-    ParentElement, SharedString, StatefulInteractiveElement as _, Styled, Window,
+    deferred, div, px, App, Div, Entity, Focusable as _, InteractiveElement as _, IntoElement,
+    ParentElement, SharedString, Stateful, StatefulInteractiveElement as _, Styled, Window,
 };
+
+fn render_var_chip(
+    chip_id: SharedString,
+    var_name: String,
+    env_state: Option<&Entity<EnvironmentState>>,
+    cx: &App,
+) -> Stateful<Div> {
+    let resolved = if let Some(env_ent) = env_state {
+        resolve_in_state(env_ent.read(cx), &var_name)
+    } else {
+        ResolvedVariable {
+            name: var_name.clone(),
+            value: String::new(),
+            scope: VariableScope::Missing,
+            is_secret: false,
+        }
+    };
+    let style = variable_style(&resolved.scope);
+
+    div()
+        .id(chip_id)
+        .tooltip(move |window, cx| variable_value_tooltip(&resolved).build(window, cx))
+        .flex()
+        .flex_shrink_0()
+        .items_center()
+        .h(px(20.))
+        .px(px(5.))
+        .rounded(px(3.))
+        .bg(style.bg_tint)
+        .text_sm()
+        .line_height(px(20.))
+        .font_family(".SystemMonoFont")
+        .text_color(style.text)
+        .cursor_pointer()
+        .child(var_name)
+}
+
+/// Static, non-editable field visually matching `render_env_input`, including
+/// inline `{{var}}` chips with resolved-value tooltips and click-to-edit navigation.
+pub fn render_disabled_env_input(
+    input_id: impl Into<SharedString>,
+    value: &str,
+    env_state: Option<&Entity<EnvironmentState>>,
+    modal_state: Option<&Entity<ModalState>>,
+    cx: &App,
+) -> Div {
+    let t = theme();
+    let base = div()
+        .w_full()
+        .h(px(28.))
+        .px(px(6.))
+        .rounded(px(4.))
+        .bg(t.bg_app)
+        .border_1()
+        .border_color(t.border_subtle)
+        .flex()
+        .items_center()
+        .overflow_hidden()
+        .text_sm()
+        .font_family(".SystemMonoFont")
+        .text_color(t.text_secondary);
+
+    let spans = zest_core::env::scan_variable_spans(value);
+    if spans.is_empty() {
+        return base.truncate().child(value.to_string());
+    }
+
+    let input_id: SharedString = input_id.into();
+    let mut row = base;
+    let mut cursor = 0usize;
+
+    for (idx, span) in spans.into_iter().enumerate() {
+        if span.start < cursor || span.end > value.len() || span.start >= span.end {
+            continue;
+        }
+        if span.start > cursor {
+            if let Some(prefix) = value.get(cursor..span.start) {
+                row = row.child(
+                    div()
+                        .flex_shrink_0()
+                        .whitespace_nowrap()
+                        .child(prefix.to_string()),
+                );
+            }
+        }
+        let var_name = span.name;
+        let chip_id = SharedString::from(format!("{}-tok-{}-{}", input_id, idx, var_name));
+        let mut chip = render_var_chip(chip_id, var_name.clone(), env_state, cx);
+        if modal_state.is_some() {
+            let env_c = env_state.cloned();
+            let modal_c = modal_state.cloned();
+            chip = chip.on_click(move |_, _window, cx| {
+                if let (Some(env_ent), Some(modal_ent)) = (&env_c, &modal_c) {
+                    open_variable_in_modal(env_ent, modal_ent, &var_name, cx);
+                } else if let Some(modal) = &modal_c {
+                    modal.update(cx, |st, cx| {
+                        st.open(ModalKind::Environment, None, cx);
+                    });
+                }
+            });
+        }
+        row = row.child(chip);
+        cursor = span.end;
+    }
+
+    if cursor < value.len() {
+        if let Some(suffix) = value.get(cursor..) {
+            row = row.child(
+                div()
+                    .flex_shrink_0()
+                    .whitespace_nowrap()
+                    .child(suffix.to_string()),
+            );
+        }
+    }
+
+    row
+}
 
 pub fn render_env_input<F>(
     input_id: impl Into<SharedString>,
@@ -156,38 +274,11 @@ where
                         .font_family(".SystemMonoFont")
                         .token(move |token_ctx, _window, cx| {
                             let var_name = token_ctx.token().id().to_string();
-                            let resolved = if let Some(env_ent) = &env_for_token {
-                                let env = env_ent.read(cx);
-                                resolve_in_state(env, &var_name)
-                            } else {
-                                ResolvedVariable {
-                                    name: var_name.clone(),
-                                    value: String::new(),
-                                    scope: VariableScope::Missing,
-                                    is_secret: false,
-                                }
-                            };
-                            let style = variable_style(&resolved.scope);
-
-                            div()
-                                .id(SharedString::from(format!(
-                                    "{}-tok-{}",
-                                    inp_id_for_tok, var_name
-                                )))
-                                .tooltip(move |window, cx| {
-                                    variable_value_tooltip(&resolved).build(window, cx)
-                                })
-                                .flex()
-                                .items_center()
-                                .px(px(5.))
-                                .py(px(1.))
-                                .rounded(px(3.))
-                                .bg(style.bg_tint)
-                                .text_sm()
-                                .font_family(".SystemMonoFont")
-                                .text_color(style.text)
-                                .cursor_pointer()
-                                .child(var_name)
+                            let chip_id = SharedString::from(format!(
+                                "{}-tok-{}",
+                                inp_id_for_tok, var_name
+                            ));
+                            render_var_chip(chip_id, var_name, env_for_token.as_ref(), cx)
                         })
                         .on_token_click(move |ev, _window, cx| {
                             let var_name = ev.token().id().to_string();

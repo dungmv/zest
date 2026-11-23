@@ -1,7 +1,7 @@
-use crate::components::env_input::render_env_input;
+use crate::components::env_input::{render_disabled_env_input, render_env_input};
 use crate::env::{build_tokenized_content, detect_unclosed_env_var};
 use crate::state::{EnvironmentState, ModalState};
-use crate::theme::{theme, AppTheme};
+use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::checkbox::Checkbox;
@@ -11,9 +11,9 @@ use gpui_kit::component::Disableable as _;
 use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    div, px, App, AppContext as _, Div, Entity, InteractiveElement as _, IntoElement,
-    ParentElement, Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled,
-    Subscription, Window,
+    div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
+    Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled, Subscription,
+    Window,
 };
 use std::rc::Rc;
 use zest_core::models::KeyValuePair;
@@ -30,25 +30,6 @@ pub struct KvReadonlyRow {
 
 /// Standard width for the Key column in key-value tables (160px).
 pub const KEY_COLUMN_WIDTH: Pixels = px(160.);
-
-/// Static, non-editable field visually matching the env inputs rendered beside it.
-pub fn render_disabled_input(value: &str, t: &AppTheme) -> Div {
-    div()
-        .w_full()
-        .h(px(28.))
-        .px(px(6.))
-        .rounded(px(4.))
-        .bg(t.bg_app)
-        .border_1()
-        .border_color(t.border_subtle)
-        .flex()
-        .items_center()
-        .text_sm()
-        .font_family(".SystemMonoFont")
-        .text_color(t.text_secondary)
-        .truncate()
-        .child(value.to_string())
-}
 
 pub type KvUpdateCallback = Rc<dyn Fn(usize, String, String, bool, &mut Window, &mut App)>;
 
@@ -297,12 +278,25 @@ impl RenderOnce for KvTable {
                             .checked(row.enabled)
                             .disabled(true),
                     )
+                    .child(div().w(KEY_COLUMN_WIDTH).child(render_disabled_env_input(
+                        format!("{row_id}-k"),
+                        &row.key,
+                        self.env_state.as_ref(),
+                        self.modal_state.as_ref(),
+                        cx,
+                    )))
                     .child(
                         div()
-                            .w(KEY_COLUMN_WIDTH)
-                            .child(render_disabled_input(&row.key, t)),
+                            .flex_1()
+                            .min_w(px(0.))
+                            .child(render_disabled_env_input(
+                                format!("{row_id}-v"),
+                                &row.value,
+                                self.env_state.as_ref(),
+                                self.modal_state.as_ref(),
+                                cx,
+                            )),
                     )
-                    .child(div().flex_1().child(render_disabled_input(&row.value, t)))
                     .child(
                         div()
                             .w(px(24.))

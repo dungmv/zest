@@ -1,6 +1,5 @@
-use crate::components::env_input::render_env_input;
+use crate::components::env_input::{render_disabled_env_input, render_env_input};
 use crate::components::inherited_headers::mask_secret;
-use crate::components::kv_table::render_disabled_input;
 use crate::state::{EnvironmentState, ModalState, RequestSessionState, WorkspaceDataState};
 use crate::theme::{theme, AppTheme};
 use gpui_kit::assets::IconName;
@@ -213,24 +212,32 @@ pub(super) fn render_auth_tab(
                         .w_full()
                         .flex()
                         .flex_col()
-                        .px(px(6.))
-                        .py(px(2.))
                         .gap(px(4.))
                         .child(
-                            div()
-                                .p(px(8.))
-                                .rounded(px(6.))
-                                .bg(t.bg_app)
-                                .border_1()
-                                .border_color(t.border)
-                                .flex()
-                                .items_center()
-                                .gap(px(8.))
-                                .child(Icon::new(IconName::Info).size(px(16.)))
-                                .child(div().text_xs().text_color(t.text_secondary).child(desc)),
+                            div().w_full().px(px(6.)).py(px(2.)).child(
+                                div()
+                                    .p(px(8.))
+                                    .rounded(px(6.))
+                                    .bg(t.bg_app)
+                                    .border_1()
+                                    .border_color(t.border)
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(8.))
+                                    .child(Icon::new(IconName::Info).size(px(16.)))
+                                    .child(
+                                        div().text_xs().text_color(t.text_secondary).child(desc),
+                                    ),
+                            ),
                         )
                         .when_some(inherited, |this, info| {
-                            this.child(render_inherited_auth_fields(&info.auth, t))
+                            this.child(render_inherited_auth_fields(
+                                &info.auth,
+                                env_state,
+                                modal_state,
+                                t,
+                                cx,
+                            ))
                         })
                 }
                 Auth::None => div()
@@ -575,8 +582,16 @@ pub(super) fn render_auth_tab(
         })
 }
 
-/// Read-only mirror of a local auth form row: same label/input layout, disabled input.
-fn disabled_field(label: &str, value: &str, t: &AppTheme) -> Div {
+/// Read-only mirror of a local auth form row: same label/input layout, disabled env input.
+fn disabled_field(
+    input_id: &'static str,
+    label: &str,
+    value: &str,
+    env_state: &Entity<EnvironmentState>,
+    modal_state: &Entity<ModalState>,
+    t: &AppTheme,
+    cx: &App,
+) -> Div {
     div()
         .w_full()
         .flex()
@@ -593,34 +608,95 @@ fn disabled_field(label: &str, value: &str, t: &AppTheme) -> Div {
                 .text_color(t.text_secondary)
                 .child(label.to_string()),
         )
-        .child(div().flex_1().child(render_disabled_input(value, t)))
+        .child(
+            div()
+                .flex_1()
+                .min_w(px(0.))
+                .child(render_disabled_env_input(
+                    input_id,
+                    value,
+                    Some(env_state),
+                    Some(modal_state),
+                    cx,
+                )),
+        )
 }
 
 /// Disabled mirror of the local auth forms, shown under the inherit description so the
-/// user sees the effective inherited configuration (secrets masked).
-fn render_inherited_auth_fields(auth: &Auth, t: &AppTheme) -> Div {
+/// user sees the effective inherited configuration (secrets masked, env vars tokenized).
+fn render_inherited_auth_fields(
+    auth: &Auth,
+    env_state: &Entity<EnvironmentState>,
+    modal_state: &Entity<ModalState>,
+    t: &AppTheme,
+    cx: &App,
+) -> Div {
     match auth {
-        Auth::Bearer { token } => disabled_field("Token:", &mask_secret(token), t),
+        Auth::Bearer { token } => disabled_field(
+            "auth-inherit-bearer-token",
+            "Token:",
+            &mask_secret(token),
+            env_state,
+            modal_state,
+            t,
+            cx,
+        ),
         Auth::Basic { username, password } => div()
             .w_full()
             .flex()
             .flex_col()
-            .child(disabled_field("Username:", username, t))
-            .child(disabled_field("Password:", &mask_secret(password), t)),
+            .child(disabled_field(
+                "auth-inherit-basic-user",
+                "Username:",
+                username,
+                env_state,
+                modal_state,
+                t,
+                cx,
+            ))
+            .child(disabled_field(
+                "auth-inherit-basic-pass",
+                "Password:",
+                &mask_secret(password),
+                env_state,
+                modal_state,
+                t,
+                cx,
+            )),
         Auth::ApiKey { key, value, add_to } => div()
             .w_full()
             .flex()
             .flex_col()
-            .child(disabled_field("Key:", key, t))
-            .child(disabled_field("Value:", &mask_secret(value), t))
             .child(disabled_field(
+                "auth-inherit-apikey-key",
+                "Key:",
+                key,
+                env_state,
+                modal_state,
+                t,
+                cx,
+            ))
+            .child(disabled_field(
+                "auth-inherit-apikey-val",
+                "Value:",
+                &mask_secret(value),
+                env_state,
+                modal_state,
+                t,
+                cx,
+            ))
+            .child(disabled_field(
+                "auth-inherit-apikey-loc",
                 "Add to:",
                 if add_to.is_header() {
                     "Header"
                 } else {
                     "Query Params"
                 },
+                env_state,
+                modal_state,
                 t,
+                cx,
             )),
         // None adds no fields: the description banner already states no auth applies.
         // Inherit is unreachable: `inherited_auth_source` never reports `Inherit`.
