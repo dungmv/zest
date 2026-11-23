@@ -86,7 +86,6 @@ fn main() {
     });
 
     app.run(move |cx| {
-        platform::set_dock_icon();
         gpui_kit::init(cx);
 
         let settings = settings::AppSettings::load();
