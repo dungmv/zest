@@ -145,7 +145,7 @@ impl GrpcEngine {
             // 2b. Interpolate {{var}} in the authored gRPC message, mirroring
             // HTTP body treatment (fake vars were resolved by stage 1).
             if let Some(payload) = req_item.grpc.as_mut() {
-                let interpolated = zest_core::interpolation::interpolate_cow(
+                let interpolated = zest_core::env::interpolate_cow(
                     &payload.message_json,
                     effective_env.as_deref(),
                 )

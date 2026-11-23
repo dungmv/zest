@@ -1,10 +1,13 @@
-use super::{AutocompleteNavState, EnvVarCandidate, EnvVarKind};
+//! Autocomplete popup rendering and keyboard navigation for single-line env inputs.
+
 use crate::theme::theme;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    div, px, App, Div, Entity, FontWeight, InteractiveElement as _, ParentElement as _,
-    SharedString, StatefulInteractiveElement as _, Styled, Window,
+    div, px, App, Div, Entity, FontWeight, Hsla, InteractiveElement as _, KeyDownEvent,
+    ParentElement as _, ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled,
+    Window,
 };
+use zest_core::env::{VariableCandidate, VariableScope};
 
 /// Width of the candidate list column inside autocomplete popups.
 pub const CANDIDATE_LIST_WIDTH: f32 = 240.;
@@ -17,33 +20,109 @@ pub const CANDIDATE_DETAIL_GAP: f32 = 8.;
 /// stays shorter than the list; its height otherwise hugs the content.
 const CANDIDATE_DETAIL_MAX_HEIGHT: f32 = 160.;
 
+#[derive(Default, Clone, Debug)]
+pub struct AutocompleteNavState {
+    pub selected_index: usize,
+    pub dismissed: bool,
+    pub last_query: Option<String>,
+}
+
+/// Handles keyboard navigation events (`ArrowDown`, `ArrowUp`, `Enter`, `Tab`, `Escape`)
+/// for autocomplete popups. Returns `true` if the event was consumed.
+pub fn handle_autocomplete_keydown<F>(
+    event: &KeyDownEvent,
+    candidates: &[VariableCandidate],
+    nav_state: &Entity<AutocompleteNavState>,
+    scroll_handle: &ScrollHandle,
+    window: &mut Window,
+    cx: &mut App,
+    on_select: F,
+) -> bool
+where
+    F: FnOnce(&VariableCandidate, &mut Window, &mut App),
+{
+    match event.keystroke.key.as_str() {
+        "down" | "arrowdown" => {
+            cx.stop_propagation();
+            let len = candidates.len();
+            if len > 0 {
+                let next_idx = nav_state.update(cx, |st, cx| {
+                    st.selected_index = (st.selected_index + 1) % len;
+                    cx.notify();
+                    st.selected_index
+                });
+                scroll_handle.scroll_to_item(next_idx);
+            }
+            true
+        }
+        "up" | "arrowup" => {
+            cx.stop_propagation();
+            let len = candidates.len();
+            if len > 0 {
+                let prev_idx = nav_state.update(cx, |st, cx| {
+                    if st.selected_index == 0 {
+                        st.selected_index = len - 1;
+                    } else {
+                        st.selected_index -= 1;
+                    }
+                    cx.notify();
+                    st.selected_index
+                });
+                scroll_handle.scroll_to_item(prev_idx);
+            }
+            true
+        }
+        "enter" | "tab" => {
+            cx.stop_propagation();
+            let sel_idx = nav_state.read(cx).selected_index;
+            if let Some(cand) = candidates.get(sel_idx) {
+                let cand_clone = cand.clone();
+                nav_state.update(cx, |st, cx| {
+                    st.dismissed = true;
+                    cx.notify();
+                });
+                on_select(&cand_clone, window, cx);
+            }
+            true
+        }
+        "escape" => {
+            cx.stop_propagation();
+            nav_state.update(cx, |st, cx| {
+                st.dismissed = true;
+                cx.notify();
+            });
+            true
+        }
+        _ => false,
+    }
+}
+
 /// Two-category type display: all environment variables collapse into a single
 /// "Variable" type, dynamic fake vars keep their own "Dynamic" type.
 /// Returns `(badge label, text/border color, background tint)`.
-pub fn candidate_type_badge(kind: EnvVarKind) -> (&'static str, gpui_kit::Hsla, gpui_kit::Hsla) {
+pub fn candidate_type_badge(scope: &VariableScope) -> (&'static str, Hsla, Hsla) {
     let t = theme();
-    match kind {
-        EnvVarKind::Active | EnvVarKind::Global => (
+    match scope {
+        VariableScope::Active(_) | VariableScope::Global => (
             "Variable",
             t.tag_variable,
-            gpui_kit::Hsla {
+            Hsla {
                 a: 0.14,
                 ..t.tag_variable
             },
         ),
-        EnvVarKind::Dynamic => (
+        VariableScope::Dynamic => (
             "Dynamic",
             t.tag_dynamic,
-            gpui_kit::Hsla {
+            Hsla {
                 a: 0.14,
                 ..t.tag_dynamic
             },
         ),
-        // Never produced by `get_env_completions`; kept for exhaustiveness.
-        EnvVarKind::Unresolved => (
+        VariableScope::Missing => (
             "Unresolved",
             t.var_unresolved,
-            gpui_kit::Hsla {
+            Hsla {
                 a: 0.14,
                 ..t.var_unresolved
             },
@@ -51,22 +130,20 @@ pub fn candidate_type_badge(kind: EnvVarKind) -> (&'static str, gpui_kit::Hsla, 
     }
 }
 
-/// Renders a single autocomplete row: variable key plus its two-category type
-/// badge. Hovering the row moves the keyboard selection to it so the detail
-/// card follows the mouse; clicking dismisses the popup and runs `on_select`.
+/// Renders a single autocomplete row: variable key plus its two-category type badge.
 pub fn render_candidate_row<F>(
     id_prefix: &str,
     idx: usize,
-    cand: &EnvVarCandidate,
+    cand: &VariableCandidate,
     is_selected: bool,
     nav_state: &Entity<AutocompleteNavState>,
     on_select: F,
 ) -> gpui_kit::Stateful<Div>
 where
-    F: Fn(&EnvVarCandidate, &mut Window, &mut App) + 'static,
+    F: Fn(&VariableCandidate, &mut Window, &mut App) + 'static,
 {
     let t = theme();
-    let (badge_label, cand_color, cand_bg_tint) = candidate_type_badge(cand.kind);
+    let (badge_label, cand_color, cand_bg_tint) = candidate_type_badge(&cand.scope);
     let nav_for_hover = nav_state.clone();
     let nav_for_click = nav_state.clone();
     let cand_for_click = cand.clone();
@@ -131,17 +208,15 @@ where
         )
 }
 
-/// Renders the compact detail card for the selected candidate, placed next to
-/// the popup: key, source scope (environment variables only), and the wrapped
-/// value or description. The card hugs its content instead of stretching to
-/// the height of the popup list.
-pub fn render_candidate_detail_card(cand: Option<&EnvVarCandidate>) -> Div {
+/// Renders the compact detail card for the selected candidate, placed next to the popup.
+pub fn render_candidate_detail_card(cand: Option<&VariableCandidate>) -> Div {
     let t = theme();
     let Some(cand) = cand else {
         return div();
     };
 
-    let (_, cand_color, _) = candidate_type_badge(cand.kind);
+    let (_, cand_color, _) = candidate_type_badge(&cand.scope);
+    let is_dynamic = matches!(cand.scope, VariableScope::Dynamic);
 
     div()
         .w(px(CANDIDATE_DETAIL_WIDTH))
@@ -167,15 +242,15 @@ pub fn render_candidate_detail_card(cand: Option<&EnvVarCandidate>) -> Div {
                 .text_color(cand_color)
                 .child(format!("{{{{{}}}}}", cand.name)),
         )
-        .when(cand.kind != EnvVarKind::Dynamic, |this| {
+        .when(!is_dynamic, |this| {
             this.child(
                 div()
                     .text_xs()
                     .text_color(t.text_muted)
-                    .child(cand.scope.clone()),
+                    .child(cand.scope_label()),
             )
         })
-        .child(if cand.kind == EnvVarKind::Dynamic {
+        .child(if is_dynamic {
             div()
                 .id(SharedString::from(format!(
                     "cand-detail-desc-{}",
@@ -200,4 +275,25 @@ pub fn render_candidate_detail_card(cand: Option<&EnvVarCandidate>) -> Div {
                     cand.value.clone()
                 })
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_autocomplete_nav_state() {
+        let mut state = AutocompleteNavState::default();
+        assert_eq!(state.selected_index, 0);
+        assert!(!state.dismissed);
+        assert_eq!(state.last_query, None);
+
+        state.last_query = Some("foo".to_string());
+        state.selected_index = 2;
+        state.dismissed = true;
+
+        assert_eq!(state.selected_index, 2);
+        assert!(state.dismissed);
+        assert_eq!(state.last_query, Some("foo".to_string()));
+    }
 }

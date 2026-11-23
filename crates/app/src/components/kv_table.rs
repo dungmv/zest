@@ -1,7 +1,5 @@
-use crate::components::completion::env_autocomplete::{
-    build_tokenized_content, detect_unclosed_env_var,
-};
 use crate::components::env_input::render_env_input;
+use crate::env::{build_tokenized_content, detect_unclosed_env_var};
 use crate::state::{EnvironmentState, ModalState};
 use crate::theme::{theme, AppTheme};
 use gpui_kit::assets::IconName;

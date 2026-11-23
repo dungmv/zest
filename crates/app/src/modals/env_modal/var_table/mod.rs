@@ -71,6 +71,7 @@ impl EnvVarTable {
                     this.focus_target_variable(window, cx);
                     cx.notify();
                 }
+                ModalEvent::ThemeChanged => {}
             },
         );
 

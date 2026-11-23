@@ -65,6 +65,7 @@ impl AppView {
         let composer_inputs = ComposerInputs::new(
             window,
             state.env.clone(),
+            state.modal.clone(),
             state.session.clone(),
             state.workspace.clone(),
             highlighter_factory.clone(),

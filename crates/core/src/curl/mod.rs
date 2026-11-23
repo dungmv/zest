@@ -347,7 +347,7 @@ pub fn request_to_curl(item: &RequestItem, env: Option<&Environment>) -> String 
     parts.push(item.method.as_str().to_string());
 
     // URL & Interpolator
-    let interpolator = crate::interpolation::VariableInterpolator::new(env);
+    let interpolator = crate::env::VariableInterpolator::new(env);
     let full_url = crate::transport::build_url_with_query(&item.url, &item.params);
     let url = interpolator.interpolate_cow(&full_url);
     parts.push(format!("'{}'", url.replace('\'', "'\\''")));

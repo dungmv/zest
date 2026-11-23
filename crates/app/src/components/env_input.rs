@@ -1,8 +1,9 @@
-use crate::components::completion::env_autocomplete::{
-    build_tokenized_content, detect_unclosed_env_var, get_env_completions, get_variable_details,
-    get_variable_kind_and_color, handle_autocomplete_keydown, handle_variable_token_click,
-    render_candidate_detail_card, render_candidate_row, variable_value_tooltip,
-    AutocompleteNavState, CANDIDATE_DETAIL_GAP, CANDIDATE_LIST_WIDTH,
+use crate::env::{
+    build_tokenized_content, detect_unclosed_env_var, handle_autocomplete_keydown,
+    list_candidates_in_state, open_variable_in_modal, render_candidate_detail_card,
+    render_candidate_row, resolve_in_state, variable_style, variable_value_tooltip,
+    AutocompleteNavState, ResolvedVariable, VariableScope, CANDIDATE_DETAIL_GAP,
+    CANDIDATE_LIST_WIDTH,
 };
 use crate::state::{EnvironmentState, ModalKind, ModalState};
 use crate::theme::theme;
@@ -36,7 +37,7 @@ where
             let unclosed = detect_unclosed_env_var(&current_val);
             let candidates = unclosed
                 .as_ref()
-                .map(|(_, _, q)| get_env_completions(env, q))
+                .map(|(_, _, q)| list_candidates_in_state(env, q))
                 .unwrap_or_default();
             (candidates, unclosed)
         } else {
@@ -155,14 +156,18 @@ where
                         .font_family(".SystemMonoFont")
                         .token(move |token_ctx, _window, cx| {
                             let var_name = token_ctx.token().id().to_string();
-                            let (val, scope, is_res) = if let Some(env_ent) = &env_for_token {
+                            let resolved = if let Some(env_ent) = &env_for_token {
                                 let env = env_ent.read(cx);
-                                get_variable_details(env, &var_name)
+                                resolve_in_state(env, &var_name)
                             } else {
-                                ("".to_string(), "Missing".to_string(), false)
+                                ResolvedVariable {
+                                    name: var_name.clone(),
+                                    value: String::new(),
+                                    scope: VariableScope::Missing,
+                                    is_secret: false,
+                                }
                             };
-                            let (_kind, color, bg_tint) =
-                                get_variable_kind_and_color(&scope, is_res);
+                            let style = variable_style(&resolved.scope);
 
                             div()
                                 .id(SharedString::from(format!(
@@ -170,24 +175,26 @@ where
                                     inp_id_for_tok, var_name
                                 )))
                                 .tooltip(move |window, cx| {
-                                    variable_value_tooltip(&val, &scope, is_res).build(window, cx)
+                                    variable_value_tooltip(&resolved).build(window, cx)
                                 })
                                 .flex()
                                 .items_center()
                                 .px(px(5.))
                                 .py(px(1.))
                                 .rounded(px(3.))
-                                .bg(bg_tint)
+                                .bg(style.bg_tint)
                                 .text_sm()
                                 .font_family(".SystemMonoFont")
-                                .text_color(color)
+                                .text_color(style.text)
                                 .cursor_pointer()
                                 .child(var_name)
                         })
                         .on_token_click(move |ev, _window, cx| {
                             let var_name = ev.token().id().to_string();
-                            if let (Some(env_ent), Some(modal_ent)) = (&env_for_click, &modal_for_click) {
-                                handle_variable_token_click(env_ent, modal_ent, &var_name, cx);
+                            if let (Some(env_ent), Some(modal_ent)) =
+                                (&env_for_click, &modal_for_click)
+                            {
+                                open_variable_in_modal(env_ent, modal_ent, &var_name, cx);
                             } else if let Some(modal) = &modal_for_click {
                                 modal.update(cx, |st, cx| {
                                     st.open(ModalKind::Environment, None, cx);

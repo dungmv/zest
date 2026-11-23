@@ -111,53 +111,13 @@ impl InputHighlighter for JsonHighlighter {
                 }
                 let is_key = j < len && slice_bytes[j] == b':';
                 let color = if is_key { t.json_key } else { t.json_string };
-                let str_content = &slice_str[tok_start..tok_end];
-                if str_content.contains("{{") && str_content.contains("}}") {
-                    let mut cur_pos = 0;
-                    while let Some(open_idx) = str_content[cur_pos..].find("{{") {
-                        let abs_open = cur_pos + open_idx;
-                        if let Some(close_idx) = str_content[abs_open..].find("}}") {
-                            let abs_close = abs_open + close_idx + 2;
-                            if abs_open > cur_pos {
-                                raw_tokens.push((
-                                    start + tok_start + cur_pos..start + tok_start + abs_open,
-                                    HighlightStyle {
-                                        color: Some(color),
-                                        ..Default::default()
-                                    },
-                                ));
-                            }
-                            raw_tokens.push((
-                                start + tok_start + abs_open..start + tok_start + abs_close,
-                                HighlightStyle {
-                                    color: Some(t.var_resolved),
-                                    font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
-                                    ..Default::default()
-                                },
-                            ));
-                            cur_pos = abs_close;
-                        } else {
-                            break;
-                        }
-                    }
-                    if cur_pos < str_content.len() {
-                        raw_tokens.push((
-                            start + tok_start + cur_pos..start + tok_start + str_content.len(),
-                            HighlightStyle {
-                                color: Some(color),
-                                ..Default::default()
-                            },
-                        ));
-                    }
-                } else {
-                    raw_tokens.push((
-                        start + tok_start..start + tok_end,
-                        HighlightStyle {
-                            color: Some(color),
-                            ..Default::default()
-                        },
-                    ));
-                }
+                raw_tokens.push((
+                    start + tok_start..start + tok_end,
+                    HighlightStyle {
+                        color: Some(color),
+                        ..Default::default()
+                    },
+                ));
             } else if matches!(b, b'{' | b'}' | b'[' | b']' | b':' | b',') {
                 raw_tokens.push((
                     start + i..start + i + 1,

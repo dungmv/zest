@@ -68,8 +68,17 @@ Trong tab Response, bên cạnh chế độ xem `Pretty` (JSON thụt lề có m
    - Khi gõ hoặc dán URL có chứa `?param1=val1&param2=val2`, hệ thống tự động trích xuất các tham số này vào bảng `Params` và giữ URL gốc sạch sẽ.
 3. **Inline Environment Variable Tokens & Autocomplete:**
    - Khi gõ `{{`, hiển thị popup gợi ý biến môi trường (kèm scope Global / Active Environment, giá trị hiện tại).
-   - Render biến dưới dạng token màu trực quan (xanh lá cho biến hợp lệ, cam/đỏ cho biến chưa được định nghĩa).
+   - Render biến dưới dạng token màu trực quan (xanh dương cho Active Environment, tím cho Global, xanh lá cho Dynamic `$...`, đỏ cho biến chưa được định nghĩa).
    - Di chuột lên token để xem popover giá trị giải mã (native `Tooltip`); click vào token để mở nhanh modal cấu hình Environment.
+4. **Code Editor Environment Variable Decorations & LSP Interactions (JSON, XML, GraphQL, gRPC):**
+   - **Kiến trúc 2 tầng tập trung (`zest_core::env` + `crate::env`):**
+     - Nghiệp vụ thuần (quy tắc ưu tiên `Active Env → Global → Dynamic ($...) → Missing`, `first-wins` cho key trùng, che giá trị `secret` bằng `••••••••`, liệt kê/lọc ứng viên autocomplete, tìm `VariableSpan` tại offset) nằm tập trung tại `crates/core/src/env/` (`zest_core::env`) để đảm bảo UI, HTTP executor, script và CLI dùng chung một nguồn chân lý duy nhất.
+     - Tầng bind giao diện GPUI (map `VariableScope` → màu `AppTheme`, tooltip, điều hướng Environment modal, `InlineToken` cho `InputState`, `RangeDecoration`/`TextDecoration` + LSP `Hover`/`Definition` cho `EditorState`, autocomplete popup) nằm tập trung tại `crates/app/src/env/` (`crate::env`) phục vụ toàn bộ `Input`, `Editor`, `Script`, `RequestBar`, `KvTable`, `Auth`.
+   - Trong các code editor nhiều dòng (`EditorState`: Body JSON, Body XML, GraphQL Query/Variables, gRPC JSON Message), toàn bộ chuỗi `{{variable}}` (giữ nguyên độ rõ của `{{` và `}}`, không làm mờ dấu ngoặc) được hiển thị trực quan bằng **`RangeDecoration` (nền pill tint)** kết hợp **`TextDecoration` (màu chữ + in đậm)** đồng bộ theo đúng trạng thái resolve và scope (`Active`, `Global`, `Dynamic`, `Missing`) như URL bar.
+   - Hỗ trợ cả biến nằm trong chuỗi (`"{{bookingId}}"`) lẫn biến không có ngoặc kép (`{{pageSize}}`) và trong nội dung/thuộc tính XML.
+   - **Hover Preview (`HoverProvider`):** Rê chuột lên `{{variable}}` hiển thị popover Markdown gồm tên biến, scope (`Active: <env>`, `Global`, `Dynamic`, `Missing`), và giá trị đã giải mã (tự động che `••••••••` với biến `secret`).
+   - **Go to Definition (`DefinitionProvider` + `Cmd/Ctrl+Click`):** Giữ `Cmd/Ctrl` + rê chuột hiện gạch chân link; click (hoặc dùng action `GoToDefinition`) sẽ mở nhanh Environment modal và focus đúng biến đó (hoặc tạo mới nếu biến chưa định nghĩa). Biến Dynamic `$...` không kích hoạt Go to Definition.
+   - **Cập nhật phản ứng (Reactive Sync):** Decoration tự động cập nhật khi người dùng sửa nội dung editor, chuyển request, đổi/sửa Environment/Globals hoặc đổi Theme — hoàn toàn event-driven, không tính toán trong `render()`.
 
 ---
 

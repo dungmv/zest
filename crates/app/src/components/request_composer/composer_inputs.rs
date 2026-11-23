@@ -1,5 +1,8 @@
 use crate::components::script_editor::{ScriptCompletionProvider, ScriptEditorKind};
-use crate::state::{ComposerSyncScope, EnvironmentState, RequestSessionState, WorkspaceDataState};
+use crate::env::{attach_env_lsp, EnvCompletionProvider, EnvEditorDecorations};
+use crate::state::{
+    ComposerSyncScope, EnvironmentState, ModalState, RequestSessionState, WorkspaceDataState,
+};
 use gpui_kit::component::input::{
     EditorState as CodeEditorState, GutterDecorationCollection, InputState, TextareaState,
 };
@@ -40,6 +43,15 @@ pub struct GraphQLComposerFields {
     pub diagnostics_hover: Rc<std::cell::Cell<bool>>,
 }
 
+/// Environment variable decoration handles for all multi-line code editors in the composer.
+pub struct EnvEditorDecorationSet {
+    pub json: EnvEditorDecorations,
+    pub xml: EnvEditorDecorations,
+    pub grpc_message: EnvEditorDecorations,
+    pub graphql_query: EnvEditorDecorations,
+    pub graphql_variables: EnvEditorDecorations,
+}
+
 pub struct ComposerInputs {
     pub url_input: Entity<InputState>,
     pub json_editor: Entity<CodeEditorState>,
@@ -54,6 +66,7 @@ pub struct ComposerInputs {
     pub apikey_val_input: Entity<InputState>,
     pub grpc: GrpcComposerFields,
     pub graphql: GraphQLComposerFields,
+    pub env_decorations: EnvEditorDecorationSet,
     /// WebSocket outgoing message box (session-only, never persisted).
     pub ws_message_textarea: Entity<TextareaState>,
     /// Request that currently owns `ws_message_textarea` content.
@@ -64,6 +77,7 @@ impl ComposerInputs {
     pub fn new(
         window: &mut Window,
         env_state: Entity<EnvironmentState>,
+        modal_state: Entity<ModalState>,
         session_state: Entity<RequestSessionState>,
         workspace_state: Entity<WorkspaceDataState>,
         highlighter_factory: HighlighterFactory,
@@ -77,24 +91,22 @@ impl ComposerInputs {
         let json_editor = cx.new(|cx| {
             let mut state = CodeEditorState::new(window, cx);
             state.set_highlighter_factory(highlighter_factory.clone(), cx);
-            state.lsp_mut().completion_provider = Some(Rc::new(
-                crate::components::completion::env_autocomplete::EnvCompletionProvider::new(
-                    env_state.clone(),
-                ),
-            ));
+            state.lsp_mut().completion_provider =
+                Some(Rc::new(EnvCompletionProvider::new(env_state.clone())));
+            attach_env_lsp(&mut state, env_state.clone(), modal_state.clone());
             state.language("json").line_number(true).folding(true)
         });
+        let json_env_dec = json_editor.update(cx, EnvEditorDecorations::new);
 
         let xml_editor = cx.new(|cx| {
             let mut state = CodeEditorState::new(window, cx);
             state.set_highlighter_factory(highlighter_factory.clone(), cx);
-            state.lsp_mut().completion_provider = Some(Rc::new(
-                crate::components::completion::env_autocomplete::EnvCompletionProvider::new(
-                    env_state.clone(),
-                ),
-            ));
+            state.lsp_mut().completion_provider =
+                Some(Rc::new(EnvCompletionProvider::new(env_state.clone())));
+            attach_env_lsp(&mut state, env_state.clone(), modal_state.clone());
             state.language("xml").line_number(true).folding(true)
         });
+        let xml_env_dec = xml_editor.update(cx, EnvEditorDecorations::new);
 
         let raw_textarea = cx.new(|cx| TextareaState::new(window, cx));
 
@@ -108,8 +120,10 @@ impl ComposerInputs {
                     workspace_state.clone(),
                 ),
             ));
+            attach_env_lsp(&mut state, env_state.clone(), modal_state.clone());
             state.language("json").line_number(true).folding(true)
         });
+        let grpc_env_dec = grpc_message_editor.update(cx, EnvEditorDecorations::new);
         let grpc_error_marks = grpc_message_editor.update(cx, |state, cx| {
             state.create_gutter_decorations_collection(vec![], cx)
         });
@@ -129,18 +143,25 @@ impl ComposerInputs {
                     session_state.clone(),
                 ),
             ));
+            attach_env_lsp(
+                &mut state,
+                env_state_for_graphql.clone(),
+                modal_state.clone(),
+            );
             state.language("graphql").line_number(true).folding(true)
         });
+        let graphql_query_env_dec = graphql_query_editor.update(cx, EnvEditorDecorations::new);
         let graphql_variables_editor = cx.new(|cx| {
             let mut state = CodeEditorState::new(window, cx);
             state.set_highlighter_factory(highlighter_factory.clone(), cx);
-            state.lsp_mut().completion_provider = Some(Rc::new(
-                crate::components::completion::env_autocomplete::EnvCompletionProvider::new(
-                    env_state_for_graphql,
-                ),
-            ));
+            state.lsp_mut().completion_provider = Some(Rc::new(EnvCompletionProvider::new(
+                env_state_for_graphql.clone(),
+            )));
+            attach_env_lsp(&mut state, env_state_for_graphql, modal_state);
             state.language("json").line_number(true).folding(true)
         });
+        let graphql_variables_env_dec =
+            graphql_variables_editor.update(cx, EnvEditorDecorations::new);
         let graphql_variables_marks = graphql_variables_editor.update(cx, |state, cx| {
             state.create_gutter_decorations_collection(vec![], cx)
         });
@@ -204,9 +225,37 @@ impl ComposerInputs {
                 variables_marks: graphql_variables_marks,
                 diagnostics_hover: graphql_diagnostics_hover,
             },
+            env_decorations: EnvEditorDecorationSet {
+                json: json_env_dec,
+                xml: xml_env_dec,
+                grpc_message: grpc_env_dec,
+                graphql_query: graphql_query_env_dec,
+                graphql_variables: graphql_variables_env_dec,
+            },
             ws_message_textarea,
             ws_message_owner: None,
         }
+    }
+
+    /// Recomputes environment variable decorations across all env-aware code editors.
+    pub fn refresh_all_env_decorations(&self, env_state: &Entity<EnvironmentState>, cx: &mut App) {
+        let json_val = self.json_editor.read(cx).value().to_string();
+        let xml_val = self.xml_editor.read(cx).value().to_string();
+        let grpc_val = self.grpc.message_editor.read(cx).value().to_string();
+        let gql_query_val = self.graphql.query_editor.read(cx).value().to_string();
+        let gql_vars_val = self.graphql.variables_editor.read(cx).value().to_string();
+
+        self.env_decorations.json.sync(&json_val, env_state, cx);
+        self.env_decorations.xml.sync(&xml_val, env_state, cx);
+        self.env_decorations
+            .grpc_message
+            .sync(&grpc_val, env_state, cx);
+        self.env_decorations
+            .graphql_query
+            .sync(&gql_query_val, env_state, cx);
+        self.env_decorations
+            .graphql_variables
+            .sync(&gql_vars_val, env_state, cx);
     }
 
     pub fn sync_inputs(
@@ -225,9 +274,7 @@ impl ComposerInputs {
         if matches!(scope, ComposerSyncScope::All) {
             let tokenized_url = {
                 let env = env_state.read(cx);
-                crate::components::completion::env_autocomplete::build_tokenized_content(
-                    &req.url, env,
-                )
+                crate::env::build_tokenized_content(&req.url, env)
             };
             self.url_input.update(cx, |inp, cx| {
                 inp.set_value(tokenized_url, window, cx);
@@ -239,13 +286,7 @@ impl ComposerInputs {
                     let env_m = env_holder.clone();
                     self.bearer_token_input.update(cx, |inp, cx| {
                         let env = env_m.read(cx);
-                        inp.set_value(
-                            crate::components::completion::env_autocomplete::build_tokenized_content(
-                                token, env,
-                            ),
-                            window,
-                            cx,
-                        );
+                        inp.set_value(crate::env::build_tokenized_content(token, env), window, cx);
                     });
                 }
                 Auth::Basic { username, password } => {
@@ -254,9 +295,7 @@ impl ComposerInputs {
                     self.basic_user_input.update(cx, |inp, cx| {
                         let env = env_u.read(cx);
                         inp.set_value(
-                            crate::components::completion::env_autocomplete::build_tokenized_content(
-                                username, env,
-                            ),
+                            crate::env::build_tokenized_content(username, env),
                             window,
                             cx,
                         );
@@ -264,9 +303,7 @@ impl ComposerInputs {
                     self.basic_pass_input.update(cx, |inp, cx| {
                         let env = env_p.read(cx);
                         inp.set_value(
-                            crate::components::completion::env_autocomplete::build_tokenized_content(
-                                password, env,
-                            ),
+                            crate::env::build_tokenized_content(password, env),
                             window,
                             cx,
                         );
@@ -277,21 +314,11 @@ impl ComposerInputs {
                     let env_v = env_holder.clone();
                     self.apikey_key_input.update(cx, |inp, cx| {
                         let env = env_k.read(cx);
-                        inp.set_value(
-                            crate::components::completion::env_autocomplete::build_tokenized_content(key, env),
-                            window,
-                            cx,
-                        );
+                        inp.set_value(crate::env::build_tokenized_content(key, env), window, cx);
                     });
                     self.apikey_val_input.update(cx, |inp, cx| {
                         let env = env_v.read(cx);
-                        inp.set_value(
-                            crate::components::completion::env_autocomplete::build_tokenized_content(
-                                value, env,
-                            ),
-                            window,
-                            cx,
-                        );
+                        inp.set_value(crate::env::build_tokenized_content(value, env), window, cx);
                     });
                 }
                 Auth::Inherit | Auth::None => {
@@ -417,5 +444,7 @@ impl ComposerInputs {
                 inp.set_value(String::new(), window, cx);
             });
         }
+
+        self.refresh_all_env_decorations(env_state, cx);
     }
 }

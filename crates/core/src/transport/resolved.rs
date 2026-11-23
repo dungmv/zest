@@ -76,7 +76,7 @@ pub struct ResolvedRequest {
 
 impl ResolvedRequest {
     pub fn from_item(item: &RequestItem, env: Option<&Environment>) -> Result<Self, RequestError> {
-        let interpolator = crate::interpolation::VariableInterpolator::new(env);
+        let interpolator = crate::env::VariableInterpolator::new(env);
         let raw_url = item.url.trim();
         let interpolated_url = interpolator.interpolate_cow(raw_url);
 

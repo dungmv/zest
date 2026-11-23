@@ -12,7 +12,7 @@ use lsp_types::{
 };
 use zest_core::grpc::{method_descriptors as core_method_descriptors, MessageDescriptor};
 
-use crate::components::completion::env_autocomplete::{unclosed_env_span, EnvCompletionProvider};
+use crate::env::{unclosed_env_span, EnvCompletionProvider};
 use crate::state::{RequestSessionState, WorkspaceDataState};
 
 mod context;

@@ -1,10 +1,10 @@
-use crate::components::completion::env_autocomplete::{
-    build_tokenized_content, detect_unclosed_env_var, get_env_completions, get_variable_details,
-    get_variable_kind_and_color, handle_autocomplete_keydown, handle_variable_token_click,
-    render_candidate_detail_card, render_candidate_row, variable_value_tooltip,
+use crate::components::status_badge::{MethodBadge, ProtocolBadge};
+use crate::env::{
+    build_tokenized_content, detect_unclosed_env_var, handle_autocomplete_keydown,
+    list_candidates_in_state, open_variable_in_modal, render_candidate_detail_card,
+    render_candidate_row, resolve_in_state, variable_style, variable_value_tooltip,
     AutocompleteNavState, CANDIDATE_DETAIL_GAP, CANDIDATE_LIST_WIDTH,
 };
-use crate::components::status_badge::{MethodBadge, ProtocolBadge};
 use crate::state::{edit_active_request, EnvironmentState, ModalState, RequestSessionState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -94,7 +94,7 @@ impl RenderOnce for RequestBar {
             let unclosed = detect_unclosed_env_var(&url);
             let candidates = unclosed
                 .as_ref()
-                .map(|(_, _, q)| get_env_completions(ws, q))
+                .map(|(_, _, q)| list_candidates_in_state(ws, q))
                 .unwrap_or_default();
 
             (candidates, unclosed)
@@ -267,10 +267,8 @@ impl RenderOnce for RequestBar {
                                     .token(move |token_ctx, _window, cx| {
                                         let var_name = token_ctx.token().id().to_string();
                                         let ws = ws_env.read(cx);
-                                        let (val, scope, is_res) =
-                                            get_variable_details(ws, &var_name);
-                                        let (_kind, color, bg_tint) =
-                                            get_variable_kind_and_color(&scope, is_res);
+                                        let resolved = resolve_in_state(ws, &var_name);
+                                        let style = variable_style(&resolved.scope);
 
                                         div()
                                             .id(gpui_kit::SharedString::from(format!(
@@ -278,24 +276,23 @@ impl RenderOnce for RequestBar {
                                                 var_name
                                             )))
                                             .tooltip(move |window, cx| {
-                                                variable_value_tooltip(&val, &scope, is_res)
-                                                    .build(window, cx)
+                                                variable_value_tooltip(&resolved).build(window, cx)
                                             })
                                             .flex()
                                             .items_center()
                                             .px(px(6.))
                                             .py(px(1.))
                                             .rounded(px(4.))
-                                            .bg(bg_tint)
+                                            .bg(style.bg_tint)
                                             .text_sm()
                                             .font_family(".SystemMonoFont")
-                                            .text_color(color)
+                                            .text_color(style.text)
                                             .cursor_pointer()
                                             .child(var_name)
                                     })
                                     .on_token_click(move |ev, _window, cx| {
                                         let var_name = ev.token().id().to_string();
-                                        handle_variable_token_click(
+                                        open_variable_in_modal(
                                             &env_for_click,
                                             &modal_click,
                                             &var_name,

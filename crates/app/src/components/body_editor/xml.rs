@@ -230,54 +230,13 @@ impl InputHighlighter for XmlHighlighter {
                         if i < len && slice_bytes[i] == quote {
                             i += 1;
                         }
-                        let val_str = &slice_str[val_start..i];
-                        if val_str.contains("{{") && val_str.contains("}}") {
-                            let mut cur_pos = 0;
-                            while let Some(open_idx) = val_str[cur_pos..].find("{{") {
-                                let abs_open = cur_pos + open_idx;
-                                if let Some(close_idx) = val_str[abs_open..].find("}}") {
-                                    let abs_close = abs_open + close_idx + 2;
-                                    if abs_open > cur_pos {
-                                        raw_tokens.push((
-                                            start + val_start + cur_pos
-                                                ..start + val_start + abs_open,
-                                            HighlightStyle {
-                                                color: Some(t.json_string),
-                                                ..Default::default()
-                                            },
-                                        ));
-                                    }
-                                    raw_tokens.push((
-                                        start + val_start + abs_open..start + val_start + abs_close,
-                                        HighlightStyle {
-                                            color: Some(t.var_resolved),
-                                            font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
-                                            ..Default::default()
-                                        },
-                                    ));
-                                    cur_pos = abs_close;
-                                } else {
-                                    break;
-                                }
-                            }
-                            if cur_pos < val_str.len() {
-                                raw_tokens.push((
-                                    start + val_start + cur_pos..start + val_start + val_str.len(),
-                                    HighlightStyle {
-                                        color: Some(t.json_string),
-                                        ..Default::default()
-                                    },
-                                ));
-                            }
-                        } else {
-                            raw_tokens.push((
-                                start + val_start..start + i,
-                                HighlightStyle {
-                                    color: Some(t.json_string),
-                                    ..Default::default()
-                                },
-                            ));
-                        }
+                        raw_tokens.push((
+                            start + val_start..start + i,
+                            HighlightStyle {
+                                color: Some(t.json_string),
+                                ..Default::default()
+                            },
+                        ));
                         continue;
                     }
 
@@ -293,24 +252,6 @@ impl InputHighlighter for XmlHighlighter {
                         },
                     ));
                     i += 1;
-                }
-            }
-            // Check {{var}} outside tags
-            else if i + 1 < len && slice_bytes[i] == b'{' && slice_bytes[i + 1] == b'{' {
-                let v_start = i;
-                if let Some(close_idx) = slice_str[i..].find("}}") {
-                    let v_end = i + close_idx + 2;
-                    raw_tokens.push((
-                        start + v_start..start + v_end,
-                        HighlightStyle {
-                            color: Some(t.var_resolved),
-                            font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
-                            ..Default::default()
-                        },
-                    ));
-                    i = v_end;
-                } else {
-                    i += 2;
                 }
             } else {
                 let ch = slice_str[i..].chars().next().unwrap();
@@ -602,18 +543,19 @@ mod tests {
 
         let range = 0..xml_text.len();
         let styles = highlighter.styles(&range, &DummyResolver);
-        assert!(
-            !styles.is_empty(),
-            "Styles should tokenize XML tags and variables"
-        );
+        assert!(!styles.is_empty(), "Styles should tokenize XML tags");
 
         let t = theme();
-        let has_var_highlight = styles.iter().any(|(r, s)| {
-            &xml_text[r.clone()] == "{{custom_var}}" && s.color == Some(t.var_resolved)
-        });
+        let has_tag_highlight = styles
+            .iter()
+            .any(|(r, s)| &xml_text[r.clone()] == "root" && s.color == Some(t.primary));
+        let has_attr_value_highlight = styles
+            .iter()
+            .any(|(r, s)| &xml_text[r.clone()] == "\"101\"" && s.color == Some(t.json_string));
+        assert!(has_tag_highlight, "Should highlight XML tag name");
         assert!(
-            has_var_highlight,
-            "Should highlight {{custom_var}} with var_resolved color"
+            has_attr_value_highlight,
+            "Should highlight XML attribute value"
         );
     }
 }

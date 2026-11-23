@@ -457,7 +457,7 @@ mod tests {
         assert_eq!(token.resolved_value(), "active-new");
 
         // Interpolation over the effective env must agree with the merge.
-        let res = zest_core::interpolation::interpolate("Bearer {{TOKEN}}", Some(&effective));
+        let res = zest_core::env::interpolate("Bearer {{TOKEN}}", Some(&effective));
         assert_eq!(res.text, "Bearer active-new");
 
         let _ = std::fs::remove_dir_all(&temp_dir);

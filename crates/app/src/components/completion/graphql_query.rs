@@ -18,7 +18,7 @@ use lsp_types::{
 };
 use zest_core::graphql::{completions_at, CompletionKind};
 
-use crate::components::completion::env_autocomplete::{unclosed_env_span, EnvCompletionProvider};
+use crate::env::{unclosed_env_span, EnvCompletionProvider};
 use crate::state::RequestSessionState;
 
 pub struct GraphQLQueryCompletionProvider {

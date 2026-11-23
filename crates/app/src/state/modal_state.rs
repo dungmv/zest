@@ -306,6 +306,7 @@ impl ModalState {
         let pref_str = pref.as_str().to_string();
         self.persist_setting(|s| s.theme = Some(pref_str));
 
+        cx.emit(ModalEvent::ThemeChanged);
         cx.refresh_windows();
         cx.notify();
     }

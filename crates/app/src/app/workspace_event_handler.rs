@@ -397,4 +397,7 @@ pub fn handle_environment_event(
         }
         EnvironmentEvent::EnvironmentsReloaded => {}
     }
+
+    this.composer_inputs
+        .refresh_all_env_decorations(&this.state.env, cx);
 }

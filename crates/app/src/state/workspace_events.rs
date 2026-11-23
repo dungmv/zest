@@ -210,6 +210,8 @@ impl EventEmitter<EnvironmentEvent> for EnvironmentState {}
 pub enum ModalEvent {
     /// Environment modal opened or its selected environment changed.
     EnvModalSelectionChanged,
+    /// Active light/dark theme mode changed (either by user preference or OS appearance).
+    ThemeChanged,
 }
 
 impl EventEmitter<ModalEvent> for ModalState {}

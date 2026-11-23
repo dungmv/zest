@@ -2,10 +2,10 @@ use super::workspace_event_handler::{
     handle_environment_event, handle_response_event, handle_session_event, handle_workspace_event,
 };
 use super::AppView;
-use crate::components::completion::env_autocomplete::{attach_missing_var_tokens, RetokenizeGuard};
 use crate::components::request_composer::composer_inputs::ComposerInputs;
+use crate::env::{attach_missing_var_tokens, RetokenizeGuard};
 use crate::state::{
-    EnvironmentEvent, EnvironmentState, GitState, ModalState, PersistenceState,
+    EnvironmentEvent, EnvironmentState, GitState, ModalEvent, ModalState, PersistenceState,
     RequestSessionState, ResponseEvent, ResponseState, SessionEvent, SidebarState,
     WorkspaceDataState, WorkspaceEvent,
 };
@@ -139,9 +139,12 @@ pub fn setup_app_subscriptions(
     // 2. Subscribe to JSON editor change
     let ed_json = editor_state.clone();
     let ws_json = workspace_state.clone();
+    let env_json = targets.env_state.clone();
+    let dec_json = targets.composer_inputs.env_decorations.json.clone();
     subscriptions.push(cx.subscribe(json_editor, move |_, txt, event, cx| {
         if let InputEvent::Change = event {
             let val = txt.read(cx).value().to_string();
+            dec_json.sync(&val, &env_json, cx);
             let active_id = ed_json.read(cx).active_request_id().to_string();
             ws_json.update(cx, |ws, _| {
                 ws.update_active_request(&active_id, |r| r.set_body_json(val));
@@ -153,9 +156,12 @@ pub fn setup_app_subscriptions(
     // 2b. Subscribe to XML editor change
     let ed_xml = editor_state.clone();
     let ws_xml = workspace_state.clone();
+    let env_xml = targets.env_state.clone();
+    let dec_xml = targets.composer_inputs.env_decorations.xml.clone();
     subscriptions.push(cx.subscribe(xml_editor, move |_, txt, event, cx| {
         if let InputEvent::Change = event {
             let val = txt.read(cx).value().to_string();
+            dec_xml.sync(&val, &env_xml, cx);
             let active_id = ed_xml.read(cx).active_request_id().to_string();
             ws_xml.update(cx, |ws, _| {
                 ws.update_active_request(&active_id, |r| {
@@ -192,11 +198,14 @@ pub fn setup_app_subscriptions(
     // 2c. Subscribe to gRPC message editor change (persisted into GrpcPayload)
     let ed_grpc = editor_state.clone();
     let ws_grpc = workspace_state.clone();
+    let env_grpc = targets.env_state.clone();
+    let dec_grpc = targets.composer_inputs.env_decorations.grpc_message.clone();
     let grpc_marks = targets.composer_inputs.grpc.error_marks.clone();
     let grpc_hover = targets.composer_inputs.grpc.diagnostics_hover.clone();
     subscriptions.push(cx.subscribe(grpc_message_editor, move |_, txt, event, cx| {
         if let InputEvent::Change = event {
             let val = txt.read(cx).value().to_string();
+            dec_grpc.sync(&val, &env_grpc, cx);
             let active_id = ed_grpc.read(cx).active_request_id().to_string();
             ws_grpc.update(cx, |ws, _| {
                 ws.update_active_request(&active_id, |r| r.set_grpc_message_json(val.clone()));
@@ -231,11 +240,18 @@ pub fn setup_app_subscriptions(
     // 2d. Subscribe to GraphQL query editor change (persisted into GraphQLPayload)
     let ed_gql = editor_state.clone();
     let ws_gql = workspace_state.clone();
+    let env_gql = targets.env_state.clone();
+    let dec_gql = targets
+        .composer_inputs
+        .env_decorations
+        .graphql_query
+        .clone();
     subscriptions.push(cx.subscribe(
         &targets.composer_inputs.graphql.query_editor,
         move |_, txt, event, cx| {
             if let InputEvent::Change = event {
                 let val = txt.read(cx).value().to_string();
+                dec_gql.sync(&val, &env_gql, cx);
                 let active_id = ed_gql.read(cx).active_request_id().to_string();
                 ws_gql.update(cx, |ws, _| {
                     ws.update_active_request(&active_id, |r| {
@@ -250,6 +266,12 @@ pub fn setup_app_subscriptions(
     // 2e. Subscribe to GraphQL variables editor change (+ JSON validation)
     let ed_gvar = editor_state.clone();
     let ws_gvar = workspace_state.clone();
+    let env_gvar = targets.env_state.clone();
+    let dec_gvar = targets
+        .composer_inputs
+        .env_decorations
+        .graphql_variables
+        .clone();
     let gvar_marks = targets.composer_inputs.graphql.variables_marks.clone();
     let gvar_hover = targets.composer_inputs.graphql.diagnostics_hover.clone();
     subscriptions.push(cx.subscribe(
@@ -257,6 +279,7 @@ pub fn setup_app_subscriptions(
         move |_, txt, event, cx| {
             if let InputEvent::Change = event {
                 let val = txt.read(cx).value().to_string();
+                dec_gvar.sync(&val, &env_gvar, cx);
                 let active_id = ed_gvar.read(cx).active_request_id().to_string();
                 ws_gvar.update(cx, |ws, _| {
                     ws.update_active_request(&active_id, |r| {
@@ -522,6 +545,15 @@ pub fn setup_app_subscriptions(
             handle_environment_event(this, event, cx);
         },
     ));
+    subscriptions.push(cx.subscribe(
+        targets.modal_state,
+        |this, _modal, event: &ModalEvent, cx| {
+            if matches!(event, ModalEvent::ThemeChanged) {
+                this.composer_inputs
+                    .refresh_all_env_decorations(&this.state.env, cx);
+            }
+        },
+    ));
 
     // 5. Pure redraw observers: re-render AppView on entity state changes
     subscriptions.push(cx.observe(editor_state, |_, _, cx| cx.notify()));
@@ -546,6 +578,7 @@ pub fn setup_app_subscriptions(
                 if crate::theme::current_theme_mode() != mode {
                     crate::theme::set_theme(crate::theme::ThemePreference::System, mode);
                     crate::theme::sync_component_theme(mode, cx);
+                    cx.emit(ModalEvent::ThemeChanged);
                     cx.refresh_windows();
                     cx.notify();
                 }

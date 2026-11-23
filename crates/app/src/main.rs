@@ -3,6 +3,7 @@
 
 mod app;
 mod components;
+mod env;
 mod modals;
 mod notify;
 mod platform;

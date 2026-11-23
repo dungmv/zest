@@ -1,7 +1,5 @@
 use super::ScriptEditorKind;
-use crate::components::completion::env_autocomplete::{
-    detect_unclosed_env_var, get_env_completions,
-};
+use crate::env::{detect_unclosed_env_var, list_candidates_in_state};
 use crate::state::EnvironmentState;
 use anyhow::Result;
 use gpui_kit::component::input::{CompletionProvider, Rope};
@@ -68,30 +66,33 @@ impl CompletionProvider for ScriptCompletionProvider {
         if let Some((start_pos_byte, _end_pos_byte, q)) = detect_unclosed_env_var(slice) {
             if let Some(env_entity) = &self.env_state {
                 let env = env_entity.read(cx);
-                let candidates = get_env_completions(env, &q);
+                let candidates = list_candidates_in_state(env, &q);
                 let start_pos = rope.offset_to_position(start_pos_byte);
                 let end_pos = rope.offset_to_position(safe_offset);
                 let items: Vec<CompletionItem> = candidates
                     .into_iter()
-                    .map(|c| CompletionItem {
-                        label: format!("{{{{{}}}}}", c.name),
-                        filter_text: Some(c.name.clone()),
-                        kind: Some(CompletionItemKind::VARIABLE),
-                        detail: Some(format!("{} • {}", c.detail_text(), c.scope)),
-                        documentation: Some(Documentation::String(format!(
-                            "Environment Variable: {}\nValue: {}\nScope: {}",
-                            c.name,
-                            c.detail_text(),
-                            c.scope
-                        ))),
-                        text_edit: Some(CompletionTextEdit::Edit(TextEdit {
-                            range: LspRange {
-                                start: start_pos,
-                                end: end_pos,
-                            },
-                            new_text: format!("{{{{{}}}}}", c.name),
-                        })),
-                        ..Default::default()
+                    .map(|c| {
+                        let scope_label = c.scope_label();
+                        CompletionItem {
+                            label: format!("{{{{{}}}}}", c.name),
+                            filter_text: Some(c.name.clone()),
+                            kind: Some(CompletionItemKind::VARIABLE),
+                            detail: Some(format!("{} • {}", c.detail_text(), scope_label)),
+                            documentation: Some(Documentation::String(format!(
+                                "Environment Variable: {}\nValue: {}\nScope: {}",
+                                c.name,
+                                c.detail_text(),
+                                scope_label
+                            ))),
+                            text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                                range: LspRange {
+                                    start: start_pos,
+                                    end: end_pos,
+                                },
+                                new_text: format!("{{{{{}}}}}", c.name),
+                            })),
+                            ..Default::default()
+                        }
                     })
                     .collect();
                 return Task::ready(Ok(CompletionResponse::Array(items)));
@@ -110,30 +111,33 @@ impl CompletionProvider for ScriptCompletionProvider {
                 if !var_query.contains(['"', '\'', '\n']) {
                     if let Some(env_entity) = &self.env_state {
                         let env = env_entity.read(cx);
-                        let candidates = get_env_completions(env, var_query);
+                        let candidates = list_candidates_in_state(env, var_query);
                         let start_lsp = rope.offset_to_position(quote_idx + 1);
                         let end_lsp = rope.offset_to_position(safe_offset);
                         let items: Vec<CompletionItem> = candidates
                             .into_iter()
-                            .map(|c| CompletionItem {
-                                label: c.name.clone(),
-                                filter_text: Some(c.name.clone()),
-                                kind: Some(CompletionItemKind::VARIABLE),
-                                detail: Some(format!("{} • {}", c.detail_text(), c.scope)),
-                                documentation: Some(Documentation::String(format!(
-                                    "Environment Variable: {}\nValue: {}\nScope: {}",
-                                    c.name,
-                                    c.detail_text(),
-                                    c.scope
-                                ))),
-                                text_edit: Some(CompletionTextEdit::Edit(TextEdit {
-                                    range: LspRange {
-                                        start: start_lsp,
-                                        end: end_lsp,
-                                    },
-                                    new_text: c.name,
-                                })),
-                                ..Default::default()
+                            .map(|c| {
+                                let scope_label = c.scope_label();
+                                CompletionItem {
+                                    label: c.name.clone(),
+                                    filter_text: Some(c.name.clone()),
+                                    kind: Some(CompletionItemKind::VARIABLE),
+                                    detail: Some(format!("{} • {}", c.detail_text(), scope_label)),
+                                    documentation: Some(Documentation::String(format!(
+                                        "Environment Variable: {}\nValue: {}\nScope: {}",
+                                        c.name,
+                                        c.detail_text(),
+                                        scope_label
+                                    ))),
+                                    text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                                        range: LspRange {
+                                            start: start_lsp,
+                                            end: end_lsp,
+                                        },
+                                        new_text: c.name,
+                                    })),
+                                    ..Default::default()
+                                }
                             })
                             .collect();
                         return Task::ready(Ok(CompletionResponse::Array(items)));
