@@ -1,7 +1,9 @@
+mod preview;
 mod request;
 mod response;
 mod workspace;
 
+pub use preview::*;
 pub use request::*;
 pub use response::*;
 pub use workspace::*;

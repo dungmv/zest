@@ -4,6 +4,7 @@ mod cookies_tab;
 mod headers_tab;
 pub mod json_highlight;
 mod messages_tab;
+mod preview_image;
 mod request_sent_tab;
 mod timing_popover;
 

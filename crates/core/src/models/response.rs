@@ -205,6 +205,12 @@ impl HttpResponseRecord {
         })
     }
 
+    /// Returns the preview renderer kind if this response body is previewable
+    /// (e.g. an image response).
+    pub fn preview_kind(&self) -> Option<super::ResponsePreviewKind> {
+        super::detect_preview_kind(&self.headers, &self.body)
+    }
+
     /// Extracts the filename from the `Content-Disposition` response header, if present.
     pub fn content_disposition_filename(&self) -> Option<String> {
         self.headers.iter().find_map(|(k, v)| {
@@ -228,11 +234,17 @@ impl HttpResponseRecord {
     /// Precedence:
     /// 1. `Content-Disposition` response header filename
     /// 2. Last non-empty path segment of the request URL (percent-decoded once)
-    /// 3. Fallback `"response.json"`
+    /// 3. Fallback `"response.<ext>"` based on detected preview kind, else `"response.json"`
     pub fn suggested_filename(&self) -> String {
         self.content_disposition_filename()
             .or_else(|| self.url_filename())
-            .unwrap_or_else(|| "response.json".to_string())
+            .unwrap_or_else(|| {
+                if let Some(kind) = self.preview_kind() {
+                    format!("response.{}", kind.fallback_extension())
+                } else {
+                    "response.json".to_string()
+                }
+            })
     }
 }
 

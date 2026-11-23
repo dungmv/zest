@@ -1,4 +1,4 @@
-use super::ResponseInspector;
+use super::{preview_image, ResponseInspector};
 use crate::state::ResponseViewMode;
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -14,7 +14,7 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled, Window,
 };
 use std::sync::Arc;
-use zest_core::models::HttpResponseRecord;
+use zest_core::models::{HttpResponseRecord, ResponsePreviewKind};
 use zest_core::storage::models::{RequestExampleFile, RequestKvItem};
 
 pub(super) fn render_body_tab(
@@ -216,14 +216,26 @@ pub(super) fn render_body_tab(
         let req_id_opt = active_id.clone();
         let wrap_lines = resp_s.wrap_lines;
         let show_jsonpath_bar = resp_s.show_jsonpath_bar;
+        let preview_kind = resp_s
+            .formatted_body
+            .as_ref()
+            .and_then(|f| f.preview_kind)
+            .or_else(|| c_resp.preview_kind());
+        let is_preview_mode =
+            matches!(view_mode, ResponseViewMode::Preview) && preview_kind.is_some();
+        let is_raster_image = matches!(
+            preview_kind,
+            Some(ResponsePreviewKind::Image(fmt)) if fmt.is_raster()
+        );
 
         // Query bar is offered only when the body parsed as JSON (the
         // retained parsed value in CachedResponseFormat is what gets queried).
-        let jsonpath_active = resp_s
-            .formatted_body
-            .as_ref()
-            .and_then(|f| f.cached_format.as_ref())
-            .is_some_and(|cf| cf.parsed_json.is_some());
+        let jsonpath_active = !is_preview_mode
+            && resp_s
+                .formatted_body
+                .as_ref()
+                .and_then(|f| f.cached_format.as_ref())
+                .is_some_and(|cf| cf.parsed_json.is_some());
         let jsonpath_matches = resp_s.formatted_body.as_ref().and_then(|f| f.match_count);
         let jsonpath_hint = jsonpath_matches.map(|n| {
             div()
@@ -305,6 +317,31 @@ pub(super) fn render_body_tab(
                                                             })
                                                             .child("Raw")
                                                     })
+                                                    // Preview Button (shown for previewable responses)
+                                                    .when(preview_kind.is_some(), |this| {
+                                                        let rs_c = rs_toggle.clone();
+                                                        this.child(
+                                                            div()
+                                                                .id("btn-view-preview")
+                                                                .px(px(8.))
+                                                                .py(px(2.))
+                                                                .rounded(px(4.))
+                                                                .border_1()
+                                                                .border_color(if is_preview_mode { t.border } else { t.transparent })
+                                                                .bg(if is_preview_mode { t.bg_selected } else { t.transparent })
+                                                                .text_color(if is_preview_mode { t.text_primary } else { t.text_secondary })
+                                                                .text_xs()
+                                                                .font_weight(if is_preview_mode { gpui_kit::FontWeight::SEMIBOLD } else { gpui_kit::FontWeight::NORMAL })
+                                                                .cursor_pointer()
+                                                                .hover(|s| if is_preview_mode { s } else { s.text_color(t.text_primary).bg(t.bg_hover) })
+                                                                .on_click(move |_, _, cx| {
+                                                                    rs_c.update(cx, |state, cx| {
+                                                                        state.set_view_mode(ResponseViewMode::Preview, cx);
+                                                                    });
+                                                                })
+                                                                .child("Preview"),
+                                                        )
+                                                    })
                                             )
                                             .child(
                                                 div()
@@ -338,9 +375,9 @@ pub(super) fn render_body_tab(
                                                                 }),
                                                         )
                                                     })
-                                                    // Save as Example Button
+                                                    // Save as Example Button (text responses only)
                                                     .when_some(req_id_opt.clone(), |this, req_id| {
-                                                        if is_viewing_example {
+                                                        if is_viewing_example || is_raster_image {
                                                             return this;
                                                         }
                                                         let ws_s = ws_s.clone();
@@ -374,8 +411,8 @@ pub(super) fn render_body_tab(
                                                                 }),
                                                         )
                                                     })
-                                                    // Toggle Wrap Line Button
-                                                    .child({
+                                                    // Toggle Wrap Line Button (text view only)
+                                                    .when(!is_preview_mode, |this| {
                                                         let rs_w = rs_wrap.clone();
                                                         let r_ed = resp_ed.clone();
                                                         let wrap_icon = if wrap_lines {
@@ -384,39 +421,43 @@ pub(super) fn render_body_tab(
                                                             Icon::new(IconName::TextWrap)
                                                         };
 
-                                                        Button::new("btn-toggle-wrap")
-                                                            .ghost()
-                                                            .xsmall()
-                                                            .icon(wrap_icon)
-                                                            .tooltip("Toggle line wrap")
-                                                            .on_click(move |_, window, cx: &mut App| {
-                                                                rs_w.update(cx, |state, cx| {
-                                                                    state.toggle_wrap_lines(cx);
-                                                                });
-                                                                let new_wrap = rs_w.read(cx).wrap_lines;
-                                                                r_ed.update(cx, |ed, cx| {
-                                                                    ed.set_soft_wrap(new_wrap, window, cx);
-                                                                });
-                                                            })
+                                                        this.child(
+                                                            Button::new("btn-toggle-wrap")
+                                                                .ghost()
+                                                                .xsmall()
+                                                                .icon(wrap_icon)
+                                                                .tooltip("Toggle line wrap")
+                                                                .on_click(move |_, window, cx: &mut App| {
+                                                                    rs_w.update(cx, |state, cx| {
+                                                                        state.toggle_wrap_lines(cx);
+                                                                    });
+                                                                    let new_wrap = rs_w.read(cx).wrap_lines;
+                                                                    r_ed.update(cx, |ed, cx| {
+                                                                        ed.set_soft_wrap(new_wrap, window, cx);
+                                                                    });
+                                                                }),
+                                                        )
                                                     })
-                                                    // Copy Button
-                                                    .child({
+                                                    // Copy Button (text responses only)
+                                                    .when(!is_raster_image, |this| {
                                                         let rs_c = rs_copy.clone();
-                                                        Button::new("btn-copy-response")
-                                                            .ghost()
-                                                            .xsmall()
-                                                            .icon(IconName::Copy)
-                                                            .tooltip("Copy Response")
-                                                            .on_click(move |_, _, cx: &mut App| {
-                                                                let copy_text = rs_c.read(cx).formatted_body.as_ref()
-                                                                    .map(|f| f.display_text.to_string())
-                                                                    .or_else(|| {
-                                                                        rs_c.read(cx).current_response.as_ref()
-                                                                            .map(|r| String::from_utf8_lossy(&r.body).to_string())
-                                                                    })
-                                                                    .unwrap_or_default();
-                                                                cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(copy_text));
-                                                            })
+                                                        this.child(
+                                                            Button::new("btn-copy-response")
+                                                                .ghost()
+                                                                .xsmall()
+                                                                .icon(IconName::Copy)
+                                                                .tooltip("Copy Response")
+                                                                .on_click(move |_, _, cx: &mut App| {
+                                                                    let copy_text = rs_c.read(cx).formatted_body.as_ref()
+                                                                        .map(|f| f.display_text.to_string())
+                                                                        .or_else(|| {
+                                                                            rs_c.read(cx).current_response.as_ref()
+                                                                                .map(|r| String::from_utf8_lossy(&r.body).to_string())
+                                                                        })
+                                                                        .unwrap_or_default();
+                                                                    cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(copy_text));
+                                                                }),
+                                                        )
                                                     })
                                                     // Save to File (Download) Button
                                                     .child({
@@ -511,7 +552,7 @@ pub(super) fn render_body_tab(
                                         )
                                     })
                                     // Large payload notice banner
-                                    .when(is_large_payload, |this| {
+                                    .when(!is_preview_mode && is_large_payload, |this| {
                                         this.child(
                                             div()
                                                 .px(px(12.))
@@ -530,9 +571,22 @@ pub(super) fn render_body_tab(
                                                 )
                                         )
                                     })
-                                    // Response lines area: Editor with folding/selection for normal payloads, uniform_list for large payloads
+                                    // Response content area: Preview renderer, virtualized list for large payloads, or Editor
                                     .child({
-                                        if is_large_payload {
+                                        if let (true, Some(ResponsePreviewKind::Image(fmt))) =
+                                            (is_preview_mode, preview_kind)
+                                        {
+                                            div()
+                                                .flex_1()
+                                                .size_full()
+                                                .overflow_hidden()
+                                                .child(preview_image::render_image_preview(
+                                                    &ri.response_state,
+                                                    &c_resp,
+                                                    fmt,
+                                                    cx,
+                                                ))
+                                        } else if is_large_payload {
                                             div()
                                                 .flex_1()
                                                 .size_full()

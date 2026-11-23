@@ -3,8 +3,10 @@ use gpui_kit::Context;
 use std::sync::Arc;
 use zest_core::cache::ResponseCache;
 use zest_core::grpc::GrpcCallSummary;
-use zest_core::models::Protocol;
-use zest_core::models::{ConsoleLogEntry, ConsoleLogLevel, HttpResponseRecord, TestResult};
+use zest_core::models::{
+    probe_image_dimensions, ConsoleLogEntry, ConsoleLogLevel, HttpResponseRecord,
+    ImagePreviewFormat, Protocol, ResponsePreviewKind, TestResult,
+};
 use zest_core::transport::TransportFrame;
 use zest_core::ws::WebSocketStatus;
 
@@ -14,6 +16,9 @@ const MAX_VIEW_FRAMES: usize = 1000;
 /// and re-serializing multi-megabyte payloads runs on the UI thread on every
 /// response arrival and request switch.
 const MAX_FORMAT_BODY_BYTES: usize = 2 * 1024 * 1024;
+/// Images above this byte size skip in-app decoding to avoid OOM/stalls;
+/// users can still download the raw payload via "Save to File".
+pub const MAX_PREVIEW_IMAGE_BYTES: usize = 25 * 1024 * 1024;
 /// Maximum number of lines materialized for the (virtualized) body view;
 /// payloads beyond the cap end with a truncation marker line.
 const MAX_FORMAT_LINES: usize = 2000;
@@ -23,6 +28,65 @@ const MAX_FORMAT_LINE_CHARS: usize = 1000;
 /// View-side cap for script console logs within a single run (a runaway
 /// `console.log` loop must not grow the panel without bound).
 const MAX_CONSOLE_LOGS: usize = 1000;
+
+const IMAGE_ZOOM_STEPS: &[u16] = &[25, 50, 75, 100, 150, 200, 300, 400];
+
+/// Zoom mode for the response image preview canvas.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ImageZoomMode {
+    #[default]
+    Fit,
+    Scale(u16),
+}
+
+impl ImageZoomMode {
+    pub fn zoom_in(self) -> Self {
+        let cur = match self {
+            Self::Fit => 100,
+            Self::Scale(pct) => pct,
+        };
+        let next = IMAGE_ZOOM_STEPS
+            .iter()
+            .copied()
+            .find(|&step| step > cur)
+            .unwrap_or(*IMAGE_ZOOM_STEPS.last().unwrap_or(&400));
+        Self::Scale(next)
+    }
+
+    pub fn zoom_out(self) -> Self {
+        let cur = match self {
+            Self::Fit => 100,
+            Self::Scale(pct) => pct,
+        };
+        let prev = IMAGE_ZOOM_STEPS
+            .iter()
+            .rev()
+            .copied()
+            .find(|&step| step < cur)
+            .unwrap_or(*IMAGE_ZOOM_STEPS.first().unwrap_or(&25));
+        Self::Scale(prev)
+    }
+
+    pub fn label(self) -> String {
+        match self {
+            Self::Fit => "Fit".to_string(),
+            Self::Scale(pct) => format!("{pct}%"),
+        }
+    }
+}
+
+fn to_gpui_image_format(fmt: ImagePreviewFormat) -> gpui_kit::ImageFormat {
+    match fmt {
+        ImagePreviewFormat::Png => gpui_kit::ImageFormat::Png,
+        ImagePreviewFormat::Jpeg => gpui_kit::ImageFormat::Jpeg,
+        ImagePreviewFormat::Webp => gpui_kit::ImageFormat::Webp,
+        ImagePreviewFormat::Gif => gpui_kit::ImageFormat::Gif,
+        ImagePreviewFormat::Svg => gpui_kit::ImageFormat::Svg,
+        ImagePreviewFormat::Bmp => gpui_kit::ImageFormat::Bmp,
+        ImagePreviewFormat::Ico => gpui_kit::ImageFormat::Ico,
+        ImagePreviewFormat::Tiff => gpui_kit::ImageFormat::Tiff,
+    }
+}
 
 /// Splits at most [`MAX_FORMAT_LINES`] lines of at most
 /// [`MAX_FORMAT_LINE_CHARS`] chars each, appending truncation markers when
@@ -62,6 +126,9 @@ pub(crate) struct CachedResponseFormat {
     pub(crate) parsed_json: Option<Arc<serde_json::Value>>,
     pub(crate) is_json: bool,
     pub(crate) is_xml: bool,
+    pub(crate) preview_kind: Option<ResponsePreviewKind>,
+    pub(crate) preview_image: Option<Arc<gpui_kit::Image>>,
+    pub(crate) image_dimensions: Option<(u32, u32)>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -70,6 +137,9 @@ pub struct FormattedResponseBody {
     pub lines: Arc<Vec<String>>,
     pub is_json: bool,
     pub is_xml: bool,
+    pub preview_kind: Option<ResponsePreviewKind>,
+    pub preview_image: Option<Arc<gpui_kit::Image>>,
+    pub image_dimensions: Option<(u32, u32)>,
     /// Number of JSONPath query matches when a query is active, else `None`.
     pub match_count: Option<usize>,
     pub(crate) cached_format: Option<Arc<CachedResponseFormat>>,
@@ -163,6 +233,8 @@ pub struct ResponseState {
     pub active_example_name: Option<String>,
     pub active_tab: ResponseTabKind,
     pub view_mode: ResponseViewMode,
+    /// Zoom preset for the image preview canvas (reset on response switch).
+    pub image_zoom: ImageZoomMode,
     /// Active JSONPath query for the response Body tab (empty = no filter).
     pub jsonpath_query: String,
     /// Whether the JSONPath filter bar below the response toolbar is visible.
@@ -207,6 +279,7 @@ impl ResponseState {
             active_example_name: None,
             active_tab: ResponseTabKind::Response,
             view_mode: ResponseViewMode::Pretty,
+            image_zoom: ImageZoomMode::Fit,
             jsonpath_query: String::new(),
             show_jsonpath_bar: false,
             show_examples_dropdown: false,
@@ -246,6 +319,7 @@ impl ResponseState {
         self.jsonpath_query.clear();
         self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
         self.refresh_formatted_body();
+        self.reconcile_view_mode_for_response();
     }
 
     pub fn load_for_request(
@@ -308,6 +382,7 @@ impl ResponseState {
         self.jsonpath_query.clear();
         self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
         self.refresh_formatted_body();
+        self.reconcile_view_mode_for_response();
         cx.emit(ResponseEvent::ContentChanged {
             sync_sent_preview: true,
         });
@@ -356,6 +431,7 @@ impl ResponseState {
         self.jsonpath_query.clear();
         self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
         self.refresh_formatted_body();
+        self.reconcile_view_mode_for_response();
     }
 
     pub fn restore_live_response(&mut self, req_id: &str, cx: &mut Context<Self>) {
@@ -366,6 +442,7 @@ impl ResponseState {
         self.jsonpath_query.clear();
         self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
         self.refresh_formatted_body();
+        self.reconcile_view_mode_for_response();
         cx.emit(ResponseEvent::ContentChanged {
             sync_sent_preview: true,
         });
@@ -430,6 +507,9 @@ impl ResponseState {
                 lines,
                 is_json: cached_format.is_json,
                 is_xml: cached_format.is_xml,
+                preview_kind: cached_format.preview_kind,
+                preview_image: cached_format.preview_image.clone(),
+                image_dimensions: cached_format.image_dimensions,
                 match_count,
                 cached_format: Some(cached_format),
             });
@@ -438,7 +518,67 @@ impl ResponseState {
         }
     }
 
+    /// Reconciles `view_mode` and resets `image_zoom` whenever the active
+    /// response changes:
+    /// - Image responses auto-switch to `Preview`.
+    /// - Non-previewable responses fall back from `Preview` to `Pretty`.
+    pub(crate) fn reconcile_view_mode_for_response(&mut self) {
+        self.image_zoom = ImageZoomMode::Fit;
+        let preview_kind = self.formatted_body.as_ref().and_then(|f| f.preview_kind);
+        match preview_kind {
+            Some(ResponsePreviewKind::Image(_)) => {
+                self.view_mode = ResponseViewMode::Preview;
+            }
+            None => {
+                if self.view_mode == ResponseViewMode::Preview {
+                    self.view_mode = ResponseViewMode::Pretty;
+                }
+            }
+        }
+    }
+
     fn build_cached_format(resp: &Arc<HttpResponseRecord>) -> CachedResponseFormat {
+        let preview_kind = resp.preview_kind();
+        let (preview_image, image_dimensions, raster_placeholder) = match preview_kind {
+            Some(ResponsePreviewKind::Image(fmt)) => {
+                let image = (!resp.body.is_empty() && resp.body.len() <= MAX_PREVIEW_IMAGE_BYTES)
+                    .then(|| {
+                        Arc::new(gpui_kit::Image::from_bytes(
+                            to_gpui_image_format(fmt),
+                            resp.body.clone(),
+                        ))
+                    });
+                let dims = probe_image_dimensions(fmt, &resp.body);
+                let placeholder = fmt.is_raster().then(|| {
+                    format!(
+                        "[Binary {} image — {}. Switch to Preview or Save to File.]",
+                        fmt.label(),
+                        resp.formatted_size()
+                    )
+                });
+                (image, dims, placeholder)
+            }
+            None => (None, None, None),
+        };
+
+        if let Some(placeholder) = raster_placeholder {
+            let lines = Arc::new(vec![placeholder.clone()]);
+            let text = Arc::new(placeholder);
+            return CachedResponseFormat {
+                response_ptr: Arc::as_ptr(resp) as usize,
+                raw_text: text.clone(),
+                raw_lines: lines.clone(),
+                pretty_text: text,
+                pretty_lines: lines,
+                parsed_json: None,
+                is_json: false,
+                is_xml: false,
+                preview_kind,
+                preview_image,
+                image_dimensions,
+            };
+        }
+
         let oversized = resp.body.len() > MAX_FORMAT_BODY_BYTES;
         let raw_str = String::from_utf8_lossy(&resp.body).to_string();
         let parsed_json = if oversized {
@@ -484,6 +624,9 @@ impl ResponseState {
             parsed_json: parsed_json.map(Arc::new),
             is_json,
             is_xml,
+            preview_kind,
+            preview_image,
+            image_dimensions,
         }
     }
 
@@ -500,6 +643,7 @@ impl ResponseState {
         self.jsonpath_query.clear();
         self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
         self.refresh_formatted_body();
+        self.reconcile_view_mode_for_response();
         cx.emit(ResponseEvent::ContentChanged {
             sync_sent_preview: true,
         });
@@ -521,6 +665,24 @@ impl ResponseState {
             sync_sent_preview: false,
         });
         cx.notify();
+    }
+
+    pub fn set_image_zoom(&mut self, zoom: ImageZoomMode, cx: &mut Context<Self>) {
+        if self.image_zoom == zoom {
+            return;
+        }
+        self.image_zoom = zoom;
+        cx.notify();
+    }
+
+    pub fn zoom_in_image(&mut self, cx: &mut Context<Self>) {
+        let next = self.image_zoom.zoom_in();
+        self.set_image_zoom(next, cx);
+    }
+
+    pub fn zoom_out_image(&mut self, cx: &mut Context<Self>) {
+        let prev = self.image_zoom.zoom_out();
+        self.set_image_zoom(prev, cx);
     }
 
     pub fn toggle_examples_dropdown(&mut self, cx: &mut Context<Self>) {
