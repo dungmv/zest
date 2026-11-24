@@ -3,9 +3,11 @@
 //! action and the tinted status pill.
 
 pub mod format_json;
+pub mod secret;
 pub mod status_pill;
 pub mod toolbar;
 
 pub use format_json::*;
+pub use secret::*;
 pub use status_pill::*;
 pub use toolbar::*;

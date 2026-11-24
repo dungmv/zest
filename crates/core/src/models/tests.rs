@@ -120,6 +120,44 @@ fn test_http_request_item_mutations() {
         }
     );
 
+    // Auth contributed headers preview
+    let mask = |s: &str| format!("[{s}]");
+    assert_eq!(
+        Auth::Bearer {
+            token: "secret".into()
+        }
+        .contributed_header_preview(mask),
+        Some(("Authorization".into(), "Bearer [secret]".into()))
+    );
+    assert_eq!(
+        Auth::Basic {
+            username: "admin".into(),
+            password: "pw".into()
+        }
+        .contributed_header_preview(mask),
+        Some(("Authorization".into(), "Basic admin:[pw]".into()))
+    );
+    assert_eq!(
+        Auth::ApiKey {
+            key: "X-Key".into(),
+            value: "val".into(),
+            add_to: ApiKeyLocation::Header
+        }
+        .contributed_header_preview(mask),
+        Some(("X-Key".into(), "[val]".into()))
+    );
+    assert_eq!(
+        Auth::ApiKey {
+            key: "k".into(),
+            value: "v".into(),
+            add_to: ApiKeyLocation::Query
+        }
+        .contributed_header_preview(mask),
+        None
+    );
+    assert_eq!(Auth::None.contributed_header_preview(mask), None);
+    assert_eq!(Auth::Inherit.contributed_header_preview(mask), None);
+
     // Settings
     req.set_timeout_secs(42);
     assert_eq!(req.settings.timeout_secs(), 42);

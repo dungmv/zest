@@ -1,7 +1,54 @@
 use crate::app::AppView;
+use crate::components::common::mask_secret;
+use crate::components::kv_table::KvReadonlyRow;
 use crate::components::*;
 use crate::state::*;
 use gpui_kit::{div, AnyElement, Context, IntoElement, ParentElement, Styled};
+use zest_core::models::RequestItem;
+
+/// Builds the read-only rows appended to the Headers `KvTable`:
+/// - ancestor headers, using the exact send-time merge semantics. Rows the request
+///   overrides (case-insensitive key match) are excluded — they are not sent, so
+///   showing them as inherited values would be misleading.
+/// - a preview of the header contributed by inherited auth (e.g. Bearer ->
+///   `Authorization: Bearer ***`), when the request auth is `Inherit`.
+pub(crate) fn inherited_readonly_rows(
+    ws: &WorkspaceDataState,
+    req: &RequestItem,
+) -> Vec<KvReadonlyRow> {
+    let mut rows: Vec<KvReadonlyRow> = ws
+        .inherited_headers_for_request(req)
+        .into_iter()
+        .filter(|h| !h.overridden_by_request)
+        .map(|h| KvReadonlyRow {
+            key: h.pair.key,
+            value: h.pair.value,
+            enabled: h.pair.enabled,
+            source_detail: format!("Inherited from {}", h.source),
+        })
+        .collect();
+
+    if req.auth.is_inherit() {
+        if let Some(info) = ws.inherited_auth_source(req.folder_id.as_deref()) {
+            let scope = if info.source_folder_id.is_some() {
+                format!("folder \"{}\"", info.source_name)
+            } else {
+                format!("workspace \"{}\"", info.source_name)
+            };
+            let source_detail = format!("Added by inherited auth from {scope}");
+            if let Some((key, value)) = info.auth.contributed_header_preview(mask_secret) {
+                rows.push(KvReadonlyRow {
+                    key,
+                    value,
+                    enabled: true,
+                    source_detail,
+                });
+            }
+        }
+    }
+
+    rows
+}
 
 pub(super) fn render_headers_tab(av: &AppView, cx: &mut Context<AppView>) -> AnyElement {
     let req_id_str = av.state.session.read(cx).active_request_id().to_string();

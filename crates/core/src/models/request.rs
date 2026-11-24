@@ -242,6 +242,32 @@ impl Auth {
     pub fn is_none(&self) -> bool {
         matches!(self, Auth::None)
     }
+
+    /// Returns the HTTP header (key, value) contributed by this auth configuration,
+    /// transforming secret values using the supplied `mask_fn`.
+    /// Returns `None` if this auth mode does not produce an HTTP header (e.g. `None`, `Inherit`,
+    /// or `ApiKey` placed in query params).
+    pub fn contributed_header_preview<F>(&self, mask_fn: F) -> Option<(String, String)>
+    where
+        F: Fn(&str) -> String,
+    {
+        match self {
+            Auth::Bearer { token } => Some((
+                "Authorization".to_string(),
+                format!("Bearer {}", mask_fn(token)),
+            )),
+            Auth::Basic { username, password } => Some((
+                "Authorization".to_string(),
+                format!("Basic {}:{}", username, mask_fn(password)),
+            )),
+            Auth::ApiKey {
+                key,
+                value,
+                add_to: ApiKeyLocation::Header,
+            } if !key.trim().is_empty() => Some((key.clone(), mask_fn(value))),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

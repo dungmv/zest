@@ -1,5 +1,5 @@
+use crate::components::common::mask_secret;
 use crate::components::env_input::{render_disabled_env_input, render_env_input};
-use crate::components::inherited_headers::mask_secret;
 use crate::state::{EnvironmentState, ModalState, RequestSessionState, WorkspaceDataState};
 use crate::theme::{theme, AppTheme};
 use gpui_kit::assets::IconName;

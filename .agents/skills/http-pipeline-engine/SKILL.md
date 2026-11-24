@@ -74,7 +74,7 @@ In `crates/core/src/http/executor.rs`, `ReqwestExecutor` manages persistent HTTP
 ### 3.1 Shared Header & Auth Inheritance (`crates/core/src/transport/hierarchy.rs`)
 Both send-time resolution (`resolve_hierarchical_headers_and_auth`) and the read-only composer projection (`resolve_inherited_headers` -> `Vec<InheritedHeader>`) use the same `HeaderMerger`:
 - **Precedence Chain**: `Workspace` -> `Parent Folder Chain` (outermost to innermost) -> `Request`.
-- **Headers**: Case-insensitive key matching where child overrides ancestor while preserving first-seen order. In the UI (`components/inherited_headers.rs`), ancestor headers overridden by the request are flagged `overridden_by_request: true`.
+- **Headers**: Case-insensitive key matching where child overrides ancestor while preserving first-seen order. In the UI (`components/request_composer/headers_tab.rs`), ancestor headers overridden by the request are flagged `overridden_by_request: true`.
 - **Auth**: If a scope specifies `Auth::Inherit`, resolution walks upward from the nearest parent folder to the workspace, defaulting to `Auth::None`.
 
 ### 3.2 Variable Resolution Precedence & Interpolation (`zest_core::interpolation`)
