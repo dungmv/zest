@@ -6,9 +6,9 @@ pub mod json_highlight;
 mod messages_tab;
 mod preview_image;
 mod request_sent_tab;
+mod status_pill;
 mod timing_popover;
 
-use crate::components::status_pill;
 use crate::components::tabs_with_badge::render_tab_badge;
 use crate::state::{RequestSessionState, ResponseState, ResponseTabKind, WorkspaceDataState};
 use crate::theme::theme;
@@ -23,6 +23,7 @@ use gpui_kit::{
     div, px, App, Entity, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
     StatefulInteractiveElement as _, Styled, Window,
 };
+use status_pill::status_pill;
 use zest_core::models::Protocol;
 use zest_core::ws::WebSocketStatus;
 
