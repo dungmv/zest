@@ -168,39 +168,28 @@ pub(super) fn render_body_tab(
         let view_mode = resp_s.view_mode;
         let body_len = current_resp.as_ref().map(|r| r.body.len()).unwrap_or(0);
 
-        let (_display_text, lines, is_json) = if let Some(fmt) = &resp_s.formatted_body {
-            (fmt.display_text.clone(), fmt.lines.clone(), fmt.is_json)
-        } else {
-            let raw_str = current_resp
-                .as_ref()
-                .map(|r| String::from_utf8_lossy(&r.body).to_string())
-                .unwrap_or_default();
-            let parsed_json = serde_json::from_str::<serde_json::Value>(&raw_str).ok();
-            let is_json = parsed_json.is_some()
-                || current_resp.as_ref().map(|r| r.is_json()).unwrap_or(false)
-                || raw_str.trim_start().starts_with('{')
-                || raw_str.trim_start().starts_with('[');
-
-            let display_text = if matches!(view_mode, ResponseViewMode::Pretty) {
-                if let Some(parsed) = &parsed_json {
-                    serde_json::to_string_pretty(parsed).unwrap_or_else(|_| raw_str.clone())
-                } else {
-                    raw_str.clone()
-                }
+        let (_display_text, lines, is_json, is_binary, is_truncated) =
+            if let Some(fmt) = &resp_s.formatted_body {
+                (
+                    fmt.display_text.clone(),
+                    fmt.lines.clone(),
+                    fmt.is_json,
+                    fmt.is_binary,
+                    fmt.is_truncated,
+                )
             } else {
-                raw_str.clone()
+                (
+                    std::sync::Arc::new(String::new()),
+                    std::sync::Arc::new(Vec::new()),
+                    false,
+                    false,
+                    false,
+                )
             };
 
-            let lines: Vec<String> = display_text.lines().map(|s| s.to_string()).collect();
-            (
-                std::sync::Arc::new(display_text),
-                std::sync::Arc::new(lines),
-                is_json,
-            )
-        };
-
         let total_lines = lines.len();
-        let is_large_payload = body_len > 10 * 1024 * 1024 || total_lines > 20000;
+        let is_large_payload =
+            is_truncated || body_len > 10 * 1024 * 1024 || total_lines > 20000;
 
         let rs_toggle = resp_state_clone.clone();
         let rs_filter = resp_state_clone.clone();
@@ -375,9 +364,9 @@ pub(super) fn render_body_tab(
                                                                 }),
                                                         )
                                                     })
-                                                    // Save as Example Button (text responses only)
+                                                    // Save as Example Button (text responses within size limit only)
                                                     .when_some(req_id_opt.clone(), |this, req_id| {
-                                                        if is_viewing_example || is_raster_image {
+                                                        if is_viewing_example || is_raster_image || is_binary || is_large_payload {
                                                             return this;
                                                         }
                                                         let ws_s = ws_s.clone();
@@ -439,7 +428,7 @@ pub(super) fn render_body_tab(
                                                         )
                                                     })
                                                     // Copy Button (text responses only)
-                                                    .when(!is_raster_image, |this| {
+                                                    .when(!is_raster_image && !is_binary, |this| {
                                                         let rs_c = rs_copy.clone();
                                                         this.child(
                                                             Button::new("btn-copy-response")
@@ -450,10 +439,6 @@ pub(super) fn render_body_tab(
                                                                 .on_click(move |_, _, cx: &mut App| {
                                                                     let copy_text = rs_c.read(cx).formatted_body.as_ref()
                                                                         .map(|f| f.display_text.to_string())
-                                                                        .or_else(|| {
-                                                                            rs_c.read(cx).current_response.as_ref()
-                                                                                .map(|r| String::from_utf8_lossy(&r.body).to_string())
-                                                                        })
                                                                         .unwrap_or_default();
                                                                     cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(copy_text));
                                                                 }),
@@ -468,12 +453,13 @@ pub(super) fn render_body_tab(
                                                             .icon(IconName::Download)
                                                             .tooltip("Save to File")
                                                             .on_click(move |_, _, cx: &mut App| {
+                                                                // Zero-copy Arc clone: never duplicate a 100MB Vec<u8> on the UI thread.
                                                                 let save_data = rs_s
                                                                     .read(cx)
                                                                     .current_response
                                                                     .as_ref()
-                                                                    .map(|r| (r.body.clone(), r.suggested_filename()));
-                                                                if let Some((bytes, file_name)) = save_data {
+                                                                    .map(|r| (r.clone(), r.suggested_filename()));
+                                                                if let Some((record, file_name)) = save_data {
                                                                     cx.spawn(async move |cx| {
                                                                         if let Some(file) = rfd::AsyncFileDialog::new()
                                                                             .set_file_name(&file_name)
@@ -483,7 +469,7 @@ pub(super) fn render_body_tab(
                                                                             let path = file.path().to_path_buf();
                                                                             cx.background_executor()
                                                                                 .spawn(async move {
-                                                                                    let _ = std::fs::write(path, &bytes);
+                                                                                    let _ = std::fs::write(path, &record.body);
                                                                                 })
                                                                                 .await;
                                                                         }
@@ -567,7 +553,10 @@ pub(super) fn render_body_tab(
                                                     div()
                                                         .text_xs()
                                                         .text_color(t.var_unresolved)
-                                                        .child(format!("⚠ Large payload ({} lines). Virtualized list active at 120 FPS.", total_lines)),
+                                                        .child(format!(
+                                                            "⚠ Large payload ({}). Showing bounded preview — use \"Save to File\" for full content.",
+                                                            c_resp.formatted_size()
+                                                        )),
                                                 )
                                         )
                                     })

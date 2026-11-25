@@ -265,7 +265,7 @@ impl Runner {
                             });
                         }
 
-                        let loc_file = LocFile::from_record(&record);
+                        let record_for_disk = record.clone();
                         workspace_state.update(cx, |ws, cx| {
                             if let Some(r) = ws.find_request_mut(&req_id) {
                                 r.last_status_code = Some(status);
@@ -280,6 +280,7 @@ impl Runner {
                             let cookies = ws.sync_cookies_in_memory();
                             cx.background_executor()
                                 .spawn(async move {
+                                    let loc_file = LocFile::from_record(&record_for_disk);
                                     let _ = store.save_response_cache(&req_id_for_disk, &loc_file);
                                     if let Ok(val) = serde_json::to_value(&cookies) {
                                         let _ = store.save_cookies(&val);

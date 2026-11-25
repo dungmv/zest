@@ -55,14 +55,14 @@ pub struct PostResponseContext {
 impl PostResponseContext {
     pub fn from_response_and_env(record: &HttpResponseRecord, env: Option<&Environment>) -> Self {
         let env_vars = env.map(|e| e.variables.clone()).unwrap_or_default();
-        let response_body = match record.body_as_str() {
-            Ok(s) => {
-                const MAX_STR_LEN: usize = 10 * 1024 * 1024;
-                if s.len() > MAX_STR_LEN {
-                    s[..MAX_STR_LEN].to_string()
-                } else {
-                    s.to_string()
-                }
+        const MAX_STR_LEN: usize = 10 * 1024 * 1024;
+        let slice = &record.body[..record.body.len().min(MAX_STR_LEN)];
+        let response_body = match std::str::from_utf8(slice) {
+            Ok(s) => s.to_string(),
+            Err(err) if record.body.len() > MAX_STR_LEN && err.error_len().is_none() => {
+                std::str::from_utf8(&slice[..err.valid_up_to()])
+                    .unwrap_or("")
+                    .to_string()
             }
             Err(_) => String::new(),
         };

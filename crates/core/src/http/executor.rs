@@ -450,6 +450,8 @@ impl ReqwestExecutor {
         let mut body_bytes: Vec<u8> = Vec::new();
         let mut total_received = 0usize;
         let mut stream = response.bytes_stream();
+        const PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(50);
+        let mut last_progress_emit: Option<Instant> = None;
 
         let download_start = Instant::now();
         loop {
@@ -474,10 +476,13 @@ impl ReqwestExecutor {
                 }
             }
             if let Some(tx) = &progress_tx {
-                let _ = tx.send(HttpProgress::Downloading {
-                    received_bytes: total_received,
-                    total_bytes: None,
-                });
+                if last_progress_emit.is_none_or(|t| t.elapsed() >= PROGRESS_EMIT_INTERVAL) {
+                    let _ = tx.send(HttpProgress::Downloading {
+                        received_bytes: total_received,
+                        total_bytes: None,
+                    });
+                    last_progress_emit = Some(Instant::now());
+                }
             }
         }
         let download_ms = download_start.elapsed().as_millis() as u64;
@@ -567,13 +572,30 @@ impl HttpExecutor for ReqwestExecutor {
         let total_size = response.content_length().map(|s| s as usize);
 
         let download_start = Instant::now();
-        let mut body_bytes = Vec::new();
+        const MAX_INITIAL_BODY_CAPACITY: usize = 64 * 1024 * 1024;
+        const PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(50);
+        let mut body_bytes =
+            Vec::with_capacity(total_size.unwrap_or(0).min(MAX_INITIAL_BODY_CAPACITY));
         let mut stream = response.bytes_stream();
+        let mut last_progress_emit: Option<Instant> = None;
+        let mut last_reported_bytes = 0usize;
 
         while let Some(chunk_res) = stream.next().await {
             let chunk = chunk_res.map_err(|e| RequestError::Network(e.to_string()))?;
             body_bytes.extend_from_slice(&chunk);
             if let Some(tx) = &progress_tx {
+                if last_progress_emit.is_none_or(|t| t.elapsed() >= PROGRESS_EMIT_INTERVAL) {
+                    last_reported_bytes = body_bytes.len();
+                    let _ = tx.send(HttpProgress::Downloading {
+                        received_bytes: last_reported_bytes,
+                        total_bytes: total_size,
+                    });
+                    last_progress_emit = Some(Instant::now());
+                }
+            }
+        }
+        if let Some(tx) = &progress_tx {
+            if body_bytes.len() != last_reported_bytes {
                 let _ = tx.send(HttpProgress::Downloading {
                     received_bytes: body_bytes.len(),
                     total_bytes: total_size,

@@ -13,6 +13,17 @@ use zest_core::transport::{
 use super::pipeline::{merge_env_mutations, run_pre_request_stage};
 use super::send_event::SendEvent;
 
+/// Formats a byte count into a compact human-readable label for download progress.
+fn format_progress_bytes(bytes: usize) -> String {
+    if bytes < 1024 {
+        format!("{bytes} B")
+    } else if bytes < 1024 * 1024 {
+        format!("{:.1} KB", bytes as f64 / 1024.0)
+    } else {
+        format!("{:.2} MB", bytes as f64 / (1024.0 * 1024.0))
+    }
+}
+
 /// Per-request SSE frames kept engine-side so the view survives request
 /// switches while a stream is still running (mirrors `GrpcEngine`).
 const MAX_SSE_LOG_FRAMES: usize = 1000;
@@ -139,9 +150,16 @@ impl HttpEngine {
                             total_bytes,
                         } => {
                             if let Some(total) = total_bytes {
-                                format!("Downloading ({}/{} B)...", received_bytes, total)
+                                format!(
+                                    "Downloading ({} / {})...",
+                                    format_progress_bytes(received_bytes),
+                                    format_progress_bytes(total)
+                                )
                             } else {
-                                format!("Downloading ({} B)...", received_bytes)
+                                format!(
+                                    "Downloading ({})...",
+                                    format_progress_bytes(received_bytes)
+                                )
                             }
                         }
                     };

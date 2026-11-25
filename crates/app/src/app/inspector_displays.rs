@@ -44,17 +44,15 @@ impl InspectorDisplays {
         let (display_text, is_json, is_xml) = {
             let resp_s = response_state.read(cx);
             if let Some(fmt) = &resp_s.formatted_body {
-                (fmt.display_text.to_string(), fmt.is_json, fmt.is_xml)
-            } else if let Some(resp) = &resp_s.current_response {
-                let text = String::from_utf8_lossy(&resp.body).to_string();
-                let is_j = resp.is_json()
-                    || text.trim_start().starts_with('{')
-                    || text.trim_start().starts_with('[');
-                let is_x = !is_j
-                    && (resp.is_xml()
-                        || text.trim_start().starts_with("<?xml")
-                        || (text.trim_start().starts_with('<') && text.trim_end().ends_with('>')));
-                (text, is_j, is_x)
+                if fmt.is_truncated {
+                    // Large/truncated payloads render in the virtualized list
+                    // (`body_tab.rs`), never in `CodeEditorState`. Keep the
+                    // editor empty so we never index/highlight megabytes on
+                    // the UI thread.
+                    (String::new(), false, false)
+                } else {
+                    (fmt.display_text.to_string(), fmt.is_json, fmt.is_xml)
+                }
             } else {
                 (String::new(), false, false)
             }
