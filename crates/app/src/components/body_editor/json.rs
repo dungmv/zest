@@ -10,6 +10,7 @@ use std::ops::Range;
 pub struct JsonHighlighter {
     pub text: Rope,
     pub cached_str: String,
+    comments: Vec<Range<usize>>,
 }
 
 impl JsonHighlighter {
@@ -17,6 +18,7 @@ impl JsonHighlighter {
         Self {
             text: Rope::new(),
             cached_str: String::new(),
+            comments: Vec::new(),
         }
     }
 }
@@ -42,6 +44,9 @@ impl InputHighlighter for JsonHighlighter {
     ) {
         self.text = text.clone();
         self.cached_str = text.to_string();
+        self.comments.clear();
+        self.comments
+            .extend(zest_core::jsonc::comment_ranges(&self.cached_str));
     }
 
     fn styles(
@@ -76,7 +81,25 @@ impl InputHighlighter for JsonHighlighter {
         let mut raw_tokens = Vec::new();
         let t = theme();
 
+        let first_comment = self
+            .comments
+            .partition_point(|comment| comment.end <= start);
+        let mut comments = self.comments[first_comment..].iter().peekable();
         while i < len {
+            if let Some(comment) = comments.next_if(|comment| comment.start <= start + i) {
+                let comment_end = comment.end.min(end);
+                if comment_end > start + i {
+                    raw_tokens.push((
+                        start + i..comment_end,
+                        HighlightStyle {
+                            color: Some(t.text_muted),
+                            ..Default::default()
+                        },
+                    ));
+                    i = comment_end - start;
+                    continue;
+                }
+            }
             let b = slice_bytes[i];
             if b == b'"' {
                 let tok_start = i;
@@ -217,7 +240,16 @@ impl InputHighlighter for JsonHighlighter {
         let len = bytes.len();
         let mut i = 0;
 
+        let mut comments = zest_core::jsonc::comment_ranges(&s).peekable();
         while i < len {
+            if let Some(comment) = comments.next_if(|range| range.start == i) {
+                current_line += bytes[comment.clone()]
+                    .iter()
+                    .filter(|&&b| b == b'\n')
+                    .count();
+                i = comment.end;
+                continue;
+            }
             let b = bytes[i];
             if in_string {
                 if escaped {
@@ -330,6 +362,15 @@ mod tests {
         let rope = Rope::from_str(json_text);
         let folds = highlighter.fold_ranges(&rope);
         assert!(!folds.is_empty(), "Should detect foldable ranges");
+    }
+
+    #[test]
+    fn json_highlighter_ignores_brackets_inside_comments_when_folding() {
+        let source = "{\n  /* }\n     [ */\n  \"url\": \"https://example.com\"\n}";
+        let highlighter = JsonHighlighter::new();
+        let folds = highlighter.fold_ranges(&Rope::from_str(source));
+        assert_eq!(folds.len(), 1);
+        assert_eq!((folds[0].start_line, folds[0].end_line), (0, 4));
     }
 
     #[test]

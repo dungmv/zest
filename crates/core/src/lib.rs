@@ -8,6 +8,7 @@ pub mod grpc;
 pub mod http;
 pub mod importers;
 pub mod json_path;
+pub mod jsonc;
 pub mod models;
 pub mod scripting;
 pub mod sse;

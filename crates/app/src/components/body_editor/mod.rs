@@ -10,7 +10,7 @@ pub use json::*;
 pub use multipart::*;
 pub use xml::*;
 
-use crate::components::format_json_editor;
+use crate::components::format_jsonc_editor;
 use crate::components::message_toolbar;
 use crate::state::{
     edit_active_request, CollectionState, EnvironmentState, ModalState, RequestSessionState,
@@ -389,7 +389,7 @@ impl BodyEditor {
                 .xsmall()
                 .label("Format JSON")
                 .on_click(move |_, window, cx: &mut App| {
-                    format_json_editor(&j_text, &ed_c, window, cx);
+                    format_jsonc_editor(&j_text, &ed_c, window, cx);
                 })
                 .into_any_element()
         } else if is_xml {

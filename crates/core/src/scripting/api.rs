@@ -14,7 +14,9 @@ impl PreRequestContext {
     pub fn from_request_and_env(item: &RequestItem, env: Option<&Environment>) -> Self {
         let env_vars = env.map(|e| e.variables.clone()).unwrap_or_default();
         let request_body_json = match &item.body {
-            RequestBody::Json { content: raw_json } => Some(raw_json.clone()),
+            RequestBody::Json { content: raw_json } => {
+                Some(crate::jsonc::to_json(raw_json).into_owned())
+            }
             _ => None,
         };
 

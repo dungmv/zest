@@ -438,7 +438,9 @@ fn extract_path_param_names(path: &str) -> Vec<String> {
 fn request_body_for(req: &ImportedRequest) -> Option<Value> {
     match &req.body {
         RequestBody::None => None,
-        RequestBody::Json { content } => Some(json_request_body(json_media(content))),
+        RequestBody::Json { content } => Some(json_request_body(json_media(
+            &crate::jsonc::to_json(content),
+        ))),
         RequestBody::FormUrlEncoded { params } => {
             let mut properties = Map::new();
             for p in params.iter().filter(|p| p.enabled && !p.key.is_empty()) {

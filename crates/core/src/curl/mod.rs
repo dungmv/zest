@@ -409,7 +409,8 @@ pub fn request_to_curl(item: &RequestItem, env: Option<&Environment>) -> String 
     match &item.body {
         RequestBody::None => {}
         RequestBody::Json { content: raw_json } => {
-            let interpolated = interpolator.interpolate_cow(raw_json);
+            let json = crate::jsonc::to_json(raw_json);
+            let interpolated = interpolator.interpolate_cow(&json);
             parts.push("-H".to_string());
             parts.push("'Content-Type: application/json'".to_string());
             parts.push("-d".to_string());

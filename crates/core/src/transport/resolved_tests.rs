@@ -88,3 +88,47 @@ fn test_resolved_request_no_duplicate_query() {
     let resolved_clean = ResolvedRequest::from_item(&item_clean, None).unwrap();
     assert_eq!(resolved_clean.url, "https://api.example.com/search?q=rust");
 }
+
+#[test]
+fn jsonc_request_sends_json_and_preserves_the_source() {
+    use crate::models::{Environment, EnvironmentVariable};
+
+    let mut item = RequestItem::new("ws-1", "JSONC", HttpMethod::Post, "https://example.com");
+    let source = "{\n// {{name}}\n\"name\": \"{{name}}\",\n\"id\": {{id}}, /* omitted */\n}";
+    item.set_body_json(source.to_owned());
+    let mut env = Environment::new("ws-1", "Test");
+    env.variables.extend([
+        EnvironmentVariable {
+            key: "name".into(),
+            current_value: "https://example.com/ñ".into(),
+            ..Default::default()
+        },
+        EnvironmentVariable {
+            key: "id".into(),
+            current_value: "42".into(),
+            ..Default::default()
+        },
+    ]);
+
+    let resolved = ResolvedRequest::from_item(&item, Some(&env)).unwrap();
+    let body = resolved.body.unwrap();
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&body).unwrap(),
+        serde_json::json!({"name": "https://example.com/ñ", "id": 42})
+    );
+    assert!(resolved
+        .headers
+        .contains(&("Content-Type".into(), "application/json".into())));
+    assert_eq!(
+        resolved.sent_info.body_preview.as_deref(),
+        std::str::from_utf8(&body).ok()
+    );
+    let curl = crate::curl::request_to_curl(&item, Some(&env));
+    assert!(curl.contains(std::str::from_utf8(&body).unwrap()));
+    assert_eq!(
+        item.body,
+        RequestBody::Json {
+            content: source.into()
+        }
+    );
+}

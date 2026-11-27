@@ -181,7 +181,8 @@ impl ResolvedRequest {
                 if !content_type_set {
                     headers.push(("Content-Type".to_string(), "application/json".to_string()));
                 }
-                let interpolated = interpolator.interpolate_cow(raw_json);
+                let json = crate::jsonc::to_json(raw_json);
+                let interpolated = interpolator.interpolate_cow(&json);
                 Some(interpolated.into_owned().into_bytes())
             }
             RequestBody::FormUrlEncoded { params: pairs } => {
