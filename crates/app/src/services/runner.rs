@@ -318,11 +318,6 @@ impl Runner {
                             });
 
                             response_state.update(cx, |resp, cx| {
-                                resp.set_test_results(
-                                    post_output.test_results,
-                                    record.console_logs.clone(),
-                                    cx,
-                                );
                                 resp.set_response_for_request(req_id.clone(), record, cx);
                             });
 

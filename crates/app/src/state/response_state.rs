@@ -131,19 +131,20 @@ impl ResponseState {
     pub fn load_for_request_internal(&mut self, req_id: &str, store: &dyn WorkspaceStore) {
         self.active_example_name = None;
         if let Some(cached) = self.cache.get(&req_id.to_string()).cloned() {
-            self.test_results = cached.test_results.clone();
-            self.console_logs = cached.console_logs.clone();
             self.current_response = Some(cached);
         } else if let Ok(Some(loc)) = store.load_response_cache(req_id) {
             let record = Arc::new(loc.to_record(req_id));
-            self.test_results = record.test_results.clone();
-            self.console_logs = record.console_logs.clone();
             self.cache.insert(req_id.to_string(), record.clone());
             self.current_response = Some(record);
         } else {
+            self.current_response = None;
+        }
+        if let Some(response) = self.current_response.clone() {
+            self.load_console_output(&response);
+        } else {
             self.test_results.clear();
             self.console_logs.clear();
-            self.current_response = None;
+            self.sync_console_list();
         }
         self.ui.jsonpath_query.clear();
         self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
@@ -171,6 +172,7 @@ impl ResponseState {
         self.current_response = None;
         self.formatted_body = None;
         self.test_results.clear();
+        self.sync_console_list();
         self.ui.show_timing_popover = false;
         self.active_example_name = None;
         self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
@@ -203,8 +205,7 @@ impl ResponseState {
         cx: &mut Context<Self>,
     ) {
         self.active_example_name = None;
-        self.test_results = response.test_results.clone();
-        self.console_logs = response.console_logs.clone();
+        self.load_console_output(&response);
 
         self.cache.insert(req_id, response.clone());
         self.current_response = Some(response);
@@ -374,8 +375,7 @@ impl ResponseState {
         cx: &mut Context<Self>,
     ) {
         if let Some(r) = &response {
-            self.test_results = r.test_results.clone();
-            self.console_logs = r.console_logs.clone();
+            self.load_console_output(r);
         }
         self.current_response = response;
         self.ui.jsonpath_query.clear();
@@ -513,6 +513,13 @@ impl ResponseState {
             .reset(self.test_results.len() + self.console_logs.len());
     }
 
+    fn load_console_output(&mut self, response: &HttpResponseRecord) {
+        self.test_results.clone_from(&response.test_results);
+        let start = response.console_logs.len().saturating_sub(MAX_CONSOLE_LOGS);
+        self.console_logs = response.console_logs[start..].to_vec();
+        self.sync_console_list();
+    }
+
     // --- WebSocket session view ------------------------------------------
 
     pub fn set_ws_status(&mut self, status: WebSocketStatus, cx: &mut Context<Self>) {
@@ -560,18 +567,6 @@ impl ResponseState {
         self.realtime.frames_list.reset(self.realtime.frames.len());
         self.realtime.ws_handshake_headers = handshake_headers;
         self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
-        cx.notify();
-    }
-
-    pub fn set_test_results(
-        &mut self,
-        results: Vec<TestResult>,
-        logs: Vec<ConsoleLogEntry>,
-        cx: &mut Context<Self>,
-    ) {
-        self.test_results = results;
-        self.console_logs = self.cap_console_logs(logs);
-        self.sync_console_list();
         cx.notify();
     }
 

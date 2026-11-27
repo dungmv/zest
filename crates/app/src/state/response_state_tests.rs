@@ -112,6 +112,42 @@ fn test_console_tab_kind() {
     assert_eq!(state.active_tab, ResponseTabKind::Console);
 }
 
+#[gpui_kit::test]
+fn console_log_is_visible_in_the_list_viewport(cx: &mut gpui_kit::TestAppContext) {
+    use crate::components::ConsolePanel;
+    use gpui_kit::{AppContext as _, Entity, IntoElement, Render, Window};
+
+    struct ConsoleView(Entity<ResponseState>);
+
+    impl Render for ConsoleView {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            ConsolePanel::new(self.0.clone())
+        }
+    }
+
+    let response = cx.new(|_| ResponseState::new());
+    let list = cx.update(|cx| {
+        response.update(cx, |state, cx| {
+            state.set_pre_request_logs(
+                vec![ConsoleLogEntry {
+                    source: ConsoleLogSource::PreRequest,
+                    level: ConsoleLogLevel::Log,
+                    message: r#"{"authenticated":true}"#.into(),
+                    timestamp: "10:00:00".into(),
+                }],
+                cx,
+            );
+            state.console_list.clone()
+        })
+    });
+
+    cx.add_window_view(|_, _| ConsoleView(response));
+
+    let viewport = list.viewport_bounds();
+    let row = list.bounds_for_item(0).expect("console row was laid out");
+    assert!(row.top() < viewport.bottom() && row.bottom() > viewport.top());
+}
+
 #[test]
 fn test_large_response_body_formatting() {
     let mut state = ResponseState::new();
@@ -203,6 +239,21 @@ fn test_load_for_request_from_cache() {
     assert_eq!(resp.duration_ms, 42);
     assert_eq!(String::from_utf8_lossy(&resp.body), r#"{"token":"xyz"}"#);
     assert!(state.formatted_body.is_some());
+
+    let mut cached = resp.as_ref().clone();
+    cached.console_logs.push(ConsoleLogEntry {
+        source: ConsoleLogSource::PostResponse,
+        level: ConsoleLogLevel::Log,
+        message: r#"{"authenticated":true}"#.into(),
+        timestamp: "10:00:00".into(),
+    });
+    state.cache.insert(rel_path.clone(), Arc::new(cached));
+    state.load_for_request_internal(&rel_path, &store);
+    assert_eq!(state.console_logs.len(), 1);
+    assert_eq!(state.console_list.item_count(), 1);
+
+    state.load_for_request_internal("missing", &store);
+    assert_eq!(state.console_list.item_count(), 0);
 }
 
 #[test]

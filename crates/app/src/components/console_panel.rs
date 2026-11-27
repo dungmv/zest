@@ -63,6 +63,7 @@ impl RenderOnce for ConsolePanel {
                                 }
                             }
                         })
+                        .size_full()
                         .into_any_element()
                     }
                 }),
