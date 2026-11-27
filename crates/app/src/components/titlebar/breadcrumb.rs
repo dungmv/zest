@@ -1,4 +1,4 @@
-use crate::state::{effective_request_name, ModalKind, ModalState, WorkspaceDataState};
+use crate::state::{effective_request_name, CollectionState, ModalKind, ModalState};
 use crate::theme::theme;
 use gpui_kit::component::breadcrumb::{Breadcrumb, BreadcrumbItem};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -10,7 +10,7 @@ use gpui_kit::{
 /// Center search button: opens the command palette and shows the active
 /// request's folder path as a truncated breadcrumb.
 pub(super) fn render_center_section(
-    ws: &WorkspaceDataState,
+    ws: &CollectionState,
     active_id: &str,
     example_name: Option<&String>,
     modal_state: &Entity<ModalState>,

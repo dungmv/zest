@@ -2,7 +2,7 @@ mod file_picker;
 mod row;
 
 use crate::env::{build_tokenized_content, detect_unclosed_env_var};
-use crate::state::{EnvironmentState, ModalState, RequestSessionState, WorkspaceDataState};
+use crate::state::{CollectionState, EnvironmentState, ModalState, RequestSessionState};
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::{
@@ -44,14 +44,14 @@ pub(super) struct MpRowInputs {
 pub(super) struct MpTableState {
     pub(super) rows: Vec<MpRowInputs>,
     pub(super) req_id: String,
-    pub(super) workspace_state: Option<Entity<WorkspaceDataState>>,
+    pub(super) workspace_state: Option<Entity<CollectionState>>,
     pub(super) editor_state: Entity<RequestSessionState>,
 }
 
 impl MpTableState {
     pub(super) fn new(
         req_id: String,
-        workspace_state: Option<Entity<WorkspaceDataState>>,
+        workspace_state: Option<Entity<CollectionState>>,
         editor_state: Entity<RequestSessionState>,
     ) -> Self {
         Self {
@@ -298,7 +298,7 @@ impl MpTableState {
 pub struct MultipartContext<'a> {
     pub req_id_str: &'a str,
     pub editor_state: &'a Entity<RequestSessionState>,
-    pub workspace_state: Option<&'a Entity<WorkspaceDataState>>,
+    pub workspace_state: Option<&'a Entity<CollectionState>>,
     pub env_state: Option<&'a Entity<EnvironmentState>>,
     pub modal_state: Option<&'a Entity<ModalState>>,
 }

@@ -4,7 +4,7 @@ use super::item_actions::delete_multi_selected_items;
 use super::{SidebarRenderContext, SIDEBAR_ROW_HEIGHT};
 use crate::app::actions::DismissModal;
 use crate::state::{
-    ModalKind, ModalPayload, ModalState, RequestSessionState, SidebarState, WorkspaceDataState,
+    CollectionState, ModalKind, ModalPayload, ModalState, RequestSessionState, SidebarState,
     WorkspaceSettingTarget,
 };
 use crate::theme::theme;
@@ -216,7 +216,7 @@ fn build_folder_context_menu(
     menu: PopupMenu,
     folder_id: &str,
     folder_name: &str,
-    ws: &Entity<WorkspaceDataState>,
+    ws: &Entity<CollectionState>,
     ed: &Entity<RequestSessionState>,
     sb: &Entity<SidebarState>,
     modal: &Entity<ModalState>,

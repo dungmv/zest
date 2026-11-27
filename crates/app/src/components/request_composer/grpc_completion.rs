@@ -15,19 +15,19 @@ use zest_core::grpc::{
 };
 
 use crate::env::{unclosed_env_span, EnvCompletionProvider};
-use crate::state::{EnvironmentState, RequestSessionState, WorkspaceDataState};
+use crate::state::{CollectionState, EnvironmentState, RequestSessionState};
 
 pub(super) struct ProtoJsonCompletionProvider {
     env: EnvCompletionProvider,
     session_state: Entity<RequestSessionState>,
-    workspace_state: Entity<WorkspaceDataState>,
+    workspace_state: Entity<CollectionState>,
 }
 
 impl ProtoJsonCompletionProvider {
     pub(super) fn new(
         env_state: Entity<EnvironmentState>,
         session_state: Entity<RequestSessionState>,
-        workspace_state: Entity<WorkspaceDataState>,
+        workspace_state: Entity<CollectionState>,
     ) -> Self {
         Self {
             env: EnvCompletionProvider::new(env_state),

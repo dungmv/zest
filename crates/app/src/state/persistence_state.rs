@@ -1,6 +1,6 @@
 use super::{
-    EnvironmentState, PersistPayload, PersistTarget, PersistenceCoordinator, TargetStatus,
-    WorkspaceDataState, WorkspaceEvent,
+    CollectionEvent, CollectionState, EnvironmentState, PersistPayload, PersistTarget,
+    PersistenceCoordinator, TargetStatus,
 };
 use gpui_kit::{Context, Entity, Task};
 use std::collections::{HashMap, HashSet};
@@ -278,7 +278,7 @@ impl PersistenceState {
     pub fn schedule_save_active_request(
         &mut self,
         req_id: String,
-        workspace_data: Entity<WorkspaceDataState>,
+        workspace_data: Entity<CollectionState>,
         cx: &mut Context<Self>,
     ) {
         if req_id == "scratch" || req_id.is_empty() {
@@ -430,7 +430,7 @@ impl PersistenceState {
     pub fn resolve_conflict_reload(
         &mut self,
         rel_path: &str,
-        workspace_data: Entity<WorkspaceDataState>,
+        workspace_data: Entity<CollectionState>,
         cx: &mut Context<Self>,
     ) {
         self.conflicts.remove(rel_path);
@@ -444,7 +444,7 @@ impl PersistenceState {
             let path = rel_path.to_string();
             workspace_data.update(cx, |ws, cx| {
                 ws.parse_errors.remove(&path);
-                let ws_name = ws.workspace_meta.name.clone();
+                let ws_name = ws.workspace_scope.name.clone();
                 if let Some(r) = ws.requests.iter_mut().find(|r| r.id == path) {
                     let prev_status = r.last_status_code.or_else(|| {
                         ws.store
@@ -457,7 +457,7 @@ impl PersistenceState {
                     r.last_status_code = prev_status;
                 }
                 ws.bump_tree_version();
-                cx.emit(WorkspaceEvent::RequestsReloaded {
+                cx.emit(CollectionEvent::RequestsReloaded {
                     req_ids: Some(vec![path]),
                 });
                 cx.notify();
@@ -469,7 +469,7 @@ impl PersistenceState {
     pub fn resolve_conflict_keep(
         &mut self,
         rel_path: &str,
-        workspace_data: Entity<WorkspaceDataState>,
+        workspace_data: Entity<CollectionState>,
         cx: &mut Context<Self>,
     ) {
         self.conflicts.remove(rel_path);

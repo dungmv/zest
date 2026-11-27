@@ -5,17 +5,17 @@ use gpui_kit::{div, AnyElement, Context, IntoElement, ParentElement, Styled};
 
 pub(super) fn render_params_tab(av: &AppView, cx: &mut Context<AppView>) -> AnyElement {
     let req_id_str = av.state.session.read(cx).active_request_id().to_string();
-    let ws_read = av.state.workspace.read(cx);
+    let ws_read = av.state.collection.read(cx);
     let params = ws_read
         .find_request(&req_id_str)
         .map(|r| r.params.clone())
         .unwrap_or_default();
     let ed_up = av.state.session.clone();
-    let ws_up = av.state.workspace.clone();
+    let ws_up = av.state.collection.clone();
     let ed_add = av.state.session.clone();
-    let ws_add = av.state.workspace.clone();
+    let ws_add = av.state.collection.clone();
     let ed_del = av.state.session.clone();
-    let ws_del = av.state.workspace.clone();
+    let ws_del = av.state.collection.clone();
     let req_id_k = req_id_str.clone();
     let req_id_a = req_id_str.clone();
     let req_id_d = req_id_str.clone();

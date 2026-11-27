@@ -351,7 +351,7 @@ fn test_persistence_state_write_behind_flush(cx: &mut gpui_kit::TestAppContext) 
 fn test_request_persistence_state_and_remap(cx: &mut gpui_kit::TestAppContext) {
     let (dir, store) = setup_test_workspace("RequestRemap");
     let ws_state =
-        cx.new(|_| WorkspaceDataState::new_for_path(dir.path().to_path_buf(), store.clone()));
+        cx.new(|_| CollectionState::new_for_path(dir.path().to_path_buf(), store.clone()));
     let per_state = cx.new(|_| PersistenceState::new(store.clone(), dir.path().to_path_buf()));
 
     // 1. Create request in workspace
@@ -417,7 +417,7 @@ fn test_fs_batch_recreated_request_not_dropped(cx: &mut gpui_kit::TestAppContext
 
     let (dir, store) = setup_test_workspace("WatcherRecreated");
     let ws_state =
-        cx.new(|_| WorkspaceDataState::new_for_path(dir.path().to_path_buf(), store.clone()));
+        cx.new(|_| CollectionState::new_for_path(dir.path().to_path_buf(), store.clone()));
     let env_state =
         cx.new(|_| EnvironmentState::new(store.clone(), "WatcherRecreated".to_string(), None));
     let per_state = cx.new(|_| PersistenceState::new(store.clone(), dir.path().to_path_buf()));
@@ -484,7 +484,7 @@ fn test_external_change_reconciles_clean_vs_dirty(cx: &mut gpui_kit::TestAppCont
 
     let (dir, store) = setup_test_workspace("test_reconcile");
     let ws_state =
-        cx.new(|_| WorkspaceDataState::new_for_path(dir.path().to_path_buf(), store.clone()));
+        cx.new(|_| CollectionState::new_for_path(dir.path().to_path_buf(), store.clone()));
     let per_state = cx.new(|_| PersistenceState::new(store.clone(), dir.path().to_path_buf()));
     let env_state =
         cx.new(|_| EnvironmentState::new(store.clone(), "test_reconcile".to_string(), None));
@@ -579,7 +579,7 @@ async fn test_watcher_env_conflict_and_tree_changed_preserves_dirty(
 
     let (dir, store) = setup_test_workspace("test_env_conflict");
     let ws_state =
-        cx.new(|_| WorkspaceDataState::new_for_path(dir.path().to_path_buf(), store.clone()));
+        cx.new(|_| CollectionState::new_for_path(dir.path().to_path_buf(), store.clone()));
     let per_state = cx.new(|_| PersistenceState::new(store.clone(), dir.path().to_path_buf()));
     let env_state =
         cx.new(|_| EnvironmentState::new(store.clone(), "test_env_conflict".to_string(), None));

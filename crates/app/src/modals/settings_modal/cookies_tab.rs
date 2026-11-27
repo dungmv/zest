@@ -1,4 +1,4 @@
-use crate::state::{ModalState, WorkspaceDataState};
+use crate::state::{ModalState, WorkspaceState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::empty::{
@@ -14,7 +14,7 @@ use gpui_kit::{
 };
 
 pub fn render_cookies_tab(
-    workspace_state: &Entity<WorkspaceDataState>,
+    workspace_state: &Entity<WorkspaceState>,
     modal_state: &Entity<ModalState>,
     window: &mut Window,
     cx: &mut App,

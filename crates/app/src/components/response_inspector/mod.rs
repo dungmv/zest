@@ -11,7 +11,7 @@ mod status_pill;
 mod timing_popover;
 
 use crate::components::tabs_with_badge::render_tab_badge;
-use crate::state::{RequestSessionState, ResponseState, ResponseTabKind, WorkspaceDataState};
+use crate::state::{CollectionState, RequestSessionState, ResponseState, ResponseTabKind};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -30,7 +30,7 @@ use zest_core::ws::WebSocketStatus;
 
 #[derive(IntoElement)]
 pub struct ResponseInspector {
-    workspace_state: Entity<WorkspaceDataState>,
+    workspace_state: Entity<CollectionState>,
     editor_state: Entity<RequestSessionState>,
     response_state: Entity<ResponseState>,
     response_editor: Entity<CodeEditorState>,
@@ -39,7 +39,7 @@ pub struct ResponseInspector {
 
 impl ResponseInspector {
     pub fn new(
-        workspace_state: Entity<WorkspaceDataState>,
+        workspace_state: Entity<CollectionState>,
         editor_state: Entity<RequestSessionState>,
         response_state: Entity<ResponseState>,
         response_editor: Entity<CodeEditorState>,

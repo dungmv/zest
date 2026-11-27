@@ -12,7 +12,7 @@ use gpui_kit::{App, Entity};
 use zest_core::graphql::validate_variables;
 use zest_core::grpc::validate_message;
 
-use crate::state::{RequestSessionState, WorkspaceDataState};
+use crate::state::{CollectionState, RequestSessionState};
 use crate::theme::theme;
 
 struct EditorDiagnostic {
@@ -30,7 +30,7 @@ pub(crate) fn refresh_grpc_validation(
     hovered: bool,
     text: &str,
     session_state: &Entity<RequestSessionState>,
-    workspace_state: &Entity<WorkspaceDataState>,
+    workspace_state: &Entity<CollectionState>,
     cx: &mut App,
 ) {
     let (req_id, schema) = {

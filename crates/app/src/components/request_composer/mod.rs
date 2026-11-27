@@ -48,7 +48,7 @@ impl AppView {
             .cloned();
         let active_parse_err = self
             .state
-            .workspace
+            .collection
             .read(cx)
             .parse_errors
             .get(&req_id_str)
@@ -78,7 +78,7 @@ impl AppView {
                 let view_handle = app_view_entity.clone();
                 let view_handle_disc = app_view_entity.clone();
                 RequestBar::new(
-                    self.state.workspace.clone(),
+                    self.state.collection.clone(),
                     self.state.env.clone(),
                     self.state.modal.clone(),
                     self.state.session.clone(),
@@ -116,7 +116,7 @@ impl AppView {
                         RequestTabKind::Headers => headers_tab::render_headers_tab(self, cx),
                         RequestTabKind::Auth => {
                             let (auth, folder_id) = {
-                                let ws_read = self.state.workspace.read(cx);
+                                let ws_read = self.state.collection.read(cx);
                                 let active_r = ws_read.find_request(&req_id_str);
                                 (
                                     active_r.map(|r| r.auth.clone()).unwrap_or(Auth::Inherit),
@@ -127,7 +127,7 @@ impl AppView {
                                 &auth,
                                 folder_id.as_deref(),
                                 auth_tab::AuthTabContext {
-                                    workspace_state: &self.state.workspace,
+                                    workspace_state: &self.state.collection,
                                     env_state: &self.state.env,
                                     modal_state: &self.state.modal,
                                     editor_state: &self.state.session,

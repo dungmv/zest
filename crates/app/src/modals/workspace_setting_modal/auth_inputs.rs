@@ -1,5 +1,5 @@
 use crate::env::{build_tokenized_content, detect_unclosed_env_var};
-use crate::state::{EnvironmentState, WorkspaceDataState, WorkspaceSettingTarget};
+use crate::state::{CollectionState, EnvironmentState, WorkspaceSettingTarget, WorkspaceState};
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::{App, AppContext as _, Entity, Window};
 use zest_core::models::{ApiKeyLocation, Auth};
@@ -12,394 +12,216 @@ pub struct ScopeAuthInputs {
     pub api_val_input: Entity<InputState>,
 }
 
+fn read_target_auth(
+    ws: &Entity<WorkspaceState>,
+    col: &Entity<CollectionState>,
+    target: &WorkspaceSettingTarget,
+    cx: &App,
+) -> Option<Auth> {
+    match target {
+        WorkspaceSettingTarget::Workspace => Some(ws.read(cx).workspace_meta.auth.clone()),
+        WorkspaceSettingTarget::Folder(fid) => col
+            .read(cx)
+            .folders
+            .iter()
+            .find(|f| &f.id == fid)
+            .map(|f| f.auth.clone()),
+    }
+}
+
+fn save_target_auth(
+    ws: &Entity<WorkspaceState>,
+    col: &Entity<CollectionState>,
+    target: &WorkspaceSettingTarget,
+    new_auth: Auth,
+    cx: &mut App,
+) {
+    match target {
+        WorkspaceSettingTarget::Workspace => {
+            let cur_h = ws
+                .read(cx)
+                .active_workspace
+                .as_ref()
+                .map(|w| w.headers.clone())
+                .unwrap_or_default();
+            ws.update(cx, |state, cx| {
+                state.save_workspace_settings(cur_h, new_auth, cx)
+            });
+        }
+        WorkspaceSettingTarget::Folder(fid) => {
+            let cur_h = col
+                .read(cx)
+                .folders
+                .iter()
+                .find(|f| &f.id == fid)
+                .map(|f| f.headers.clone())
+                .unwrap_or_default();
+            col.update(cx, |state, cx| {
+                state.save_folder_settings(fid, cur_h, new_auth, cx)
+            });
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn use_auth_field_input(
+    window: &mut Window,
+    cx: &mut App,
+    key: String,
+    placeholder: &'static str,
+    init_val: String,
+    ws: &Entity<WorkspaceState>,
+    col: &Entity<CollectionState>,
+    env: &Entity<EnvironmentState>,
+    target: &WorkspaceSettingTarget,
+    build_auth: impl Fn(String, Option<Auth>) -> Auth + 'static,
+) -> Entity<InputState> {
+    let ws_c = ws.clone();
+    let col_c = col.clone();
+    let env_c = env.clone();
+    let tgt = target.clone();
+    window
+        .use_keyed_state(gpui_kit::SharedString::from(key), cx, |window, cx| {
+            let input = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
+            let content = build_tokenized_content(&init_val, env_c.read(cx));
+            input.update(cx, |s, cx| s.set_value(content, window, cx));
+
+            let sub = cx.subscribe_in(&input, window, move |_, inp, ev, window, cx| {
+                if let InputEvent::Change = ev {
+                    let val = inp.read(cx).value().to_string();
+                    let cur = read_target_auth(&ws_c, &col_c, &tgt, cx);
+                    let new_auth = build_auth(val.clone(), cur);
+                    save_target_auth(&ws_c, &col_c, &tgt, new_auth, cx);
+                    if val.contains("}}") && detect_unclosed_env_var(&val).is_none() {
+                        let tokenized = build_tokenized_content(&val, env_c.read(cx));
+                        inp.update(cx, |s, cx| s.set_value(tokenized, window, cx));
+                    }
+                }
+            });
+            (input, sub)
+        })
+        .read(cx)
+        .0
+        .clone()
+}
+
 pub fn use_scope_auth_inputs(
     window: &mut Window,
     cx: &mut App,
     target: &WorkspaceSettingTarget,
     current_auth: &Auth,
-    ws_state: &Entity<WorkspaceDataState>,
+    ws_state: &Entity<WorkspaceState>,
+    col_state: &Entity<CollectionState>,
     env_state: &Entity<EnvironmentState>,
 ) -> ScopeAuthInputs {
-    let ws_clone = ws_state.clone();
-    let env_clone = env_state.clone();
-
-    // 1. Bearer Token Input
-    let bearer_token_holder = window.use_keyed_state(
-        gpui_kit::SharedString::from(format!("ws-setting-auth-bearer-{:?}", target)),
+    let bearer_init = match current_auth {
+        Auth::Bearer { token } => token.clone(),
+        _ => String::new(),
+    };
+    let bearer_input = use_auth_field_input(
+        window,
         cx,
-        |window, cx| {
-            let init_val = match current_auth {
-                Auth::Bearer { token } => token.clone(),
+        format!("ws-setting-auth-bearer-{:?}", target),
+        "Token or {{token}}",
+        bearer_init,
+        ws_state,
+        col_state,
+        env_state,
+        target,
+        |token, _| Auth::Bearer { token },
+    );
+
+    let basic_u_init = match current_auth {
+        Auth::Basic { username, .. } => username.clone(),
+        _ => String::new(),
+    };
+    let basic_user_input = use_auth_field_input(
+        window,
+        cx,
+        format!("ws-setting-auth-basic-u-{:?}", target),
+        "Username",
+        basic_u_init,
+        ws_state,
+        col_state,
+        env_state,
+        target,
+        |username, cur| {
+            let password = match cur {
+                Some(Auth::Basic { password, .. }) => password,
                 _ => String::new(),
             };
-            let input = cx.new(|cx| InputState::new(window, cx).placeholder("Token or {{token}}"));
-            let content = build_tokenized_content(&init_val, env_clone.read(cx));
-            input.update(cx, |s, cx| s.set_value(content, window, cx));
-
-            let ws_s = ws_clone.clone();
-            let tgt = target.clone();
-            let env_sub = env_clone.clone();
-            let sub = cx.subscribe_in(&input, window, move |_, inp, ev, window, cx| {
-                if let InputEvent::Change = ev {
-                    let token = inp.read(cx).value().to_string();
-                    let new_auth = Auth::Bearer {
-                        token: token.clone(),
-                    };
-                    match &tgt {
-                        WorkspaceSettingTarget::Workspace => {
-                            let cur_h = ws_s
-                                .read(cx)
-                                .active_workspace
-                                .as_ref()
-                                .map(|w| w.headers.clone())
-                                .unwrap_or_default();
-                            ws_s.update(cx, |state, cx| {
-                                state.save_workspace_settings(cur_h, new_auth, cx)
-                            });
-                        }
-                        WorkspaceSettingTarget::Folder(fid) => {
-                            let cur_h = ws_s
-                                .read(cx)
-                                .folders
-                                .iter()
-                                .find(|f| &f.id == fid)
-                                .map(|f| f.headers.clone())
-                                .unwrap_or_default();
-                            ws_s.update(cx, |state, cx| {
-                                state.save_folder_settings(fid, cur_h, new_auth, cx)
-                            });
-                        }
-                    }
-                    if token.contains("}}") && detect_unclosed_env_var(&token).is_none() {
-                        let tokenized = build_tokenized_content(&token, env_sub.read(cx));
-                        inp.update(cx, |s, cx| s.set_value(tokenized, window, cx));
-                    }
-                }
-            });
-            (input, sub)
+            Auth::Basic { username, password }
         },
     );
-    let bearer_input = bearer_token_holder.read(cx).0.clone();
 
-    // 2. Basic User Input
-    let basic_user_holder = window.use_keyed_state(
-        gpui_kit::SharedString::from(format!("ws-setting-auth-basic-u-{:?}", target)),
+    let basic_p_init = match current_auth {
+        Auth::Basic { password, .. } => password.clone(),
+        _ => String::new(),
+    };
+    let basic_pass_input = use_auth_field_input(
+        window,
         cx,
-        |window, cx| {
-            let init_val = match current_auth {
-                Auth::Basic { username, .. } => username.clone(),
+        format!("ws-setting-auth-basic-p-{:?}", target),
+        "Password",
+        basic_p_init,
+        ws_state,
+        col_state,
+        env_state,
+        target,
+        |password, cur| {
+            let username = match cur {
+                Some(Auth::Basic { username, .. }) => username,
                 _ => String::new(),
             };
-            let input = cx.new(|cx| InputState::new(window, cx).placeholder("Username"));
-            let content = build_tokenized_content(&init_val, env_clone.read(cx));
-            input.update(cx, |s, cx| s.set_value(content, window, cx));
-
-            let ws_s = ws_clone.clone();
-            let tgt = target.clone();
-            let env_sub = env_clone.clone();
-            let sub = cx.subscribe_in(&input, window, move |_, inp, ev, window, cx| {
-                if let InputEvent::Change = ev {
-                    let u = inp.read(cx).value().to_string();
-                    let p = match &tgt {
-                        WorkspaceSettingTarget::Workspace => {
-                            match &ws_s.read(cx).workspace_meta.auth {
-                                Auth::Basic { password, .. } => password.clone(),
-                                _ => String::new(),
-                            }
-                        }
-                        WorkspaceSettingTarget::Folder(fid) => {
-                            match ws_s
-                                .read(cx)
-                                .folders
-                                .iter()
-                                .find(|f| &f.id == fid)
-                                .map(|f| &f.auth)
-                            {
-                                Some(Auth::Basic { password, .. }) => password.clone(),
-                                _ => String::new(),
-                            }
-                        }
-                    };
-                    let new_auth = Auth::Basic {
-                        username: u.clone(),
-                        password: p,
-                    };
-                    match &tgt {
-                        WorkspaceSettingTarget::Workspace => {
-                            let cur_h = ws_s
-                                .read(cx)
-                                .active_workspace
-                                .as_ref()
-                                .map(|w| w.headers.clone())
-                                .unwrap_or_default();
-                            ws_s.update(cx, |state, cx| {
-                                state.save_workspace_settings(cur_h, new_auth, cx)
-                            });
-                        }
-                        WorkspaceSettingTarget::Folder(fid) => {
-                            let cur_h = ws_s
-                                .read(cx)
-                                .folders
-                                .iter()
-                                .find(|f| &f.id == fid)
-                                .map(|f| f.headers.clone())
-                                .unwrap_or_default();
-                            ws_s.update(cx, |state, cx| {
-                                state.save_folder_settings(fid, cur_h, new_auth, cx)
-                            });
-                        }
-                    }
-                    if u.contains("}}") && detect_unclosed_env_var(&u).is_none() {
-                        let tokenized = build_tokenized_content(&u, env_sub.read(cx));
-                        inp.update(cx, |s, cx| s.set_value(tokenized, window, cx));
-                    }
-                }
-            });
-            (input, sub)
+            Auth::Basic { username, password }
         },
     );
-    let basic_user_input = basic_user_holder.read(cx).0.clone();
 
-    // 3. Basic Password Input
-    let basic_pass_holder = window.use_keyed_state(
-        gpui_kit::SharedString::from(format!("ws-setting-auth-basic-p-{:?}", target)),
+    let api_k_init = match current_auth {
+        Auth::ApiKey { key, .. } => key.clone(),
+        _ => "X-API-Key".to_string(),
+    };
+    let api_key_input = use_auth_field_input(
+        window,
         cx,
-        |window, cx| {
-            let init_val = match current_auth {
-                Auth::Basic { password, .. } => password.clone(),
-                _ => String::new(),
+        format!("ws-setting-auth-apikey-k-{:?}", target),
+        "Header / Param Name",
+        api_k_init,
+        ws_state,
+        col_state,
+        env_state,
+        target,
+        |key, cur| {
+            let (value, add_to) = match cur {
+                Some(Auth::ApiKey { value, add_to, .. }) => (value, add_to),
+                _ => (String::new(), ApiKeyLocation::Header),
             };
-            let input = cx.new(|cx| InputState::new(window, cx).placeholder("Password"));
-            let content = build_tokenized_content(&init_val, env_clone.read(cx));
-            input.update(cx, |s, cx| s.set_value(content, window, cx));
-
-            let ws_s = ws_clone.clone();
-            let tgt = target.clone();
-            let env_sub = env_clone.clone();
-            let sub = cx.subscribe_in(&input, window, move |_, inp, ev, window, cx| {
-                if let InputEvent::Change = ev {
-                    let p = inp.read(cx).value().to_string();
-                    let u = match &tgt {
-                        WorkspaceSettingTarget::Workspace => {
-                            match &ws_s.read(cx).workspace_meta.auth {
-                                Auth::Basic { username, .. } => username.clone(),
-                                _ => String::new(),
-                            }
-                        }
-                        WorkspaceSettingTarget::Folder(fid) => {
-                            match ws_s
-                                .read(cx)
-                                .folders
-                                .iter()
-                                .find(|f| &f.id == fid)
-                                .map(|f| &f.auth)
-                            {
-                                Some(Auth::Basic { username, .. }) => username.clone(),
-                                _ => String::new(),
-                            }
-                        }
-                    };
-                    let new_auth = Auth::Basic {
-                        username: u,
-                        password: p.clone(),
-                    };
-                    match &tgt {
-                        WorkspaceSettingTarget::Workspace => {
-                            let cur_h = ws_s
-                                .read(cx)
-                                .active_workspace
-                                .as_ref()
-                                .map(|w| w.headers.clone())
-                                .unwrap_or_default();
-                            ws_s.update(cx, |state, cx| {
-                                state.save_workspace_settings(cur_h, new_auth, cx)
-                            });
-                        }
-                        WorkspaceSettingTarget::Folder(fid) => {
-                            let cur_h = ws_s
-                                .read(cx)
-                                .folders
-                                .iter()
-                                .find(|f| &f.id == fid)
-                                .map(|f| f.headers.clone())
-                                .unwrap_or_default();
-                            ws_s.update(cx, |state, cx| {
-                                state.save_folder_settings(fid, cur_h, new_auth, cx)
-                            });
-                        }
-                    }
-                    if p.contains("}}") && detect_unclosed_env_var(&p).is_none() {
-                        let tokenized = build_tokenized_content(&p, env_sub.read(cx));
-                        inp.update(cx, |s, cx| s.set_value(tokenized, window, cx));
-                    }
-                }
-            });
-            (input, sub)
+            Auth::ApiKey { key, value, add_to }
         },
     );
-    let basic_pass_input = basic_pass_holder.read(cx).0.clone();
 
-    // 4. API Key Header/Param Name
-    let api_key_holder = window.use_keyed_state(
-        gpui_kit::SharedString::from(format!("ws-setting-auth-apikey-k-{:?}", target)),
+    let api_v_init = match current_auth {
+        Auth::ApiKey { value, .. } => value.clone(),
+        _ => String::new(),
+    };
+    let api_val_input = use_auth_field_input(
+        window,
         cx,
-        |window, cx| {
-            let init_val = match current_auth {
-                Auth::ApiKey { key, .. } => key.clone(),
-                _ => "X-API-Key".to_string(),
+        format!("ws-setting-auth-apikey-v-{:?}", target),
+        "Value or {{secret}}",
+        api_v_init,
+        ws_state,
+        col_state,
+        env_state,
+        target,
+        |value, cur| {
+            let (key, add_to) = match cur {
+                Some(Auth::ApiKey { key, add_to, .. }) => (key, add_to),
+                _ => ("X-API-Key".to_string(), ApiKeyLocation::Header),
             };
-            let input = cx.new(|cx| InputState::new(window, cx).placeholder("Header / Param Name"));
-            let content = build_tokenized_content(&init_val, env_clone.read(cx));
-            input.update(cx, |s, cx| s.set_value(content, window, cx));
-
-            let ws_s = ws_clone.clone();
-            let tgt = target.clone();
-            let env_sub = env_clone.clone();
-            let sub = cx.subscribe_in(&input, window, move |_, inp, ev, window, cx| {
-                if let InputEvent::Change = ev {
-                    let k = inp.read(cx).value().to_string();
-                    let (v, cur_loc) = match &tgt {
-                        WorkspaceSettingTarget::Workspace => {
-                            match &ws_s.read(cx).workspace_meta.auth {
-                                Auth::ApiKey { value, add_to, .. } => (value.clone(), *add_to),
-                                _ => (String::new(), ApiKeyLocation::Header),
-                            }
-                        }
-                        WorkspaceSettingTarget::Folder(fid) => {
-                            match ws_s
-                                .read(cx)
-                                .folders
-                                .iter()
-                                .find(|f| &f.id == fid)
-                                .map(|f| &f.auth)
-                            {
-                                Some(Auth::ApiKey { value, add_to, .. }) => {
-                                    (value.clone(), *add_to)
-                                }
-                                _ => (String::new(), ApiKeyLocation::Header),
-                            }
-                        }
-                    };
-                    let new_auth = Auth::ApiKey {
-                        key: k.clone(),
-                        value: v,
-                        add_to: cur_loc,
-                    };
-                    match &tgt {
-                        WorkspaceSettingTarget::Workspace => {
-                            let cur_h = ws_s
-                                .read(cx)
-                                .active_workspace
-                                .as_ref()
-                                .map(|w| w.headers.clone())
-                                .unwrap_or_default();
-                            ws_s.update(cx, |state, cx| {
-                                state.save_workspace_settings(cur_h, new_auth, cx)
-                            });
-                        }
-                        WorkspaceSettingTarget::Folder(fid) => {
-                            let cur_h = ws_s
-                                .read(cx)
-                                .folders
-                                .iter()
-                                .find(|f| &f.id == fid)
-                                .map(|f| f.headers.clone())
-                                .unwrap_or_default();
-                            ws_s.update(cx, |state, cx| {
-                                state.save_folder_settings(fid, cur_h, new_auth, cx)
-                            });
-                        }
-                    }
-                    if k.contains("}}") && detect_unclosed_env_var(&k).is_none() {
-                        let tokenized = build_tokenized_content(&k, env_sub.read(cx));
-                        inp.update(cx, |s, cx| s.set_value(tokenized, window, cx));
-                    }
-                }
-            });
-            (input, sub)
+            Auth::ApiKey { key, value, add_to }
         },
     );
-    let api_key_input = api_key_holder.read(cx).0.clone();
-
-    // 5. API Key Value
-    let api_val_holder = window.use_keyed_state(
-        gpui_kit::SharedString::from(format!("ws-setting-auth-apikey-v-{:?}", target)),
-        cx,
-        |window, cx| {
-            let init_val = match current_auth {
-                Auth::ApiKey { value, .. } => value.clone(),
-                _ => String::new(),
-            };
-            let input = cx.new(|cx| InputState::new(window, cx).placeholder("Value or {{secret}}"));
-            let content = build_tokenized_content(&init_val, env_clone.read(cx));
-            input.update(cx, |s, cx| s.set_value(content, window, cx));
-
-            let ws_s = ws_clone.clone();
-            let tgt = target.clone();
-            let env_sub = env_clone.clone();
-            let sub = cx.subscribe_in(&input, window, move |_, inp, ev, window, cx| {
-                if let InputEvent::Change = ev {
-                    let v = inp.read(cx).value().to_string();
-                    let (k, cur_loc) = match &tgt {
-                        WorkspaceSettingTarget::Workspace => {
-                            match &ws_s.read(cx).workspace_meta.auth {
-                                Auth::ApiKey { key, add_to, .. } => (key.clone(), *add_to),
-                                _ => ("X-API-Key".to_string(), ApiKeyLocation::Header),
-                            }
-                        }
-                        WorkspaceSettingTarget::Folder(fid) => {
-                            match ws_s
-                                .read(cx)
-                                .folders
-                                .iter()
-                                .find(|f| &f.id == fid)
-                                .map(|f| &f.auth)
-                            {
-                                Some(Auth::ApiKey { key, add_to, .. }) => (key.clone(), *add_to),
-                                _ => ("X-API-Key".to_string(), ApiKeyLocation::Header),
-                            }
-                        }
-                    };
-                    let new_auth = Auth::ApiKey {
-                        key: k,
-                        value: v.clone(),
-                        add_to: cur_loc,
-                    };
-                    match &tgt {
-                        WorkspaceSettingTarget::Workspace => {
-                            let cur_h = ws_s
-                                .read(cx)
-                                .active_workspace
-                                .as_ref()
-                                .map(|w| w.headers.clone())
-                                .unwrap_or_default();
-                            ws_s.update(cx, |state, cx| {
-                                state.save_workspace_settings(cur_h, new_auth, cx)
-                            });
-                        }
-                        WorkspaceSettingTarget::Folder(fid) => {
-                            let cur_h = ws_s
-                                .read(cx)
-                                .folders
-                                .iter()
-                                .find(|f| &f.id == fid)
-                                .map(|f| f.headers.clone())
-                                .unwrap_or_default();
-                            ws_s.update(cx, |state, cx| {
-                                state.save_folder_settings(fid, cur_h, new_auth, cx)
-                            });
-                        }
-                    }
-                    if v.contains("}}") && detect_unclosed_env_var(&v).is_none() {
-                        let tokenized = build_tokenized_content(&v, env_sub.read(cx));
-                        inp.update(cx, |s, cx| s.set_value(tokenized, window, cx));
-                    }
-                }
-            });
-            (input, sub)
-        },
-    );
-    let api_val_input = api_val_holder.read(cx).0.clone();
 
     ScopeAuthInputs {
         bearer_input,

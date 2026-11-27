@@ -1,13 +1,14 @@
 use super::workspace_event_handler::{
-    handle_environment_event, handle_response_event, handle_session_event, handle_workspace_event,
+    handle_collection_event, handle_environment_event, handle_response_event, handle_session_event,
+    handle_workspace_event,
 };
 use super::AppView;
 use crate::components::request_composer::composer_inputs::ComposerInputs;
 use crate::env::{attach_missing_var_tokens, RetokenizeGuard};
 use crate::state::{
-    EnvironmentEvent, EnvironmentState, GitState, ModalEvent, ModalState, PersistenceState,
-    RequestSessionState, ResponseEvent, ResponseState, SessionEvent, SidebarState,
-    WorkspaceDataState, WorkspaceEvent,
+    CollectionEvent, CollectionState, EnvironmentEvent, EnvironmentState, GitState, ModalEvent,
+    ModalState, PersistenceState, RequestSessionState, ResponseEvent, ResponseState, SessionEvent,
+    SidebarState, WorkspaceEvent, WorkspaceState,
 };
 use gpui_kit::component::input::InputEvent;
 use gpui_kit::*;
@@ -16,7 +17,8 @@ use std::rc::Rc;
 use zest_core::models::{ApiKeyLocation, Auth, RequestBody};
 
 pub struct SubscriptionTargets<'a> {
-    pub workspace_state: &'a Entity<WorkspaceDataState>,
+    pub workspace_state: &'a Entity<WorkspaceState>,
+    pub collection_state: &'a Entity<CollectionState>,
     pub env_state: &'a Entity<EnvironmentState>,
     pub persistence_state: &'a Entity<PersistenceState>,
     pub modal_state: &'a Entity<ModalState>,
@@ -49,7 +51,7 @@ fn subscribe_url_input(
     cx: &mut Context<AppView>,
 ) {
     let editor_state = targets.editor_state;
-    let workspace_state = targets.workspace_state;
+    let workspace_state = targets.collection_state;
     let url_input = &targets.composer_inputs.url_input;
 
     // 1. Subscribe to URL input change
@@ -144,7 +146,7 @@ fn subscribe_body_editors(
     cx: &mut Context<AppView>,
 ) {
     let editor_state = targets.editor_state;
-    let workspace_state = targets.workspace_state;
+    let workspace_state = targets.collection_state;
     let json_editor = &targets.composer_inputs.json_editor;
     let xml_editor = &targets.composer_inputs.xml_editor;
     let raw_textarea = &targets.composer_inputs.raw_textarea;
@@ -212,7 +214,7 @@ fn subscribe_protocol_editors(
     cx: &mut Context<AppView>,
 ) {
     let editor_state = targets.editor_state;
-    let workspace_state = targets.workspace_state;
+    let workspace_state = targets.collection_state;
     let grpc_message_editor = &targets.composer_inputs.grpc.message_editor;
     let grpc_proto_path_input = &targets.composer_inputs.grpc.proto_path_input;
 
@@ -361,7 +363,7 @@ fn subscribe_auth_inputs(
     cx: &mut Context<AppView>,
 ) {
     let editor_state = targets.editor_state;
-    let workspace_state = targets.workspace_state;
+    let workspace_state = targets.collection_state;
     let bearer_token_input = &targets.composer_inputs.auth.bearer_token_input;
     let basic_user_input = &targets.composer_inputs.auth.basic_user_input;
     let basic_pass_input = &targets.composer_inputs.auth.basic_pass_input;
@@ -522,7 +524,7 @@ fn subscribe_script_editors(
     cx: &mut Context<AppView>,
 ) {
     let editor_state = targets.editor_state;
-    let workspace_state = targets.workspace_state;
+    let workspace_state = targets.collection_state;
     let pre_script_editor = &targets.composer_inputs.pre_script_editor;
     let test_script_editor = &targets.composer_inputs.test_script_editor;
 
@@ -562,6 +564,7 @@ fn subscribe_state_events(
 ) {
     let editor_state = targets.editor_state;
     let workspace_state = targets.workspace_state;
+    let collection_state = targets.collection_state;
     let response_state = targets.response_state;
 
     // 4. Subscribe to typed state events (synchronous, single-dispatch command channel)
@@ -572,11 +575,16 @@ fn subscribe_state_events(
             handle_session_event(this, event, window, cx);
         },
     ));
+    subscriptions.push(
+        cx.subscribe(workspace_state, |this, _ws, event: &WorkspaceEvent, cx| {
+            handle_workspace_event(this, event, cx);
+        }),
+    );
     subscriptions.push(cx.subscribe_in(
-        workspace_state,
+        collection_state,
         window,
-        |this, _ws, event: &WorkspaceEvent, window, cx| {
-            handle_workspace_event(this, event, window, cx);
+        |this, _col, event: &CollectionEvent, window, cx| {
+            handle_collection_event(this, event, window, cx);
         },
     ));
     subscriptions.push(cx.subscribe_in(
@@ -605,6 +613,7 @@ fn subscribe_state_events(
     // 5. Pure redraw observers: re-render AppView on entity state changes
     subscriptions.push(cx.observe(editor_state, |_, _, cx| cx.notify()));
     subscriptions.push(cx.observe(workspace_state, |_, _, cx| cx.notify()));
+    subscriptions.push(cx.observe(collection_state, |_, _, cx| cx.notify()));
     subscriptions.push(cx.observe(response_state, |_, _, cx| cx.notify()));
     subscriptions.push(cx.observe(targets.sidebar_state, |_, _, cx| cx.notify()));
     subscriptions.push(cx.observe(targets.modal_state, |_, _, cx| cx.notify()));

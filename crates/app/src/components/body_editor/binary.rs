@@ -1,4 +1,4 @@
-use crate::state::{RequestSessionState, WorkspaceDataState};
+use crate::state::{CollectionState, RequestSessionState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::Icon;
@@ -24,7 +24,7 @@ pub fn render_binary_editor(
     file_path: &str,
     size_label: &str,
     editor_state: &Entity<RequestSessionState>,
-    workspace_state: Option<&Entity<WorkspaceDataState>>,
+    workspace_state: Option<&Entity<CollectionState>>,
 ) -> AnyElement {
     let t = theme();
     let file_path = file_path.to_string();

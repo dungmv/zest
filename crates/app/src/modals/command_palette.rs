@@ -1,7 +1,7 @@
 use crate::components::status_badge::MethodBadge;
 use crate::state::{
-    EnvironmentState, ModalKind, ModalState, PersistenceState, RequestSessionState, SidebarState,
-    WorkspaceDataState,
+    CollectionState, EnvironmentState, ModalKind, ModalState, PersistenceState,
+    RequestSessionState, SidebarState,
 };
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -17,7 +17,7 @@ use gpui_kit::{
 
 #[derive(IntoElement)]
 pub struct CommandPalette {
-    workspace_state: Entity<WorkspaceDataState>,
+    workspace_state: Entity<CollectionState>,
     env_state: Entity<EnvironmentState>,
     persistence_state: Entity<PersistenceState>,
     modal_state: Entity<ModalState>,
@@ -27,7 +27,7 @@ pub struct CommandPalette {
 
 impl CommandPalette {
     pub fn new(
-        workspace_state: Entity<WorkspaceDataState>,
+        workspace_state: Entity<CollectionState>,
         env_state: Entity<EnvironmentState>,
         persistence_state: Entity<PersistenceState>,
         modal_state: Entity<ModalState>,
@@ -67,7 +67,7 @@ struct PaletteCache {
 
 fn rebuild_palette_cache(
     cache: &mut PaletteCache,
-    ws: &WorkspaceDataState,
+    ws: &CollectionState,
     per: &PersistenceState,
     q: &str,
 ) {

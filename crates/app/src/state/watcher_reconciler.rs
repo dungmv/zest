@@ -1,5 +1,5 @@
 use super::{
-    EnvironmentState, GitState, PersistTarget, PersistenceState, WorkspaceDataState, WorkspaceEvent,
+    CollectionEvent, CollectionState, EnvironmentState, GitState, PersistTarget, PersistenceState,
 };
 use gpui_kit::{Context, Entity};
 use std::collections::HashSet;
@@ -12,7 +12,7 @@ use zest_core::storage::FsEvent;
 impl PersistenceState {
     pub fn start_watcher(
         &mut self,
-        workspace_data: Entity<WorkspaceDataState>,
+        workspace_data: Entity<CollectionState>,
         env_state: Entity<EnvironmentState>,
         git_state: Entity<GitState>,
         cx: &mut Context<Self>,
@@ -57,7 +57,7 @@ impl PersistenceState {
     pub fn handle_fs_event(
         &mut self,
         event: FsEvent,
-        workspace_data: Entity<WorkspaceDataState>,
+        workspace_data: Entity<CollectionState>,
         env_state: Entity<EnvironmentState>,
         git_state: Entity<GitState>,
         cx: &mut Context<Self>,
@@ -68,7 +68,7 @@ impl PersistenceState {
     pub fn handle_fs_events_batch(
         &mut self,
         events: Vec<FsEvent>,
-        workspace_data: Entity<WorkspaceDataState>,
+        workspace_data: Entity<CollectionState>,
         env_state: Entity<EnvironmentState>,
         git_state: Entity<GitState>,
         cx: &mut Context<Self>,
@@ -190,7 +190,7 @@ impl PersistenceState {
                     for (path, req_file) in reqs_to_update {
                         ws.parse_errors.remove(&path);
                         if let Some(r) = ws.requests.iter_mut().find(|r| r.id == path) {
-                            let ws_name = ws.workspace_meta.name.clone();
+                            let ws_name = ws.workspace_scope.name.clone();
                             let prev_status = r.last_status_code.or_else(|| {
                                 ws.store
                                     .load_response_cache(&r.id)
@@ -215,7 +215,7 @@ impl PersistenceState {
                     if needs_rescan {
                         ws.reload_tree_preserving_async(dirty_requests, cx);
                     } else if !reloaded_ids.is_empty() {
-                        cx.emit(WorkspaceEvent::RequestsReloaded {
+                        cx.emit(CollectionEvent::RequestsReloaded {
                             req_ids: Some(reloaded_ids),
                         });
                     }

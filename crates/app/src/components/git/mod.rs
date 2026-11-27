@@ -12,20 +12,20 @@ pub use history_modal::*;
 pub use remotes_modal::*;
 
 use crate::services::GitService;
-use crate::state::{GitActiveModal, GitState, WorkspaceDataState};
+use crate::state::{CollectionState, GitActiveModal, GitState};
 use gpui_kit::{div, App, Entity, IntoElement, RenderOnce, Window};
 
 #[derive(IntoElement)]
 pub struct GitModal {
     git_state: Entity<GitState>,
-    workspace_state: Entity<WorkspaceDataState>,
+    workspace_state: Entity<CollectionState>,
     git_service: GitService,
 }
 
 impl GitModal {
     pub fn new(
         git_state: Entity<GitState>,
-        workspace_state: Entity<WorkspaceDataState>,
+        workspace_state: Entity<CollectionState>,
         git_service: GitService,
     ) -> Self {
         Self {

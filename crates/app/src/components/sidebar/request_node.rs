@@ -6,7 +6,7 @@ use crate::app::actions::DismissModal;
 use crate::components::{MethodBadge, ProtocolBadge, StatusCodeBadge};
 use crate::services::GitService;
 use crate::state::{
-    GitState, PersistenceState, RequestSessionState, SidebarState, WorkspaceDataState,
+    CollectionState, GitState, PersistenceState, RequestSessionState, SidebarState,
 };
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -263,7 +263,7 @@ fn build_request_context_menu(
     req_name: &str,
     is_pinned: bool,
     is_dirty_git: bool,
-    ws: &Entity<WorkspaceDataState>,
+    ws: &Entity<CollectionState>,
     per: &Entity<PersistenceState>,
     sb: &Entity<SidebarState>,
     git: &Entity<GitState>,
@@ -396,7 +396,7 @@ fn discard_request_changes(
     req_id: &str,
     req_name: &str,
     git: &Entity<GitState>,
-    ws: &Entity<WorkspaceDataState>,
+    ws: &Entity<CollectionState>,
     per: &Entity<PersistenceState>,
     ed: &Entity<RequestSessionState>,
     cx: &mut App,
@@ -445,7 +445,7 @@ fn discard_request_changes(
             }
         });
         ws_cb.update(cx, |w, cx| {
-            w.reload_all();
+            w.reload_tree();
             let active_id = ed_cb.read(cx).active_request_id().to_string();
             if active_id == r_id_task {
                 if w.find_request(&r_id_task).is_some() {

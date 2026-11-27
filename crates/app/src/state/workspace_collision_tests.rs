@@ -4,13 +4,13 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::state::{FolderMoveOutcome, WorkspaceDataState};
+    use crate::state::{CollectionState, FolderMoveOutcome};
     use std::path::PathBuf;
     use std::sync::Arc;
     use zest_core::models::Protocol;
     use zest_core::storage::{FsWorkspaceStore, WorkspaceStore};
 
-    fn setup_ws(tag: &str) -> (PathBuf, Arc<FsWorkspaceStore>, WorkspaceDataState) {
+    fn setup_ws(tag: &str) -> (PathBuf, Arc<FsWorkspaceStore>, CollectionState) {
         let temp_dir = std::env::temp_dir().join(format!(
             "zest-collision-{}-{}",
             tag,
@@ -18,7 +18,7 @@ mod tests {
         ));
         let store = Arc::new(FsWorkspaceStore::new(&temp_dir));
         store.init_workspace("Collision WS").unwrap();
-        let ws = WorkspaceDataState::new_for_path(temp_dir.clone(), store.clone());
+        let ws = CollectionState::new_for_path(temp_dir.clone(), store.clone());
         (temp_dir, store, ws)
     }
 
@@ -203,7 +203,7 @@ mod tests {
         )));
 
         // A fresh scan of disk agrees with the in-memory state.
-        let reloaded = WorkspaceDataState::new_for_path(temp_dir.clone(), store.clone());
+        let reloaded = CollectionState::new_for_path(temp_dir.clone(), store.clone());
         assert!(reloaded
             .folders
             .iter()
@@ -273,7 +273,7 @@ mod tests {
         );
 
         // A fresh scan of disk agrees with the in-memory state.
-        let reloaded = WorkspaceDataState::new_for_path(temp_dir.clone(), store.clone());
+        let reloaded = CollectionState::new_for_path(temp_dir.clone(), store.clone());
         assert!(reloaded.folders.iter().any(|f| {
             f.id == "b/shared-2" && f.parent_id.as_deref() == Some("b") && f.name == "Shared"
         }));

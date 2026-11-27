@@ -33,7 +33,7 @@ pub struct RequestBarActions {
 
 #[derive(IntoElement)]
 pub struct RequestBar {
-    workspace_state: Entity<crate::state::WorkspaceDataState>,
+    workspace_state: Entity<crate::state::CollectionState>,
     env_state: Entity<EnvironmentState>,
     modal_state: Entity<ModalState>,
     editor_state: Entity<RequestSessionState>,
@@ -44,7 +44,7 @@ pub struct RequestBar {
 
 impl RequestBar {
     pub fn new(
-        workspace_state: Entity<crate::state::WorkspaceDataState>,
+        workspace_state: Entity<crate::state::CollectionState>,
         env_state: Entity<EnvironmentState>,
         modal_state: Entity<ModalState>,
         editor_state: Entity<RequestSessionState>,
@@ -485,7 +485,7 @@ impl RenderOnce for RequestBar {
 /// HTTP method dropdown trigger (extracted so the WS/gRPC branch can render
 /// a static protocol badge in its place).
 fn render_http_method_dropdown(
-    ws_s: Entity<crate::state::WorkspaceDataState>,
+    ws_s: Entity<crate::state::CollectionState>,
     ed_s: Entity<RequestSessionState>,
     req_id_str: String,
     method: HttpMethod,

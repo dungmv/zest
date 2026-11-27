@@ -1,8 +1,9 @@
 #[cfg(test)]
 mod tests {
     use crate::state::{
-        EnvironmentState, GitActiveModal, GitState, GitTab, ModalKind, ModalPayload, ModalState,
-        PersistenceState, SettingsTab, SidebarState, WorkspaceDataState, WorkspaceSettingTarget,
+        CollectionState, EnvironmentState, GitActiveModal, GitState, GitTab, ModalKind,
+        ModalPayload, ModalState, PersistenceState, SettingsTab, SidebarState,
+        WorkspaceScopeSnapshot, WorkspaceSettingTarget, WorkspaceState,
     };
     use std::sync::Arc;
     use zest_core::models::{
@@ -108,7 +109,7 @@ mod tests {
         let store = Arc::new(FsWorkspaceStore::new(&temp_dir));
         store.init_workspace("Cookie WS").unwrap();
 
-        let mut ws_state = WorkspaceDataState::new_for_path(temp_dir.clone(), store.clone());
+        let mut ws_state = WorkspaceState::new_for_path(temp_dir.clone(), store.clone());
         assert!(ws_state.cookies.is_empty());
 
         let initial_cookies = vec![
@@ -139,7 +140,7 @@ mod tests {
         assert_eq!(ws_state.cookies.len(), 2);
 
         // Reloading workspace state from disk should restore cookies from .local/cookies.json
-        let ws_reloaded = WorkspaceDataState::new_for_path(temp_dir.clone(), store.clone());
+        let ws_reloaded = WorkspaceState::new_for_path(temp_dir.clone(), store.clone());
         assert_eq!(ws_reloaded.cookies.len(), 2);
         assert_eq!(ws_reloaded.cookies[0].name, "auth_token");
 
@@ -267,7 +268,7 @@ mod tests {
             std::env::temp_dir().join(format!("zest-test-multi-{}", uuid::Uuid::new_v4().simple()));
         let store = Arc::new(FsWorkspaceStore::new(&temp_dir));
         store.init_workspace("test-ws").expect("init workspace");
-        let mut ws_raw = WorkspaceDataState::new_for_path(temp_dir.clone(), store.clone());
+        let mut ws_raw = CollectionState::new_for_path(temp_dir.clone(), store.clone());
         let r1 = ws_raw.create_request_internal(None, Protocol::Http);
         let r2 = ws_raw.create_request_internal(None, Protocol::Http);
         let r3 = ws_raw.create_request_internal(None, Protocol::Http);
@@ -482,7 +483,7 @@ mod tests {
             )
             .unwrap();
 
-        let mut ws_state = WorkspaceDataState::new_for_path(temp_dir.clone(), store.clone());
+        let mut ws_state = CollectionState::new_for_path(temp_dir.clone(), store.clone());
         ws_state.reload_tree();
         assert_eq!(ws_state.requests.len(), 1);
 
@@ -559,7 +560,7 @@ mod tests {
             });
         store.write_request(&rel_path, &req_file).unwrap();
 
-        let mut ws_state = WorkspaceDataState::new_for_path(temp_dir.clone(), store.clone());
+        let mut ws_state = CollectionState::new_for_path(temp_dir.clone(), store.clone());
         ws_state.reload_tree();
         assert_eq!(ws_state.requests.len(), 1);
         assert_eq!(ws_state.requests[0].examples.len(), 2);
@@ -595,7 +596,7 @@ mod tests {
             .create_group(Some(&parent_rel), "Child Folder")
             .unwrap();
 
-        let mut ws_state = WorkspaceDataState::new_for_path(temp_dir.clone(), store);
+        let mut ws_state = CollectionState::new_for_path(temp_dir.clone(), store);
         ws_state.reload_tree();
 
         assert_eq!(ws_state.folders.len(), 2);
@@ -663,7 +664,7 @@ mod tests {
         let store = Arc::new(FsWorkspaceStore::new(&temp_dir));
         store.init_workspace("Original Name").unwrap();
 
-        let mut ws_state = WorkspaceDataState::new_for_path(temp_dir.clone(), store.clone());
+        let mut ws_state = WorkspaceState::new_for_path(temp_dir.clone(), store.clone());
         ws_state.workspace_meta = WorkspaceMeta {
             name: "Original Name".to_string(),
             ..Default::default()
@@ -765,8 +766,12 @@ mod tests {
             password: "secret".to_string(),
         };
 
-        let mut ws_state = WorkspaceDataState::new_for_path(temp_dir.clone(), store);
-        ws_state.active_workspace = Some(ws);
+        let mut ws_state = CollectionState::new_for_path(temp_dir.clone(), store);
+        ws_state.workspace_scope = WorkspaceScopeSnapshot {
+            name: ws.name,
+            headers: ws.headers,
+            auth: ws.auth,
+        };
         ws_state.folders = vec![folder_users, folder_admin];
 
         // Case 1: Request in subfolder (users/admin) with Inherit auth
@@ -851,8 +856,12 @@ mod tests {
         folder.headers = vec![KeyValuePair::new("X-Shared", "from-folder")];
         folder.auth = Auth::Inherit;
 
-        let mut ws_state = WorkspaceDataState::new_for_path(temp_dir.clone(), store);
-        ws_state.active_workspace = Some(ws);
+        let mut ws_state = CollectionState::new_for_path(temp_dir.clone(), store);
+        ws_state.workspace_scope = WorkspaceScopeSnapshot {
+            name: ws.name,
+            headers: ws.headers,
+            auth: ws.auth,
+        };
         ws_state.folders = vec![folder];
 
         let mut req = RequestItem::new("ws", "R", HttpMethod::Get, "https://api.com");
@@ -891,7 +900,7 @@ mod tests {
         );
 
         // No ancestor auth at all.
-        ws_state.active_workspace.as_mut().unwrap().auth = Auth::Inherit;
+        ws_state.workspace_scope.auth = Auth::Inherit;
         assert!(ws_state.inherited_auth_source(Some("api")).is_none());
         assert_eq!(
             ws_state.get_inherited_auth_description(Some("api")),
@@ -908,7 +917,7 @@ mod tests {
         let store = Arc::new(FsWorkspaceStore::new(&temp_dir));
         store.init_workspace("Incremental WS").unwrap();
 
-        let mut ws_state = WorkspaceDataState::new_for_path(temp_dir.clone(), store.clone());
+        let mut ws_state = CollectionState::new_for_path(temp_dir.clone(), store.clone());
 
         // 1. Create Request
         let req1 = ws_state.create_request_internal(None, Protocol::Http);
@@ -1047,7 +1056,7 @@ mod tests {
     #[test]
     fn test_find_request_index_stays_fresh_across_list_mutations() {
         let tmp = tempfile::tempdir().unwrap();
-        let mut ws = WorkspaceDataState::new_for_path(
+        let mut ws = CollectionState::new_for_path(
             tmp.path().to_path_buf(),
             Arc::new(FsWorkspaceStore::new(tmp.path())),
         );

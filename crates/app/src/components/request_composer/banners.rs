@@ -8,8 +8,8 @@ pub(super) fn conflict_banner(av: &AppView, req_id: &str, msg: String) -> AnyEle
     let t = theme();
     let per_rel = av.state.persistence.clone();
     let per_keep = av.state.persistence.clone();
-    let ws_rel = av.state.workspace.clone();
-    let ws_keep = av.state.workspace.clone();
+    let ws_rel = av.state.collection.clone();
+    let ws_keep = av.state.collection.clone();
     let cid = req_id.to_string();
     let cid_k = req_id.to_string();
     div()

@@ -2,8 +2,8 @@ mod breadcrumb;
 mod menus;
 
 use crate::state::{
-    EnvironmentState, ModalKind, ModalState, RequestSessionState, ResponseState, SidebarState,
-    WorkspaceDataState,
+    CollectionState, EnvironmentState, ModalKind, ModalState, RequestSessionState, ResponseState,
+    SidebarState, WorkspaceState,
 };
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -41,7 +41,8 @@ pub(super) fn app_icon_image() -> Arc<Image> {
 
 #[derive(IntoElement)]
 pub struct AppTitleBar {
-    workspace_state: Entity<WorkspaceDataState>,
+    workspace_state: Entity<WorkspaceState>,
+    collection_state: Entity<CollectionState>,
     env_state: Entity<EnvironmentState>,
     modal_state: Entity<ModalState>,
     sidebar_state: Entity<SidebarState>,
@@ -50,8 +51,10 @@ pub struct AppTitleBar {
 }
 
 impl AppTitleBar {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        workspace_state: Entity<WorkspaceDataState>,
+        workspace_state: Entity<WorkspaceState>,
+        collection_state: Entity<CollectionState>,
         env_state: Entity<EnvironmentState>,
         modal_state: Entity<ModalState>,
         sidebar_state: Entity<SidebarState>,
@@ -60,6 +63,7 @@ impl AppTitleBar {
     ) -> Self {
         Self {
             workspace_state,
+            collection_state,
             env_state,
             modal_state,
             sidebar_state,
@@ -213,7 +217,7 @@ impl RenderOnce for AppTitleBar {
 
         // Center section: search button + current request name
         let center_section = breadcrumb::render_center_section(
-            ws,
+            self.collection_state.read(cx),
             active_id,
             self.response_state.read(cx).active_example_name.as_ref(),
             &modal_clone,

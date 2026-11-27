@@ -3,13 +3,16 @@ use std::sync::Arc;
 use crate::components::auth_form::{
     render_auth_form, AuthFormContext, AuthFormIds, AuthFormInputs, AuthFormOptions,
 };
-use crate::state::{EnvironmentState, ModalState, WorkspaceDataState, WorkspaceSettingTarget};
+use crate::state::{
+    CollectionState, EnvironmentState, ModalState, WorkspaceSettingTarget, WorkspaceState,
+};
 use gpui_kit::component::input::InputState;
 use gpui_kit::{App, Entity, IntoElement, Window};
 use zest_core::models::Auth;
 
 pub struct AuthTabContext<'a> {
-    pub ws_state: &'a Entity<WorkspaceDataState>,
+    pub ws_state: &'a Entity<WorkspaceState>,
+    pub col_state: &'a Entity<CollectionState>,
     pub env_state: &'a Entity<EnvironmentState>,
     pub modal_state: &'a Entity<ModalState>,
     pub target: &'a WorkspaceSettingTarget,
@@ -34,7 +37,8 @@ const WS_SETTING_AUTH_IDS: AuthFormIds = AuthFormIds {
 };
 
 fn save_target_auth(
-    ws: &Entity<WorkspaceDataState>,
+    ws: &Entity<WorkspaceState>,
+    col: &Entity<CollectionState>,
     target: &WorkspaceSettingTarget,
     new_auth: Auth,
     cx: &mut App,
@@ -50,14 +54,14 @@ fn save_target_auth(
             ws.update(cx, |s, cx| s.save_workspace_settings(cur_h, new_auth, cx));
         }
         WorkspaceSettingTarget::Folder(fid) => {
-            let cur_h = ws
+            let cur_h = col
                 .read(cx)
                 .folders
                 .iter()
                 .find(|f| &f.id == fid)
                 .map(|f| f.headers.clone())
                 .unwrap_or_default();
-            ws.update(cx, |s, cx| s.save_folder_settings(fid, cur_h, new_auth, cx));
+            col.update(cx, |s, cx| s.save_folder_settings(fid, cur_h, new_auth, cx));
         }
     }
 }
@@ -68,9 +72,10 @@ pub fn render_auth_tab(
     cx: &mut App,
 ) -> impl IntoElement {
     let ws = ctx.ws_state.clone();
+    let col = ctx.col_state.clone();
     let target = ctx.target.clone();
     let on_save = Arc::new(move |new_auth: Auth, cx: &mut App| {
-        save_target_auth(&ws, &target, new_auth, cx);
+        save_target_auth(&ws, &col, &target, new_auth, cx);
     });
 
     let none_message = if ctx.is_folder {
@@ -83,7 +88,7 @@ pub fn render_auth_tab(
         AuthFormContext {
             auth: ctx.current_auth,
             folder_id: ctx.folder_id_opt,
-            workspace_state: ctx.ws_state,
+            workspace_state: ctx.col_state,
             env_state: ctx.env_state,
             modal_state: ctx.modal_state,
             inputs: AuthFormInputs {

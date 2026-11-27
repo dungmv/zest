@@ -1,6 +1,5 @@
 use crate::state::{
-    EnvironmentState, ModalKind, ModalPayload, ModalState, WorkspaceDataState,
-    WorkspaceSettingTarget,
+    EnvironmentState, ModalKind, ModalPayload, ModalState, WorkspaceSettingTarget, WorkspaceState,
 };
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -13,9 +12,9 @@ use super::app_icon_image;
 
 /// Workspace switcher pill: [app icon + workspace name ▾] with recents.
 pub(super) fn render_workspace_switcher(
-    ws_state: &Entity<WorkspaceDataState>,
+    ws_state: &Entity<WorkspaceState>,
     modal_state: &Entity<ModalState>,
-    ws: &WorkspaceDataState,
+    ws: &WorkspaceState,
     ws_name: &str,
 ) -> impl IntoElement {
     let t = theme();

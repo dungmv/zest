@@ -10,7 +10,7 @@ pub(super) fn render_proto_tab(
     div()
         .size_full()
         .child({
-            let ws_read = av.state.workspace.read(cx);
+            let ws_read = av.state.collection.read(cx);
             let payload = ws_read
                 .find_request(&req_id_str)
                 .and_then(|r| r.grpc.clone())
@@ -19,7 +19,7 @@ pub(super) fn render_proto_tab(
             super::grpc_proto_tab::render_grpc_proto_tab(
                 &payload,
                 super::grpc_proto_tab::GrpcProtoTabContext {
-                    workspace_state: &av.state.workspace,
+                    workspace_state: &av.state.collection,
                     editor_state: &av.state.session,
                     on_fetch_schema: std::rc::Rc::new(move |cx| {
                         view_fetch.update(cx, |view, cx| view.fetch_grpc_schema(cx));

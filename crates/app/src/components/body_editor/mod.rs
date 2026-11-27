@@ -13,7 +13,7 @@ pub use xml::*;
 use crate::components::format_json_editor;
 use crate::components::message_toolbar;
 use crate::state::{
-    edit_active_request, EnvironmentState, ModalState, RequestSessionState, WorkspaceDataState,
+    edit_active_request, CollectionState, EnvironmentState, ModalState, RequestSessionState,
 };
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -54,7 +54,7 @@ pub struct BodyEditor {
     json_editor: Entity<CodeEditorState>,
     xml_editor: Entity<CodeEditorState>,
     raw_textarea: Entity<TextareaState>,
-    workspace_state: Option<Entity<WorkspaceDataState>>,
+    workspace_state: Option<Entity<CollectionState>>,
     env_state: Option<Entity<EnvironmentState>>,
     modal_state: Option<Entity<ModalState>>,
 }
@@ -77,7 +77,7 @@ impl BodyEditor {
         }
     }
 
-    pub fn workspace_state(mut self, ws: Entity<WorkspaceDataState>) -> Self {
+    pub fn workspace_state(mut self, ws: Entity<CollectionState>) -> Self {
         self.workspace_state = Some(ws);
         self
     }

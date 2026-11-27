@@ -3,7 +3,8 @@ use super::http_engine::HttpEngine;
 use super::send_event::SendEvent;
 use super::ws_service::WsService;
 use crate::state::{
-    EnvironmentState, ModalState, RequestSessionState, ResponseState, WorkspaceDataState,
+    CollectionState, EnvironmentState, ModalState, RequestSessionState, ResponseState,
+    WorkspaceState,
 };
 use gpui_kit::{App, Entity};
 use std::sync::Arc;
@@ -24,7 +25,8 @@ pub struct Engines {
 #[derive(Clone)]
 pub struct Runner {
     pub session_state: Entity<RequestSessionState>,
-    pub workspace_state: Entity<WorkspaceDataState>,
+    pub workspace_state: Entity<WorkspaceState>,
+    pub collection_state: Entity<CollectionState>,
     pub env_state: Entity<EnvironmentState>,
     pub response_state: Entity<ResponseState>,
     pub modal_state: Entity<ModalState>,
@@ -46,9 +48,11 @@ struct PreparedSend {
 }
 
 impl Runner {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         session_state: Entity<RequestSessionState>,
-        workspace_state: Entity<WorkspaceDataState>,
+        workspace_state: Entity<WorkspaceState>,
+        collection_state: Entity<CollectionState>,
         env_state: Entity<EnvironmentState>,
         response_state: Entity<ResponseState>,
         modal_state: Entity<ModalState>,
@@ -57,6 +61,7 @@ impl Runner {
         Self {
             session_state,
             workspace_state,
+            collection_state,
             env_state,
             response_state,
             modal_state,
@@ -124,15 +129,15 @@ impl Runner {
         }
         let req_id = ed.active_request_id().to_string();
         let mut req_item = self
-            .workspace_state
+            .collection_state
             .read(cx)
             .find_request(&req_id)
             .cloned()?;
 
         // Resolve hierarchical headers & auth (Workspace -> Folders -> Request)
         {
-            let ws = self.workspace_state.read(cx);
-            let (resolved_headers, resolved_auth) = ws.resolve_request_hierarchy(&req_item);
+            let col = self.collection_state.read(cx);
+            let (resolved_headers, resolved_auth) = col.resolve_request_hierarchy(&req_item);
             req_item.headers = resolved_headers;
             req_item.auth = resolved_auth;
         }
@@ -177,6 +182,7 @@ impl Runner {
     ) {
         let session_state = self.session_state.clone();
         let workspace_state = self.workspace_state.clone();
+        let collection_state = self.collection_state.clone();
         let env_state = self.env_state.clone();
         let response_state = self.response_state.clone();
         let ws_service = self.engines.ws.clone();
@@ -266,18 +272,19 @@ impl Runner {
                         }
 
                         let record_for_disk = record.clone();
-                        workspace_state.update(cx, |ws, cx| {
-                            if let Some(r) = ws.find_request_mut(&req_id) {
+                        let cookies =
+                            workspace_state.update(cx, |ws, _cx| ws.sync_cookies_in_memory());
+                        collection_state.update(cx, |col, cx| {
+                            if let Some(r) = col.find_request_mut(&req_id) {
                                 r.last_status_code = Some(status);
                             }
-                            ws.bump_tree_version();
+                            col.bump_tree_version();
                             // Disk writes (response cache + cookies) serialize
                             // and hash sizable payloads; run them on the
                             // background executor in one sequential task so
                             // response-arrival frames never hitch on I/O.
-                            let store = ws.store.clone();
+                            let store = col.store.clone();
                             let req_id_for_disk = req_id.clone();
-                            let cookies = ws.sync_cookies_in_memory();
                             cx.background_executor()
                                 .spawn(async move {
                                     let loc_file = LocFile::from_record(&record_for_disk);
@@ -384,8 +391,8 @@ impl Runner {
                             ed.set_grpc_schema(Some(std::sync::Arc::new(summary)), cx);
                         });
                         if let (Some(svc), Some(mth)) = (auto_service, auto_method) {
-                            workspace_state.update(cx, |ws, _| {
-                                ws.update_active_request(&request_id, |r| {
+                            collection_state.update(cx, |col, _| {
+                                col.update_active_request(&request_id, |r| {
                                     let payload = r.grpc_mut();
                                     payload.service = svc;
                                     payload.method = mth;
@@ -469,7 +476,12 @@ impl Runner {
     /// Resolves the gRPC schema (reflection or .proto) for the picker UI.
     pub fn fetch_grpc_schema(&self, cx: &mut App) {
         let req_id = self.session_state.read(cx).active_request_id().to_string();
-        let Some(req) = self.workspace_state.read(cx).find_request(&req_id).cloned() else {
+        let Some(req) = self
+            .collection_state
+            .read(cx)
+            .find_request(&req_id)
+            .cloned()
+        else {
             return;
         };
         if req.protocol != Protocol::Grpc {
@@ -509,7 +521,12 @@ impl Runner {
     /// the tokio runtime and lands the parsed summary on the session.
     pub fn fetch_graphql_schema(&self, cx: &mut App) {
         let req_id = self.session_state.read(cx).active_request_id().to_string();
-        let Some(req) = self.workspace_state.read(cx).find_request(&req_id).cloned() else {
+        let Some(req) = self
+            .collection_state
+            .read(cx)
+            .find_request(&req_id)
+            .cloned()
+        else {
             return;
         };
         if req.protocol != Protocol::GraphQL {

@@ -1,13 +1,14 @@
 //! Unified event dispatcher for typed commands/events emitted by state entities
-//! (`WorkspaceEvent`, `SessionEvent`, `ResponseEvent`, `EnvironmentEvent`).
+//! (`WorkspaceEvent`, `CollectionEvent`, `SessionEvent`, `ResponseEvent`,
+//! `EnvironmentEvent`).
 //!
 //! Centralizes cross-entity state synchronization and UI editor updates so
 //! `cx.observe` subscriptions remain pure view-redraw triggers.
 
 use crate::app::AppView;
 use crate::state::{
-    ComposerSyncScope, EnvironmentEvent, RequestTabKind, ResponseEvent, ResponseTabKind,
-    SessionEvent, WorkspaceEvent,
+    CollectionEvent, ComposerSyncScope, EnvironmentEvent, RequestTabKind, ResponseEvent,
+    ResponseTabKind, SessionEvent, WorkspaceEvent,
 };
 use gpui_kit::{Context, Window};
 use zest_core::models::Protocol;
@@ -15,58 +16,109 @@ use zest_core::models::Protocol;
 pub fn handle_workspace_event(
     this: &mut AppView,
     event: &WorkspaceEvent,
+    cx: &mut Context<AppView>,
+) {
+    match event {
+        WorkspaceEvent::WorkspaceSwitchRequested {
+            path,
+            store,
+            folder_name,
+        } => {
+            let path = path.clone();
+            let store = store.clone();
+            let folder_name = folder_name.clone();
+            this.state.collection.update(cx, |col, cx| {
+                col.switch_workspace(store, path, folder_name, cx);
+            });
+        }
+        WorkspaceEvent::WorkspaceMetaModified => {
+            let (meta, name) = {
+                let ws = this.state.workspace.read(cx);
+                (ws.workspace_meta.clone(), ws.workspace_name().to_string())
+            };
+            let headers = meta.headers.clone();
+            let auth = meta.auth.clone();
+            this.state.collection.update(cx, |col, cx| {
+                col.set_workspace_scope(name, headers, auth, cx);
+            });
+            this.state.persistence.update(cx, |per, cx| {
+                per.schedule_save_workspace_meta(meta, cx);
+            });
+        }
+    }
+}
+
+pub fn handle_collection_event(
+    this: &mut AppView,
+    event: &CollectionEvent,
     window: &mut Window,
     cx: &mut Context<AppView>,
 ) {
     match event {
-        WorkspaceEvent::WorkspaceOpened {
-            path,
-            workspace_name,
+        CollectionEvent::WorkspaceScanLoaded {
+            workspace_meta,
+            cookies,
+            folder_name,
             store,
+            announce_opened,
+            workspace_path,
         } => {
-            let ws_ent = this.state.workspace.clone();
-            let env_ent = this.state.env.clone();
-            let git_ent = this.state.git.clone();
-            this.state.persistence.update(cx, |per, cx| {
-                per.set_workspace(store.clone(), path.clone(), cx);
-                per.start_watcher(ws_ent, env_ent, git_ent, cx);
+            this.state.workspace.update(cx, |ws, cx| {
+                ws.apply_scan_result(
+                    workspace_meta.clone(),
+                    cookies.clone(),
+                    folder_name.clone(),
+                    store,
+                    cx,
+                );
             });
 
-            let (active_env, next_id) = {
-                let ws_ref = this.state.workspace.read(cx);
-                let per_ref = this.state.persistence.read(cx);
-                let id = per_ref
-                    .local_state
-                    .active_request
-                    .as_ref()
-                    .and_then(|act_id| {
-                        ws_ref
-                            .requests
-                            .iter()
-                            .find(|r| &r.id == act_id)
-                            .map(|r| r.id.clone())
-                    })
-                    .or_else(|| ws_ref.requests.first().map(|r| r.id.clone()))
-                    .unwrap_or_else(|| "scratch".to_string());
-                (per_ref.local_state.active_environment.clone(), id)
-            };
+            if *announce_opened {
+                let workspace_name = this.state.workspace.read(cx).workspace_name().to_string();
+                let col_ent = this.state.collection.clone();
+                let env_ent = this.state.env.clone();
+                let git_ent = this.state.git.clone();
+                this.state.persistence.update(cx, |per, cx| {
+                    per.set_workspace(store.clone(), workspace_path.clone(), cx);
+                    per.start_watcher(col_ent, env_ent, git_ent, cx);
+                });
 
-            this.state.env.update(cx, |env, cx| {
-                env.set_workspace(store.clone(), workspace_name.clone(), active_env);
-                cx.emit(EnvironmentEvent::EnvironmentsReloaded);
-                cx.notify();
-            });
+                let (active_env, next_id) = {
+                    let col_ref = this.state.collection.read(cx);
+                    let per_ref = this.state.persistence.read(cx);
+                    let id = per_ref
+                        .local_state
+                        .active_request
+                        .as_ref()
+                        .and_then(|act_id| {
+                            col_ref
+                                .requests
+                                .iter()
+                                .find(|r| &r.id == act_id)
+                                .map(|r| r.id.clone())
+                        })
+                        .or_else(|| col_ref.requests.first().map(|r| r.id.clone()))
+                        .unwrap_or_else(|| "scratch".to_string());
+                    (per_ref.local_state.active_environment.clone(), id)
+                };
 
-            this.state.git.update(cx, |git, cx| {
-                git.set_repo_path(path.clone(), cx);
-            });
+                this.state.env.update(cx, |env, cx| {
+                    env.set_workspace(store.clone(), workspace_name, active_env);
+                    cx.emit(EnvironmentEvent::EnvironmentsReloaded);
+                    cx.notify();
+                });
 
-            this.state.session.update(cx, |ed, cx| {
-                ed.active_request_id = None;
-                ed.set_active_request_id(&next_id, cx);
-            });
+                this.state.git.update(cx, |git, cx| {
+                    git.set_repo_path(workspace_path.clone(), cx);
+                });
+
+                this.state.session.update(cx, |ed, cx| {
+                    ed.active_request_id = None;
+                    ed.set_active_request_id(&next_id, cx);
+                });
+            }
         }
-        WorkspaceEvent::IdsRemapped(pairs) => {
+        CollectionEvent::IdsRemapped(pairs) => {
             if pairs.is_empty() {
                 return;
             }
@@ -97,31 +149,27 @@ pub fn handle_workspace_event(
                 per.remap_request_ids(pairs, cx);
             });
         }
-        WorkspaceEvent::RequestsReloaded { req_ids } => {
+        CollectionEvent::RequestsReloaded { req_ids } => {
             // Startup restore replay: the workspace scans asynchronously, so
             // the first `RequestsReloaded` after AppView::new carries the
-            // initial data. Select the persisted (or first) request here —
-            // subscriptions are live, so the `ActiveRequestChanged` handler
-            // performs the composer sync, protocol clamps, realtime restore
-            // and .loc cache load exactly like the old synchronous startup
-            // block did.
+            // initial data.
             if !this.initial_restore_done {
                 this.initial_restore_done = true;
                 let next_id = {
-                    let ws_ref = this.state.workspace.read(cx);
+                    let col_ref = this.state.collection.read(cx);
                     let per_ref = this.state.persistence.read(cx);
                     per_ref
                         .local_state
                         .active_request
                         .as_ref()
                         .and_then(|act_id| {
-                            ws_ref
+                            col_ref
                                 .requests
                                 .iter()
                                 .find(|r| &r.id == act_id)
                                 .map(|r| r.id.clone())
                         })
-                        .or_else(|| ws_ref.requests.first().map(|r| r.id.clone()))
+                        .or_else(|| col_ref.requests.first().map(|r| r.id.clone()))
                 };
                 if let Some(next_id) = next_id {
                     this.state.session.update(cx, |ed, cx| {
@@ -138,7 +186,7 @@ pub fn handle_workspace_event(
             if should_sync
                 && this
                     .state
-                    .workspace
+                    .collection
                     .read(cx)
                     .find_request(&active_id)
                     .is_some()
@@ -146,35 +194,29 @@ pub fn handle_workspace_event(
                 this.composer_inputs.sync_inputs(
                     &active_id,
                     ComposerSyncScope::All,
-                    &this.state.workspace,
+                    &this.state.collection,
                     &this.state.env,
                     window,
                     cx,
                 );
             }
         }
-        WorkspaceEvent::ExampleRenamed {
+        CollectionEvent::ExampleRenamed {
             old_name, new_name, ..
         } => {
             this.state.response.update(cx, |resp, cx| {
                 resp.rename_example(old_name, new_name, cx);
             });
         }
-        WorkspaceEvent::CrudFailed { title, message } => {
+        CollectionEvent::CrudFailed { title, message } => {
             crate::notify::error_in(*title, message.clone(), window, cx);
         }
-        WorkspaceEvent::WorkspaceMetaModified => {
-            let meta = this.state.workspace.read(cx).workspace_meta.clone();
-            this.state.persistence.update(cx, |per, cx| {
-                per.schedule_save_workspace_meta(meta, cx);
-            });
-        }
-        WorkspaceEvent::FolderMetaModified(folder_rel) => {
+        CollectionEvent::FolderMetaModified(folder_rel) => {
             let fid = folder_rel.clone();
-            let store = this.state.workspace.read(cx).store.clone();
+            let store = this.state.collection.read(cx).store.clone();
             let meta_opt = this
                 .state
-                .workspace
+                .collection
                 .read(cx)
                 .folders
                 .iter()
@@ -198,8 +240,8 @@ pub fn handle_workspace_event(
                 });
             }
         }
-        WorkspaceEvent::PinsModified => {
-            let pins = this.state.workspace.read(cx).pins.clone();
+        CollectionEvent::PinsModified => {
+            let pins = this.state.collection.read(cx).pins.clone();
             this.state.persistence.update(cx, |per, cx| {
                 per.schedule_save_pins(pins, cx);
             });
@@ -218,7 +260,7 @@ pub fn handle_session_event(
             this.composer_inputs.sync_inputs(
                 req_id,
                 ComposerSyncScope::All,
-                &this.state.workspace,
+                &this.state.collection,
                 &this.state.env,
                 window,
                 cx,
@@ -228,7 +270,7 @@ pub fn handle_session_event(
             // (e.g. an HTTP "Body" tab does not exist on a WebSocket request).
             let (protocol, binary_path) = this
                 .state
-                .workspace
+                .collection
                 .read(cx)
                 .find_request(req_id)
                 .map(|r| {
@@ -307,9 +349,9 @@ pub fn handle_session_event(
                 per.set_active_request(persisted_id, cx);
             });
 
-            let ws_store = this.state.workspace.read(cx).store.clone();
+            let col_store = this.state.collection.read(cx).store.clone();
             this.state.response.update(cx, |resp, cx| {
-                resp.load_for_request(req_id, ws_store.as_ref(), cx);
+                resp.load_for_request(req_id, col_store.as_ref(), cx);
             });
         }
         SessionEvent::RequestModified {
@@ -320,7 +362,7 @@ pub fn handle_session_event(
                 this.composer_inputs.sync_inputs(
                     req_id,
                     *scope,
-                    &this.state.workspace,
+                    &this.state.collection,
                     &this.state.env,
                     window,
                     cx,
@@ -329,10 +371,10 @@ pub fn handle_session_event(
 
             let is_scratch = req_id == "scratch" || req_id.is_empty();
             if !is_scratch {
-                let ws_ent = this.state.workspace.clone();
+                let col_ent = this.state.collection.clone();
                 let r_id = req_id.clone();
                 this.state.persistence.update(cx, |per, cx| {
-                    per.schedule_save_active_request(r_id, ws_ent, cx);
+                    per.schedule_save_active_request(r_id, col_ent, cx);
                 });
             }
         }
@@ -341,7 +383,7 @@ pub fn handle_session_event(
             this.composer_inputs.sync_inputs(
                 &active_id,
                 *scope,
-                &this.state.workspace,
+                &this.state.collection,
                 &this.state.env,
                 window,
                 cx,

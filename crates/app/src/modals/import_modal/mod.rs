@@ -1,7 +1,7 @@
 mod preview;
 
 use crate::modals::Modal;
-use crate::state::{ModalKind, ModalState, WorkspaceDataState};
+use crate::state::{CollectionState, ModalKind, ModalState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::alert::Alert;
@@ -77,15 +77,12 @@ impl ImportModalState {
 
 #[derive(IntoElement)]
 pub struct ImportModal {
-    workspace_state: Entity<WorkspaceDataState>,
+    workspace_state: Entity<CollectionState>,
     modal_state: Entity<ModalState>,
 }
 
 impl ImportModal {
-    pub fn new(
-        workspace_state: Entity<WorkspaceDataState>,
-        modal_state: Entity<ModalState>,
-    ) -> Self {
+    pub fn new(workspace_state: Entity<CollectionState>, modal_state: Entity<ModalState>) -> Self {
         Self {
             workspace_state,
             modal_state,

@@ -14,7 +14,7 @@ pub(super) fn render_tab_strip(
 ) -> TabBar {
     let t = theme();
     let req_id_str = av.state.session.read(cx).active_request_id().to_string();
-    let ws_read = av.state.workspace.read(cx);
+    let ws_read = av.state.collection.read(cx);
     let active_req = ws_read.find_request(&req_id_str);
     let protocol = active_req.map(|r| r.protocol).unwrap_or(Protocol::Http);
     let tabs = RequestTabKind::tabs_for(protocol);

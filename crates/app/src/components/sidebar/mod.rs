@@ -17,8 +17,8 @@ pub use row_dispatch::{
 pub const SIDEBAR_ROW_HEIGHT: f32 = 28.0;
 
 use crate::state::{
-    GitState, ModalState, PersistenceState, RequestSessionState, ResponseState, SidebarState,
-    WorkspaceDataState,
+    CollectionState, GitState, ModalState, PersistenceState, RequestSessionState, ResponseState,
+    SidebarState,
 };
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -39,7 +39,7 @@ use zest_core::models::Protocol;
 /// re-emit them.
 #[derive(IntoElement)]
 pub struct SidebarTree {
-    pub workspace_state: Entity<WorkspaceDataState>,
+    pub workspace_state: Entity<CollectionState>,
     pub persistence_state: Entity<PersistenceState>,
     pub sidebar_state: Entity<SidebarState>,
     pub modal_state: Entity<ModalState>,

@@ -5,7 +5,7 @@ mod network_tab;
 mod shortcuts_tab;
 
 use crate::modals::Modal;
-use crate::state::{ModalKind, ModalState, SettingsTab, WorkspaceDataState};
+use crate::state::{ModalKind, ModalState, SettingsTab, WorkspaceState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::scroll::ScrollableElement as _;
@@ -18,15 +18,12 @@ use gpui_kit::{
 
 #[derive(IntoElement)]
 pub struct SettingsModal {
-    workspace_state: Entity<WorkspaceDataState>,
+    workspace_state: Entity<WorkspaceState>,
     modal_state: Entity<ModalState>,
 }
 
 impl SettingsModal {
-    pub fn new(
-        workspace_state: Entity<WorkspaceDataState>,
-        modal_state: Entity<ModalState>,
-    ) -> Self {
+    pub fn new(workspace_state: Entity<WorkspaceState>, modal_state: Entity<ModalState>) -> Self {
         Self {
             workspace_state,
             modal_state,

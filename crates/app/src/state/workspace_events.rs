@@ -1,23 +1,86 @@
-//! Typed commands/events emitted by state entities (`WorkspaceDataState`,
-//! `RequestSessionState`, `ResponseState`, `EnvironmentState`) so downstream
-//! states and UI editors receive change payloads in a single synchronous dispatch
-//! instead of polling intermediate state fields on `cx.notify()`.
+//! Typed commands/events emitted by state entities (`WorkspaceState`,
+//! `CollectionState`, `RequestSessionState`, `ResponseState`, `EnvironmentState`)
+//! so downstream states and UI editors receive change payloads in a single
+//! synchronous dispatch instead of polling intermediate state fields on `cx.notify()`.
 
-use super::{EnvironmentState, ModalState, RequestSessionState, ResponseState, WorkspaceDataState};
+use super::{
+    CollectionState, EnvironmentState, ModalState, RequestSessionState, ResponseState,
+    WorkspaceState,
+};
 use gpui_kit::EventEmitter;
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
+use zest_core::models::StoredCookie;
+use zest_core::storage::models::WorkspaceMeta;
 use zest_core::storage::WorkspaceStore;
 
-/// Events emitted by `WorkspaceDataState`.
+/// Events emitted by `WorkspaceState`.
 #[derive(Clone)]
 pub enum WorkspaceEvent {
-    /// A workspace directory was opened or initialized.
-    WorkspaceOpened {
+    /// User initiated opening or creating a workspace; `CollectionState` should
+    /// switch its store and run an async background scan.
+    WorkspaceSwitchRequested {
         path: PathBuf,
-        workspace_name: String,
         store: Arc<dyn WorkspaceStore>,
+        folder_name: String,
+    },
+    /// Workspace-level metadata, headers, or auth were modified.
+    WorkspaceMetaModified,
+}
+
+impl fmt::Debug for WorkspaceEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::WorkspaceSwitchRequested {
+                path, folder_name, ..
+            } => f
+                .debug_struct("WorkspaceSwitchRequested")
+                .field("path", path)
+                .field("folder_name", folder_name)
+                .finish(),
+            Self::WorkspaceMetaModified => write!(f, "WorkspaceMetaModified"),
+        }
+    }
+}
+
+impl PartialEq for WorkspaceEvent {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Self::WorkspaceSwitchRequested {
+                    path: p1,
+                    folder_name: n1,
+                    ..
+                },
+                Self::WorkspaceSwitchRequested {
+                    path: p2,
+                    folder_name: n2,
+                    ..
+                },
+            ) => p1 == p2 && n1 == n2,
+            (Self::WorkspaceMetaModified, Self::WorkspaceMetaModified) => true,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for WorkspaceEvent {}
+
+impl EventEmitter<WorkspaceEvent> for WorkspaceState {}
+
+/// Events emitted by `CollectionState`.
+#[derive(Clone)]
+pub enum CollectionEvent {
+    /// A background workspace scan completed; carries workspace metadata and
+    /// cookies so `WorkspaceState` hydrates from the same single disk pass.
+    WorkspaceScanLoaded {
+        workspace_meta: Option<WorkspaceMeta>,
+        cookies: Vec<StoredCookie>,
+        folder_name: String,
+        store: Arc<dyn WorkspaceStore>,
+        announce_opened: bool,
+        workspace_path: PathBuf,
     },
     /// Request/folder ids changed on disk (request rename, folder rename/move,
     /// cross-folder request move). `(old_id, new_id)` pairs.
@@ -38,25 +101,25 @@ pub enum WorkspaceEvent {
         title: &'static str,
         message: String,
     },
-    /// Workspace-level metadata, headers, or auth were modified.
-    WorkspaceMetaModified,
     /// Folder-level metadata, headers, auth, or order were modified.
     FolderMetaModified(String),
     /// Request pin list was modified.
     PinsModified,
 }
 
-impl fmt::Debug for WorkspaceEvent {
+impl fmt::Debug for CollectionEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::WorkspaceOpened {
-                path,
-                workspace_name,
+            Self::WorkspaceScanLoaded {
+                folder_name,
+                announce_opened,
+                workspace_path,
                 ..
             } => f
-                .debug_struct("WorkspaceOpened")
-                .field("path", path)
-                .field("workspace_name", workspace_name)
+                .debug_struct("WorkspaceScanLoaded")
+                .field("folder_name", folder_name)
+                .field("announce_opened", announce_opened)
+                .field("workspace_path", workspace_path)
                 .finish(),
             Self::IdsRemapped(pairs) => f.debug_tuple("IdsRemapped").field(pairs).finish(),
             Self::RequestsReloaded { req_ids } => f
@@ -78,7 +141,6 @@ impl fmt::Debug for WorkspaceEvent {
                 .field("title", title)
                 .field("message", message)
                 .finish(),
-            Self::WorkspaceMetaModified => write!(f, "WorkspaceMetaModified"),
             Self::FolderMetaModified(folder_rel) => f
                 .debug_tuple("FolderMetaModified")
                 .field(folder_rel)
@@ -88,21 +150,23 @@ impl fmt::Debug for WorkspaceEvent {
     }
 }
 
-impl PartialEq for WorkspaceEvent {
+impl PartialEq for CollectionEvent {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (
-                Self::WorkspaceOpened {
-                    path: p1,
-                    workspace_name: n1,
+                Self::WorkspaceScanLoaded {
+                    folder_name: f1,
+                    announce_opened: a1,
+                    workspace_path: p1,
                     ..
                 },
-                Self::WorkspaceOpened {
-                    path: p2,
-                    workspace_name: n2,
+                Self::WorkspaceScanLoaded {
+                    folder_name: f2,
+                    announce_opened: a2,
+                    workspace_path: p2,
                     ..
                 },
-            ) => p1 == p2 && n1 == n2,
+            ) => f1 == f2 && a1 == a2 && p1 == p2,
             (Self::IdsRemapped(a), Self::IdsRemapped(b)) => a == b,
             (Self::RequestsReloaded { req_ids: a }, Self::RequestsReloaded { req_ids: b }) => {
                 a == b
@@ -129,7 +193,6 @@ impl PartialEq for WorkspaceEvent {
                     message: m2,
                 },
             ) => t1 == t2 && m1 == m2,
-            (Self::WorkspaceMetaModified, Self::WorkspaceMetaModified) => true,
             (Self::FolderMetaModified(a), Self::FolderMetaModified(b)) => a == b,
             (Self::PinsModified, Self::PinsModified) => true,
             _ => false,
@@ -137,9 +200,9 @@ impl PartialEq for WorkspaceEvent {
     }
 }
 
-impl Eq for WorkspaceEvent {}
+impl Eq for CollectionEvent {}
 
-impl EventEmitter<WorkspaceEvent> for WorkspaceDataState {}
+impl EventEmitter<CollectionEvent> for CollectionState {}
 
 /// Outcome of a folder move, returned by `move_folder_internal`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -229,7 +292,7 @@ mod tests {
 
     struct Listener;
 
-    fn test_workspace(tag: &str) -> (PathBuf, Arc<FsWorkspaceStore>, WorkspaceDataState) {
+    fn test_collection(tag: &str) -> (PathBuf, Arc<FsWorkspaceStore>, CollectionState) {
         let dir = std::env::temp_dir().join(format!(
             "zest-events-{}-{}",
             tag,
@@ -237,69 +300,69 @@ mod tests {
         ));
         let store = Arc::new(FsWorkspaceStore::new(&dir));
         store.init_workspace("test-ws").expect("init workspace");
-        let ws = WorkspaceDataState::new_for_path(dir.clone(), store.clone());
-        (dir, store, ws)
+        let col = CollectionState::new_for_path(dir.clone(), store.clone());
+        (dir, store, col)
     }
 
     #[gpui_kit::test]
     fn test_rename_request_emits_single_ids_remapped_event(cx: &mut TestAppContext) {
-        let (dir, _store, mut ws_raw) = test_workspace("rename-req");
-        let req = ws_raw.create_request_internal(None, Protocol::Http);
+        let (dir, _store, mut col_raw) = test_collection("rename-req");
+        let req = col_raw.create_request_internal(None, Protocol::Http);
         let req_id = req.id.clone();
-        let ws = cx.new(|_| ws_raw);
+        let col = cx.new(|_| col_raw);
 
         let recorded = Rc::new(RefCell::new(Vec::new()));
         let recorded_cb = recorded.clone();
         let _listener = cx.new(|cx| {
-            cx.subscribe(&ws, move |_this, _ws, ev: &WorkspaceEvent, _cx| {
+            cx.subscribe(&col, move |_this, _col, ev: &CollectionEvent, _cx| {
                 recorded_cb.borrow_mut().push(ev.clone());
             })
             .detach();
             Listener
         });
 
-        let new_id = ws
-            .update(cx, |ws, cx| ws.rename_request(&req_id, "Accounts", cx))
+        let new_id = col
+            .update(cx, |col, cx| col.rename_request(&req_id, "Accounts", cx))
             .expect("rename succeeds");
 
         let events = recorded.borrow();
         assert_eq!(
             events.as_slice(),
-            &[WorkspaceEvent::IdsRemapped(vec![(req_id, new_id)])]
+            &[CollectionEvent::IdsRemapped(vec![(req_id, new_id)])]
         );
         let _ = std::fs::remove_dir_all(dir);
     }
 
     #[gpui_kit::test]
     fn test_move_folder_cycle_emits_crud_failed_event(cx: &mut TestAppContext) {
-        let (dir, _store, mut ws_raw) = test_workspace("move-cycle");
-        let parent_id = ws_raw
+        let (dir, _store, mut col_raw) = test_collection("move-cycle");
+        let parent_id = col_raw
             .create_folder_internal(None, "Parent".to_string())
             .expect("create parent");
-        let child_id = ws_raw
+        let child_id = col_raw
             .create_folder_internal(Some(parent_id.clone()), "Child".to_string())
             .expect("create child");
-        let ws = cx.new(|_| ws_raw);
+        let col = cx.new(|_| col_raw);
 
         let recorded = Rc::new(RefCell::new(Vec::new()));
         let recorded_cb = recorded.clone();
         let _listener = cx.new(|cx| {
-            cx.subscribe(&ws, move |_this, _ws, ev: &WorkspaceEvent, _cx| {
+            cx.subscribe(&col, move |_this, _col, ev: &CollectionEvent, _cx| {
                 recorded_cb.borrow_mut().push(ev.clone());
             })
             .detach();
             Listener
         });
 
-        ws.update(cx, |ws, cx| {
-            ws.move_folder(&parent_id, Some(child_id), cx);
+        col.update(cx, |col, cx| {
+            col.move_folder(&parent_id, Some(child_id), cx);
         });
 
         let events = recorded.borrow();
         assert_eq!(events.len(), 1);
         assert!(matches!(
             &events[0],
-            WorkspaceEvent::CrudFailed {
+            CollectionEvent::CrudFailed {
                 title: "Cannot rename or move",
                 ..
             }
@@ -407,7 +470,7 @@ mod tests {
 
     #[gpui_kit::test]
     fn test_environment_active_change_emits_event(cx: &mut TestAppContext) {
-        let (dir, store, _ws_raw) = test_workspace("env-ev");
+        let (dir, store, _col_raw) = test_collection("env-ev");
         let env_state = cx.new(|_| EnvironmentState::new(store, "test-ws".to_string(), None));
         let recorded = Rc::new(RefCell::new(Vec::new()));
         let recorded_cb = recorded.clone();

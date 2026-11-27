@@ -1,5 +1,6 @@
 use crate::modals::Modal;
-use crate::state::{ModalKind, ModalState, WorkspaceDataState};
+use crate::services::openapi_export::{build_openapi_export_for, openapi_export_stats_for};
+use crate::state::{CollectionState, ModalKind, ModalState, WorkspaceState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -35,17 +36,20 @@ impl ExportModalState {
 
 #[derive(IntoElement)]
 pub struct ExportModal {
-    workspace_state: Entity<WorkspaceDataState>,
+    workspace_state: Entity<WorkspaceState>,
+    collection_state: Entity<CollectionState>,
     modal_state: Entity<ModalState>,
 }
 
 impl ExportModal {
     pub fn new(
-        workspace_state: Entity<WorkspaceDataState>,
+        workspace_state: Entity<WorkspaceState>,
+        collection_state: Entity<CollectionState>,
         modal_state: Entity<ModalState>,
     ) -> Self {
         Self {
             workspace_state,
+            collection_state,
             modal_state,
         }
     }
@@ -55,6 +59,7 @@ impl RenderOnce for ExportModal {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let t = theme();
         let ws_entity = self.workspace_state.clone();
+        let col_entity = self.collection_state.clone();
         let modal_entity_ref = self.modal_state.clone();
 
         let modal_entity = window
@@ -73,20 +78,11 @@ impl RenderOnce for ExportModal {
             .target_folder_name
             .clone()
             .unwrap_or_else(|| "Folder".to_string());
-        let (exportable, folders, skipped) = ws_entity
-            .read(cx)
-            .openapi_export_stats_for(target_folder_id.as_deref());
+        let (exportable, folders, skipped) =
+            openapi_export_stats_for(col_entity.read(cx), target_folder_id.as_deref());
         let (source_label, source_name) = match &target_folder_id {
             Some(_) => ("Folder", target_folder_name.as_str()),
-            None => (
-                "Workspace",
-                ws_entity
-                    .read(cx)
-                    .active_workspace
-                    .as_ref()
-                    .map(|w| w.name.as_str())
-                    .unwrap_or("Workspace"),
-            ),
+            None => ("Workspace", ws_entity.read(cx).workspace_name()),
         };
         let default_file_name = format!(
             "{}.openapi.{}",
@@ -283,6 +279,7 @@ impl RenderOnce for ExportModal {
                                 let is_valid = exportable > 0;
                                 let file_name = default_file_name;
                                 let ws_exec = ws_entity.clone();
+                                let col_exec = col_entity.clone();
                                 let modal_exec = modal_entity_ref.clone();
                                 let st_exec = modal_entity.clone();
                                 let scope_exec = target_folder_id.clone();
@@ -299,6 +296,7 @@ impl RenderOnce for ExportModal {
                                         let format = st_exec.read(cx).format;
                                         let file_name = file_name.clone();
                                         let ws_exec = ws_exec.clone();
+                                        let col_exec = col_exec.clone();
                                         let scope = scope_exec.clone();
                                         let modal_exec = modal_exec.clone();
 
@@ -310,9 +308,21 @@ impl RenderOnce for ExportModal {
                                                 .await
                                             {
                                                 let path = file.path().to_path_buf();
-                                                let result = ws_exec.update(cx, |ws, _cx| {
-                                                    let export = ws
-                                                        .build_openapi_export_for(scope.as_deref());
+                                                let (ws_name, ws_desc) =
+                                                    ws_exec.read_with(cx, |ws, _| {
+                                                        (
+                                                            ws.workspace_name().to_string(),
+                                                            ws.workspace_description()
+                                                                .map(str::to_string),
+                                                        )
+                                                    });
+                                                let result = col_exec.update(cx, |col, _cx| {
+                                                    let export = build_openapi_export_for(
+                                                        col,
+                                                        scope.as_deref(),
+                                                        &ws_name,
+                                                        ws_desc.as_deref(),
+                                                    );
                                                     let warnings = export.warnings.clone();
                                                     zest_core::exporters::serialize_openapi(
                                                         &export, format,

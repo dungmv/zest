@@ -1,12 +1,13 @@
-use super::{FolderMoveOutcome, WorkspaceDataState, WorkspaceEvent};
+use super::CollectionState;
+use crate::state::{CollectionEvent, FolderMoveOutcome};
 use gpui_kit::Context;
 use std::collections::HashMap;
 use zest_core::models::Folder;
 
 /// Folder lifecycle, folder moves and id repathing operations of
-/// [`WorkspaceDataState`], split from `workspace_crud.rs` to keep each file
+/// [`CollectionState`], split from `workspace_crud.rs` to keep each file
 /// under the 650 LOC budget.
-impl WorkspaceDataState {
+impl CollectionState {
     pub fn create_folder_internal(
         &mut self,
         parent_id: Option<String>,
@@ -17,7 +18,7 @@ impl WorkspaceDataState {
             if let Ok((_dir_name, rel_path)) =
                 self.store.create_group(parent_id.as_deref(), trimmed)
             {
-                let ws_name = self.workspace_meta.name.clone();
+                let ws_name = self.workspace_scope.name.clone();
                 let mut f = Folder::new(&ws_name, trimmed);
                 f.id = rel_path.clone();
                 f.parent_id = parent_id;
@@ -92,7 +93,7 @@ impl WorkspaceDataState {
     pub fn rename_folder(&mut self, folder_id: &str, new_name: String, cx: &mut Context<Self>) {
         if let Some((_new_path, pairs)) = self.rename_folder_internal(folder_id, &new_name) {
             if !pairs.is_empty() {
-                cx.emit(WorkspaceEvent::IdsRemapped(pairs));
+                cx.emit(CollectionEvent::IdsRemapped(pairs));
             }
             cx.notify();
         }
@@ -173,12 +174,12 @@ impl WorkspaceDataState {
             }
             Ok(FolderMoveOutcome::Moved(pairs)) => {
                 if !pairs.is_empty() {
-                    cx.emit(WorkspaceEvent::IdsRemapped(pairs));
+                    cx.emit(CollectionEvent::IdsRemapped(pairs));
                 }
                 cx.notify();
             }
             Err(message) => {
-                cx.emit(WorkspaceEvent::CrudFailed {
+                cx.emit(CollectionEvent::CrudFailed {
                     title: "Cannot rename or move",
                     message,
                 });
@@ -201,7 +202,7 @@ impl WorkspaceDataState {
         cx: &mut Context<Self>,
     ) {
         if let Some(new_id) = self.move_request_to_folder_internal(src_req_id, target_folder_id) {
-            cx.emit(WorkspaceEvent::IdsRemapped(vec![(
+            cx.emit(CollectionEvent::IdsRemapped(vec![(
                 src_req_id.to_string(),
                 new_id,
             )]));

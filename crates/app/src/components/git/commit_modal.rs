@@ -6,7 +6,7 @@ use super::diff_parser::DiffViewMode;
 use super::diff_view::{render_diff_content, render_diff_view_toggle};
 use crate::modals::{DialogHeader, DialogTitle, Modal};
 use crate::services::GitService;
-use crate::state::{GitState, WorkspaceDataState};
+use crate::state::{CollectionState, GitState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -27,14 +27,14 @@ use zest_core::git::GitStatusResult;
 #[derive(IntoElement)]
 pub struct GitCommitModal {
     git_state: Entity<GitState>,
-    workspace_state: Entity<WorkspaceDataState>,
+    workspace_state: Entity<CollectionState>,
     git_service: GitService,
 }
 
 impl GitCommitModal {
     pub fn new(
         git_state: Entity<GitState>,
-        workspace_state: Entity<WorkspaceDataState>,
+        workspace_state: Entity<CollectionState>,
         git_service: GitService,
     ) -> Self {
         Self {
@@ -47,7 +47,7 @@ impl GitCommitModal {
 
 pub struct ChangesViewProps {
     pub git_clone: Entity<GitState>,
-    pub ws_clone: Entity<WorkspaceDataState>,
+    pub ws_clone: Entity<CollectionState>,
     pub status_opt: Option<GitStatusResult>,
     pub selected_file: Option<(String, bool)>,
     pub diff_content: Option<String>,
@@ -220,7 +220,7 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui_kit::AnyElement {
                                                     cx,
                                                     move |cx| {
                                                         ws.update(cx, |ws, cx| {
-                                                            ws.reload_all();
+                                                            ws.reload_tree();
                                                             cx.notify();
                                                         });
                                                     },

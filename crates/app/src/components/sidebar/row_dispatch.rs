@@ -5,8 +5,8 @@ use super::folder_node::render_folder_row;
 use super::request_node::{render_request_inner_pill, render_request_row};
 use super::SIDEBAR_ROW_HEIGHT;
 use crate::state::{
-    GitState, ModalState, PersistenceState, RequestSessionState, ResponseState, SidebarState,
-    WorkspaceDataState,
+    CollectionState, GitState, ModalState, PersistenceState, RequestSessionState, ResponseState,
+    SidebarState,
 };
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -30,7 +30,7 @@ pub struct SidebarRenameCtx<'a> {
 
 /// Entity handles needed by sidebar row interaction callbacks.
 pub struct SidebarEntities<'a> {
-    pub ws: &'a Entity<WorkspaceDataState>,
+    pub ws: &'a Entity<CollectionState>,
     pub persistence: &'a Entity<PersistenceState>,
     pub sidebar: &'a Entity<SidebarState>,
     pub modal: &'a Entity<ModalState>,
@@ -188,7 +188,7 @@ pub(super) fn render_flat_sidebar_row(
                             let item = state.pins.remove(from_idx);
                             state.pins.insert(to_idx, item);
                             let _ = state.store.save_pins(&state.pins);
-                            cx.emit(crate::state::WorkspaceEvent::PinsModified);
+                            cx.emit(crate::state::CollectionEvent::PinsModified);
                             state.bump_tree_version();
                             cx.notify();
                         }

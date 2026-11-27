@@ -2,13 +2,14 @@ use crate::components::*;
 use crate::modals::*;
 use crate::services::GitService;
 use crate::state::{
-    EnvironmentState, GitState, ModalKind, ModalState, PersistenceState, RequestSessionState,
-    SidebarState, WorkspaceDataState,
+    CollectionState, EnvironmentState, GitState, ModalKind, ModalState, PersistenceState,
+    RequestSessionState, SidebarState, WorkspaceState,
 };
 use gpui_kit::{App, Div, Entity, IntoElement, ParentElement};
 
 pub struct ModalOverlayEntities<'a> {
-    pub workspace_state: &'a Entity<WorkspaceDataState>,
+    pub workspace_state: &'a Entity<WorkspaceState>,
+    pub collection_state: &'a Entity<CollectionState>,
     pub env_state: &'a Entity<EnvironmentState>,
     pub persistence_state: &'a Entity<PersistenceState>,
     pub modal_state: &'a Entity<ModalState>,
@@ -27,7 +28,7 @@ pub fn attach_modal_overlays(root: Div, entities: ModalOverlayEntities, cx: &mut
         return root.child(
             GitModal::new(
                 entities.git_state.clone(),
-                entities.workspace_state.clone(),
+                entities.collection_state.clone(),
                 GitService::new(entities.git_state.clone()),
             )
             .into_any_element(),
@@ -55,6 +56,7 @@ pub fn attach_modal_overlays(root: Div, entities: ModalOverlayEntities, cx: &mut
         Some(ModalKind::WorkspaceSetting) => root.child(
             WorkspaceSettingModal::new(
                 entities.workspace_state.clone(),
+                entities.collection_state.clone(),
                 entities.env_state.clone(),
                 entities.modal_state.clone(),
             )
@@ -62,7 +64,7 @@ pub fn attach_modal_overlays(root: Div, entities: ModalOverlayEntities, cx: &mut
         ),
         Some(ModalKind::Import) => root.child(
             ImportModal::new(
-                entities.workspace_state.clone(),
+                entities.collection_state.clone(),
                 entities.modal_state.clone(),
             )
             .into_any_element(),
@@ -70,6 +72,7 @@ pub fn attach_modal_overlays(root: Div, entities: ModalOverlayEntities, cx: &mut
         Some(ModalKind::Export) => root.child(
             ExportModal::new(
                 entities.workspace_state.clone(),
+                entities.collection_state.clone(),
                 entities.modal_state.clone(),
             )
             .into_any_element(),
@@ -79,7 +82,7 @@ pub fn attach_modal_overlays(root: Div, entities: ModalOverlayEntities, cx: &mut
         }
         Some(ModalKind::CommandPalette) => root.child(
             CommandPalette::new(
-                entities.workspace_state.clone(),
+                entities.collection_state.clone(),
                 entities.env_state.clone(),
                 entities.persistence_state.clone(),
                 entities.modal_state.clone(),

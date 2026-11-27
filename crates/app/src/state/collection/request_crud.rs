@@ -1,15 +1,15 @@
-use super::{RequestSessionState, WorkspaceDataState, WorkspaceEvent};
-use crate::settings::AppSettings;
+use super::CollectionState;
+use crate::state::{CollectionEvent, RequestSessionState};
 use gpui_kit::{App, Context, Entity};
 use std::path::PathBuf;
-use zest_core::models::{HttpMethod, Protocol, RequestItem, StoredCookie};
+use zest_core::models::{HttpMethod, Protocol, RequestItem};
 use zest_core::storage::models::RequestFile;
 
 /// Pairs `update_active_request` with a `mark_dirty` on the session state —
 /// the standard "edit the active request and flag it for persistence"
 /// boilerplate shared by every composer control.
 pub fn edit_active_request(
-    workspace_state: &Entity<WorkspaceDataState>,
+    workspace_state: &Entity<CollectionState>,
     session_state: &Entity<RequestSessionState>,
     req_id: &str,
     cx: &mut App,
@@ -23,7 +23,7 @@ pub fn edit_active_request(
     });
 }
 
-impl WorkspaceDataState {
+impl CollectionState {
     /// Conventional HTTP verb persisted for a request of the given protocol.
     /// WS handshake is a GET; gRPC and GraphQL ride on HTTP POST.
     fn protocol_method(protocol: Protocol) -> HttpMethod {
@@ -50,7 +50,7 @@ impl WorkspaceDataState {
                 )
             });
 
-        let ws_name = self.workspace_meta.name.clone();
+        let ws_name = self.workspace_scope.name.clone();
         let mut item =
             RequestItem::new_with_protocol(&ws_name, "New Request", method, "", protocol);
         item.id = rel_path.clone();
@@ -100,7 +100,7 @@ impl WorkspaceDataState {
             .ok()?;
 
         let _ = self.store.write_request(&rel_path, &req_file);
-        let ws_name = self.workspace_meta.name.clone();
+        let ws_name = self.workspace_scope.name.clone();
         let mut dup = req_file.to_item(&rel_path, &ws_name, folder_rel);
         dup.last_status_code = existing.last_status_code;
         self.requests.push(dup.clone());
@@ -175,7 +175,7 @@ impl WorkspaceDataState {
         let res = self.rename_request_internal(req_id, new_name);
         if let Some(new_id) = &res {
             if new_id != req_id {
-                cx.emit(WorkspaceEvent::IdsRemapped(vec![(
+                cx.emit(CollectionEvent::IdsRemapped(vec![(
                     req_id.to_string(),
                     new_id.clone(),
                 )]));
@@ -203,7 +203,7 @@ impl WorkspaceDataState {
                 if let Some(new_id) =
                     self.move_request_across_folders(src_req_id, target.folder_id.clone())
                 {
-                    cx.emit(WorkspaceEvent::IdsRemapped(vec![(
+                    cx.emit(CollectionEvent::IdsRemapped(vec![(
                         src_req_id.to_string(),
                         new_id,
                     )]));
@@ -300,91 +300,13 @@ impl WorkspaceDataState {
         cx: &mut Context<Self>,
     ) {
         if let Some(unique_name) = self.rename_example_internal(req_id, old_name, new_name) {
-            cx.emit(WorkspaceEvent::ExampleRenamed {
+            cx.emit(CollectionEvent::ExampleRenamed {
                 req_id: req_id.to_string(),
                 old_name: old_name.to_string(),
                 new_name: unique_name,
             });
             cx.notify();
         }
-    }
-
-    pub fn rename_workspace_internal(&mut self, new_name: &str) -> bool {
-        let trimmed = new_name.trim();
-        if trimmed.is_empty() {
-            return false;
-        }
-        self.workspace_meta.name = trimmed.to_string();
-        let _ = self.store.save_workspace_meta(&self.workspace_meta);
-        if let Some(ws) = &mut self.active_workspace {
-            ws.name = trimmed.to_string();
-        }
-        true
-    }
-
-    pub fn rename_workspace(&mut self, new_name: String, cx: &mut Context<Self>) {
-        if self.rename_workspace_internal(&new_name) {
-            cx.emit(crate::state::WorkspaceEvent::WorkspaceMetaModified);
-            cx.notify();
-        }
-    }
-
-    pub fn open_workspace_folder(&self) {
-        let path = &self.workspace_path;
-        #[cfg(target_os = "windows")]
-        let _ = std::process::Command::new("explorer").arg(path).spawn();
-        #[cfg(target_os = "macos")]
-        let _ = std::process::Command::new("open").arg(path).spawn();
-        #[cfg(target_os = "linux")]
-        let _ = std::process::Command::new("xdg-open").arg(path).spawn();
-    }
-
-    pub fn clean_history_internal(&mut self) {
-        self.recent_workspaces.clear();
-        let mut settings = AppSettings::load();
-        settings.recent_workspaces.clear();
-        let _ = settings.save();
-    }
-
-    pub fn clean_history(&mut self, cx: &mut Context<Self>) {
-        self.clean_history_internal();
-        cx.notify();
-    }
-
-    /// Refreshes the in-memory cookie snapshot from the executor without
-    /// touching disk. Returns the snapshot so the caller can persist it on
-    /// the background executor (disk writes must not run on the UI thread).
-    pub fn sync_cookies_in_memory(&mut self) -> Vec<StoredCookie> {
-        self.cookies = self.executor.get_stored_cookies();
-        self.cookies.clone()
-    }
-
-    pub fn sync_cookies_from_executor(&mut self) {
-        let cookies = self.sync_cookies_in_memory();
-        if let Ok(val) = serde_json::to_value(&cookies) {
-            let _ = self.store.save_cookies(&val);
-        }
-    }
-
-    pub fn remove_cookie_internal(&mut self, domain: &str, path: &str, name: &str) {
-        self.executor.remove_cookie(domain, path, name);
-        self.sync_cookies_from_executor();
-    }
-
-    pub fn remove_cookie(&mut self, domain: &str, path: &str, name: &str, cx: &mut Context<Self>) {
-        self.remove_cookie_internal(domain, path, name);
-        cx.notify();
-    }
-
-    pub fn clear_cookies_internal(&mut self) {
-        self.executor.clear_cookies();
-        self.cookies.clear();
-        let _ = self.store.save_cookies(&serde_json::json!([]));
-    }
-
-    pub fn clear_cookies(&mut self, cx: &mut Context<Self>) {
-        self.clear_cookies_internal();
-        cx.notify();
     }
 
     pub fn toggle_pin(&mut self, req_id: &str, cx: &mut Context<Self>) {
@@ -394,7 +316,7 @@ impl WorkspaceDataState {
             self.pins.push(req_id.to_string());
         }
         let _ = self.store.save_pins(&self.pins);
-        cx.emit(crate::state::WorkspaceEvent::PinsModified);
+        cx.emit(CollectionEvent::PinsModified);
         self.bump_tree_version();
         cx.notify();
     }
@@ -406,7 +328,7 @@ impl WorkspaceDataState {
     pub fn reorder_pins(&mut self, new_pins: Vec<String>, cx: &mut Context<Self>) {
         self.pins = new_pins;
         let _ = self.store.save_pins(&self.pins);
-        cx.emit(crate::state::WorkspaceEvent::PinsModified);
+        cx.emit(CollectionEvent::PinsModified);
         self.bump_tree_version();
         cx.notify();
     }
@@ -440,7 +362,7 @@ impl WorkspaceDataState {
         if let Some(r) = self.requests.iter_mut().find(|r| r.id == req_id) {
             let prev_status = r.last_status_code;
             let folder_id = r.folder_id.clone();
-            *r = req_file.to_item(req_id, &self.workspace_meta.name, folder_id);
+            *r = req_file.to_item(req_id, &self.workspace_scope.name, folder_id);
             r.last_status_code = prev_status;
         }
         self.bump_tree_version();

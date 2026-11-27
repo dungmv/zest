@@ -1,7 +1,7 @@
 use crate::components::script_editor::{ScriptCompletionProvider, ScriptEditorKind};
 use crate::env::{attach_env_lsp, EnvCompletionProvider, EnvEditorDecorations};
 use crate::state::{
-    ComposerSyncScope, EnvironmentState, ModalState, RequestSessionState, WorkspaceDataState,
+    CollectionState, ComposerSyncScope, EnvironmentState, ModalState, RequestSessionState,
 };
 use gpui_kit::component::input::{
     EditorState as CodeEditorState, GutterDecorationCollection, InputState, TextareaState,
@@ -84,7 +84,7 @@ impl ComposerInputs {
         env_state: Entity<EnvironmentState>,
         modal_state: Entity<ModalState>,
         session_state: Entity<RequestSessionState>,
-        workspace_state: Entity<WorkspaceDataState>,
+        workspace_state: Entity<CollectionState>,
         highlighter_factory: HighlighterFactory,
         cx: &mut App,
     ) -> Self {
@@ -269,7 +269,7 @@ impl ComposerInputs {
         &mut self,
         req_id: &str,
         scope: ComposerSyncScope,
-        workspace_state: &Entity<WorkspaceDataState>,
+        workspace_state: &Entity<CollectionState>,
         env_state: &Entity<EnvironmentState>,
         window: &mut Window,
         cx: &mut App,

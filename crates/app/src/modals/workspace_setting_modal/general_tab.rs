@@ -1,4 +1,4 @@
-use crate::state::WorkspaceDataState;
+use crate::state::WorkspaceState;
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::input::{Input, InputState};
@@ -10,7 +10,7 @@ use gpui_kit::{
 };
 
 pub fn render_general_tab(
-    ws_state: &Entity<WorkspaceDataState>,
+    ws_state: &Entity<WorkspaceState>,
     ws_name_input: &Entity<InputState>,
     workspace_name: &str,
     workspace_path_str: &str,

@@ -1,5 +1,5 @@
 use crate::components::message_toolbar;
-use crate::state::{RequestSessionState, WorkspaceDataState};
+use crate::state::{CollectionState, RequestSessionState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -15,7 +15,7 @@ use zest_core::models::WsMessageFormat;
 type SendMessageCallback = Rc<dyn Fn(&mut gpui_kit::Window, &mut App)>;
 
 pub(super) struct WsMessageTabContext<'a> {
-    pub workspace_state: &'a Entity<WorkspaceDataState>,
+    pub workspace_state: &'a Entity<CollectionState>,
     pub editor_state: &'a Entity<RequestSessionState>,
     /// Session-only outgoing message box (never persisted).
     pub message_textarea: &'a Entity<TextareaState>,

@@ -1,6 +1,6 @@
 use crate::components::format_json_editor;
 use crate::components::message_toolbar;
-use crate::state::{edit_active_request, RequestSessionState, WorkspaceDataState};
+use crate::state::{edit_active_request, CollectionState, RequestSessionState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -16,7 +16,7 @@ use gpui_kit::{
 use zest_core::models::GrpcPayload;
 
 pub(super) struct GrpcMessageTabContext<'a> {
-    pub workspace_state: &'a Entity<WorkspaceDataState>,
+    pub workspace_state: &'a Entity<CollectionState>,
     pub editor_state: &'a Entity<RequestSessionState>,
     pub message_editor: &'a Entity<CodeEditorState>,
     pub error_marks: &'a GutterDecorationCollection,

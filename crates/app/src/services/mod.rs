@@ -1,6 +1,7 @@
 pub mod git_service;
 pub mod grpc_engine;
 pub mod http_engine;
+pub mod openapi_export;
 pub mod pipeline;
 pub mod runner;
 pub mod runtime;

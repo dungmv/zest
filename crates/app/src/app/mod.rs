@@ -67,7 +67,7 @@ impl AppView {
             state.env.clone(),
             state.modal.clone(),
             state.session.clone(),
-            state.workspace.clone(),
+            state.collection.clone(),
             highlighter_factory.clone(),
             cx,
         );
@@ -86,6 +86,7 @@ impl AppView {
         let runner = Runner::new(
             state.session.clone(),
             state.workspace.clone(),
+            state.collection.clone(),
             state.env.clone(),
             state.response.clone(),
             state.modal.clone(),
@@ -96,17 +97,11 @@ impl AppView {
             },
         );
 
-        // The workspace data loads asynchronously (background scan); the
-        // initial request selection + composer/response sync replay through
-        // the `WorkspaceEvent::RequestsReloaded` handler once it lands —
-        // subscriptions are live by then, so the runtime
-        // `ActiveRequestChanged` path (clamps, realtime restore, .loc cache)
-        // covers everything the old synchronous startup block did.
-
         // Set up subscriptions:
         let mut _subscriptions = setup_app_subscriptions(
             SubscriptionTargets {
                 workspace_state: &state.workspace,
+                collection_state: &state.collection,
                 env_state: &state.env,
                 persistence_state: &state.persistence,
                 modal_state: &state.modal,
@@ -173,7 +168,7 @@ impl AppView {
         let req_id = self.state.session.read(cx).active_request_id().to_string();
         let wants_json = self
             .state
-            .workspace
+            .collection
             .read(cx)
             .find_request(&req_id)
             .map(|r| r.ws_message_format.is_json())
@@ -223,7 +218,7 @@ impl AppView {
             self.composer_inputs.grpc.diagnostics_hover.get(),
             &text,
             &self.state.session,
-            &self.state.workspace,
+            &self.state.collection,
             cx,
         );
     }
@@ -238,6 +233,7 @@ impl Render for AppView {
         let is_vertical_split = self.state.modal.read(cx).split_layout_vertical;
 
         let ws_entity = self.state.workspace.clone();
+        let col_entity = self.state.collection.clone();
         let sidebar_entity = self.state.sidebar.clone();
         let modal_entity = self.state.modal.clone();
         let git_entity = self.state.git.clone();
@@ -248,7 +244,7 @@ impl Render for AppView {
         let composer_pane = self.render_request_composer(window, cx);
 
         let response_pane = ResponseInspector::new(
-            ws_entity.clone(),
+            col_entity.clone(),
             session_entity.clone(),
             resp_entity.clone(),
             self.inspector_displays.response_editor.clone(),
@@ -280,7 +276,7 @@ impl Render for AppView {
                         .size(sidebar_width)
                         .size_range(px(200.)..px(480.))
                         .child(SidebarTree {
-                            workspace_state: ws_entity.clone(),
+                            workspace_state: col_entity.clone(),
                             persistence_state: self.state.persistence.clone(),
                             sidebar_state: sidebar_entity.clone(),
                             modal_state: modal_entity.clone(),
@@ -468,6 +464,7 @@ impl Render for AppView {
             // Custom Title Bar
             .child(AppTitleBar::new(
                 ws_entity.clone(),
+                col_entity.clone(),
                 self.state.env.clone(),
                 modal_entity.clone(),
                 sidebar_entity.clone(),
@@ -487,6 +484,7 @@ impl Render for AppView {
             root,
             ModalOverlayEntities {
                 workspace_state: &ws_entity,
+                collection_state: &col_entity,
                 env_state: &self.state.env,
                 persistence_state: &self.state.persistence,
                 modal_state: &modal_entity,

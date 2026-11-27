@@ -1,4 +1,4 @@
-use crate::state::{edit_active_request, RequestSessionState, WorkspaceDataState};
+use crate::state::{edit_active_request, CollectionState, RequestSessionState};
 use crate::theme::theme;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Input, InputState};
@@ -10,7 +10,7 @@ use zest_core::models::GrpcPayload;
 
 /// Inputs for the gRPC Proto tab.
 pub(super) struct GrpcProtoTabContext<'a> {
-    pub workspace_state: &'a Entity<WorkspaceDataState>,
+    pub workspace_state: &'a Entity<CollectionState>,
     pub editor_state: &'a Entity<RequestSessionState>,
     /// Invokes `Runner::fetch_grpc_schema` for the active request.
     pub on_fetch_schema: std::rc::Rc<dyn Fn(&mut App)>,

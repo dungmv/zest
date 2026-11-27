@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::components::auth_form::{
     render_auth_form, AuthFormContext, AuthFormIds, AuthFormInputs, AuthFormOptions,
 };
-use crate::state::{EnvironmentState, ModalState, RequestSessionState, WorkspaceDataState};
+use crate::state::{CollectionState, EnvironmentState, ModalState, RequestSessionState};
 use gpui_kit::component::input::InputState;
 use gpui_kit::{App, Div, Entity, Window};
 use zest_core::models::Auth;
@@ -17,7 +17,7 @@ pub(super) struct AuthTabInputs<'a> {
 }
 
 pub(super) struct AuthTabContext<'a> {
-    pub workspace_state: &'a Entity<WorkspaceDataState>,
+    pub workspace_state: &'a Entity<CollectionState>,
     pub env_state: &'a Entity<EnvironmentState>,
     pub modal_state: &'a Entity<ModalState>,
     pub editor_state: &'a Entity<RequestSessionState>,

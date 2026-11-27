@@ -8,7 +8,7 @@ pub(super) fn render_message_tab(
     cx: &mut Context<AppView>,
 ) -> AnyElement {
     let req_id_str = av.state.session.read(cx).active_request_id().to_string();
-    let ws_read = av.state.workspace.read(cx);
+    let ws_read = av.state.collection.read(cx);
     let active_req = ws_read.find_request(&req_id_str);
     let protocol = active_req.map(|r| r.protocol).unwrap_or(Protocol::Http);
     match protocol {
@@ -21,7 +21,7 @@ pub(super) fn render_message_tab(
                 .child(super::ws_message_tab::render_ws_message_tab(
                     msg_format,
                     super::ws_message_tab::WsMessageTabContext {
-                        workspace_state: &av.state.workspace,
+                        workspace_state: &av.state.collection,
                         editor_state: &av.state.session,
                         message_textarea: &av.composer_inputs.ws_message_textarea,
                         on_send_message: std::rc::Rc::new(move |window, cx| {
@@ -46,7 +46,7 @@ pub(super) fn render_message_tab(
                 super::grpc_message_tab::render_grpc_message_tab(
                     &payload,
                     super::grpc_message_tab::GrpcMessageTabContext {
-                        workspace_state: &av.state.workspace,
+                        workspace_state: &av.state.collection,
                         editor_state: &av.state.session,
                         message_editor: &av.composer_inputs.grpc.message_editor,
                         error_marks: &av.composer_inputs.grpc.error_marks,

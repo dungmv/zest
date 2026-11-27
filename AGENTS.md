@@ -48,28 +48,29 @@ These principles were forged through major refactoring milestones (SL-001..007, 
 
 ### 2.1 Multi-Entity State Architecture (No God Objects)
 - **Zero God Objects**: Monolithic structs like the legacy `WorkspaceState` (>3,300 LOC) or monolithic `AppView` (32 fields) are strictly forbidden.
-- **`AppState` Container**: `AppState` (`crates/app/src/state/app_state.rs`) is solely an initialization container that owns 8 decoupled GPUI entities:
-  1. `workspace: Entity<WorkspaceDataState>`: Pure domain data (collections, requests, folders, pins, workspace metadata).
-  2. `env: Entity<EnvironmentState>`: Environments, `globals`, active environment, cached variable merging.
-  3. `persistence: Entity<PersistenceState>`: Coalesced write-behind persistence (`PersistenceCoordinator`), file watcher, conflict & dirty tracking.
-  4. `sidebar: Entity<SidebarState>`: Sidebar width, collapse states, history navigation, generic `RenamingState<T>`.
-  5. `modal: Entity<ModalState>`: Modal visibility flags, network settings, theme preference, split layout.
-  6. `git: Entity<GitState>`: VCS status cache, staging, diff, branches, remotes (commands dispatched via `GitService`).
-  7. `session: Entity<RequestSessionState>`: Active request pointer, active composer tabs, in-flight send status.
-  8. `response: Entity<ResponseState>`: Active response, cached formatted bodies, test results, console logs, LRU cache.
+- **`AppState` Container**: `AppState` (`crates/app/src/state/app_state.rs`) is solely an initialization container that owns 9 decoupled GPUI entities:
+  1. `workspace: Entity<WorkspaceState>`: Workspace-level metadata, lifecycle (open/new/rename), recent workspaces, HTTP executor, and cookies.
+  2. `collection: Entity<CollectionState>`: Collection tree data (folders, requests, scratch request, pins, parse errors, background scan, CRUD, and hierarchy inheritance).
+  3. `env: Entity<EnvironmentState>`: Environments, `globals`, active environment, cached variable merging.
+  4. `persistence: Entity<PersistenceState>`: Coalesced write-behind persistence (`PersistenceCoordinator`), file watcher, conflict & dirty tracking.
+  5. `sidebar: Entity<SidebarState>`: Sidebar width, collapse states, history navigation, generic `RenamingState<T>`.
+  6. `modal: Entity<ModalState>`: Modal visibility flags, network settings, theme preference, split layout.
+  7. `git: Entity<GitState>`: VCS status cache, staging, diff, branches, remotes (commands dispatched via `GitService`).
+  8. `session: Entity<RequestSessionState>`: Active request pointer, active composer tabs, in-flight send status.
+  9. `response: Entity<ResponseState>`: Active response, cached formatted bodies, test results, console logs, LRU cache.
 - **No Prop-Drilling**: Do not pass `AppState` into child components. Child views must receive only the specific `Entity<*State>` handles they observe or mutate.
 
 ### 2.2 Single-Active Request & On-Demand Borrowing (SL-003)
 - `RequestSessionState` only stores `active_request_id: Option<String>`.
 - **Never duplicate request data**: Never store a full `HttpRequestItem` clone in `RequestSessionState`.
-- All composer tabs, header tables, and pipelines query and borrow `&HttpRequestItem` directly from `WorkspaceDataState`. Scratch requests are managed via `WorkspaceDataState::scratch_request`.
+- All composer tabs, header tables, and pipelines query and borrow `&HttpRequestItem` directly from `CollectionState`. Scratch requests are managed via `CollectionState::scratch_request`.
 
 ### 2.3 Pure GPUI Rendering & Dual-Channel Event Architecture (PERF-006)
 - **`AppView::render()` must be 100% pure element tree construction**:
   - NEVER call data synchronization routines (`sync_*`), disk reads, or state mutations inside `render()`.
   - Rendering must run at 60/120 FPS with zero overhead.
 - **Dual-Channel Event & Redraw Pattern**:
-  1. **Typed Command / Event Channel (`cx.emit` + `cx.subscribe` / `cx.subscribe_in`)**: Cross-entity synchronization and UI input updates (`ComposerInputs`, `InspectorDisplays`) flow through typed events (`WorkspaceEvent`, `SessionEvent`, `ResponseEvent`, `EnvironmentEvent` in `state/workspace_events.rs`) handled centrally in `crates/app/src/app/workspace_event_handler.rs`.
+  1. **Typed Command / Event Channel (`cx.emit` + `cx.subscribe` / `cx.subscribe_in`)**: Cross-entity synchronization and UI input updates (`ComposerInputs`, `InspectorDisplays`) flow through typed events (`WorkspaceEvent`, `CollectionEvent`, `SessionEvent`, `ResponseEvent`, `EnvironmentEvent` in `state/workspace_events.rs`) handled centrally in `crates/app/src/app/workspace_event_handler.rs`.
   2. **Pure Redraw Channel (`cx.notify` + `cx.observe`)**: `cx.observe` closures in `crates/app/src/app/subscriptions.rs` must ONLY trigger `cx.notify()`. Never store or diff intermediate flags (`last_synced_*`, `*_version`, `is_dirty`) inside `cx.observe`.
 
 ### 2.4 Non-Blocking Asynchronous Concurrency

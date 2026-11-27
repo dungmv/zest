@@ -1,4 +1,4 @@
-use super::{EnvironmentState, GitState, PersistenceState, WorkspaceDataState};
+use super::{CollectionState, EnvironmentState, GitState, PersistenceState};
 use crate::components::sidebar::{
     build_sidebar_req_items, flatten_sidebar_tree, FlatSidebarRow, FlatTreeInput, SidebarCacheKey,
     SidebarFlatCache,
@@ -211,7 +211,7 @@ impl SidebarState {
 
     pub fn cached_flat_rows(
         &self,
-        ws: &WorkspaceDataState,
+        ws: &CollectionState,
         per: &PersistenceState,
         git: &GitState,
     ) -> Arc<Vec<FlatSidebarRow>> {
@@ -337,7 +337,7 @@ impl SidebarState {
         &mut self,
         req_id: String,
         initial_name: String,
-        ws: Entity<WorkspaceDataState>,
+        ws: Entity<CollectionState>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -359,7 +359,7 @@ impl SidebarState {
         &mut self,
         folder_id: String,
         initial_name: String,
-        ws: Entity<WorkspaceDataState>,
+        ws: Entity<CollectionState>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -381,7 +381,7 @@ impl SidebarState {
         &mut self,
         req_id: String,
         example_name: String,
-        ws: Entity<WorkspaceDataState>,
+        ws: Entity<CollectionState>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {

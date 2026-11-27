@@ -1,4 +1,4 @@
-use crate::state::{RequestSessionState, SidebarState, WorkspaceDataState};
+use crate::state::{CollectionState, RequestSessionState, SidebarState};
 use gpui_kit::{App, Entity, Window};
 use zest_core::models::Protocol;
 
@@ -6,7 +6,7 @@ use zest_core::models::Protocol;
 pub fn create_and_rename_request(
     protocol: Protocol,
     folder_id: Option<String>,
-    ws_entity: &Entity<WorkspaceDataState>,
+    ws_entity: &Entity<CollectionState>,
     ed_entity: &Entity<RequestSessionState>,
     sb_entity: &Entity<SidebarState>,
     window: &mut Window,
@@ -24,7 +24,7 @@ pub fn create_and_rename_request(
 }
 
 pub fn delete_multi_selected_items(
-    ws_entity: &Entity<WorkspaceDataState>,
+    ws_entity: &Entity<CollectionState>,
     ed_entity: &Entity<RequestSessionState>,
     sb_entity: &Entity<SidebarState>,
     cx: &mut App,
@@ -67,7 +67,7 @@ pub fn delete_multi_selected_items(
 }
 
 pub fn delete_request_item(
-    ws_entity: &Entity<WorkspaceDataState>,
+    ws_entity: &Entity<CollectionState>,
     ed_entity: &Entity<RequestSessionState>,
     req_id: &str,
     cx: &mut App,

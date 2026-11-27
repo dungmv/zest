@@ -10,7 +10,8 @@ pub use headers_tab::*;
 
 use crate::modals::Modal;
 use crate::state::{
-    EnvironmentState, ModalKind, ModalState, WorkspaceDataState, WorkspaceSettingTarget,
+    CollectionState, EnvironmentState, ModalKind, ModalState, WorkspaceSettingTarget,
+    WorkspaceState,
 };
 use gpui_kit::assets::IconName;
 use gpui_kit::component::input::{InputEvent, InputState};
@@ -31,19 +32,22 @@ pub enum WorkspaceSettingTab {
 
 #[derive(IntoElement)]
 pub struct WorkspaceSettingModal {
-    workspace_state: Entity<WorkspaceDataState>,
+    workspace_state: Entity<WorkspaceState>,
+    collection_state: Entity<CollectionState>,
     env_state: Entity<EnvironmentState>,
     modal_state: Entity<ModalState>,
 }
 
 impl WorkspaceSettingModal {
     pub fn new(
-        workspace_state: Entity<WorkspaceDataState>,
+        workspace_state: Entity<WorkspaceState>,
+        collection_state: Entity<CollectionState>,
         env_state: Entity<EnvironmentState>,
         modal_state: Entity<ModalState>,
     ) -> Self {
         Self {
             workspace_state,
+            collection_state,
             env_state,
             modal_state,
         }
@@ -53,6 +57,7 @@ impl WorkspaceSettingModal {
 impl RenderOnce for WorkspaceSettingModal {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let ws_clone = self.workspace_state.clone();
+        let col_clone = self.collection_state.clone();
         let modal_clone = self.modal_state.clone();
         let env_clone = self.env_state.clone();
         let target = match &modal_clone.read(cx).workspace_setting_target {
@@ -61,48 +66,43 @@ impl RenderOnce for WorkspaceSettingModal {
         };
 
         // Scope details (name, headers, auth)
-        let (title, folder_id_opt, current_headers, current_auth) = {
-            let ws = ws_clone.read(cx);
-            match &target {
-                WorkspaceSettingTarget::Workspace => {
-                    let name = ws
-                        .active_workspace
-                        .as_ref()
-                        .map(|w| w.name.clone())
-                        .unwrap_or_else(|| "Workspace".to_string());
-                    let headers = ws
-                        .active_workspace
-                        .as_ref()
-                        .map(|w| w.headers.clone())
-                        .unwrap_or_default();
-                    let auth = ws
-                        .active_workspace
-                        .as_ref()
-                        .map(|w| w.auth.clone())
-                        .unwrap_or(Auth::None);
-                    (format!("Workspace Settings: {}", name), None, headers, auth)
-                }
-                WorkspaceSettingTarget::Folder(f_id) => {
-                    let folder = ws.folders.iter().find(|f| &f.id == f_id).cloned();
-                    let name = folder
-                        .as_ref()
-                        .map(|f| f.name.clone())
-                        .unwrap_or_else(|| f_id.clone());
-                    let headers = folder
-                        .as_ref()
-                        .map(|f| f.headers.clone())
-                        .unwrap_or_default();
-                    let auth = folder
-                        .as_ref()
-                        .map(|f| f.auth.clone())
-                        .unwrap_or(Auth::Inherit);
-                    (
-                        format!("Folder Settings: {}", name),
-                        Some(f_id.clone()),
-                        headers,
-                        auth,
-                    )
-                }
+        let (title, folder_id_opt, current_headers, current_auth) = match &target {
+            WorkspaceSettingTarget::Workspace => {
+                let ws = ws_clone.read(cx);
+                let name = ws.workspace_name().to_string();
+                let headers = ws
+                    .active_workspace
+                    .as_ref()
+                    .map(|w| w.headers.clone())
+                    .unwrap_or_default();
+                let auth = ws
+                    .active_workspace
+                    .as_ref()
+                    .map(|w| w.auth.clone())
+                    .unwrap_or(Auth::None);
+                (format!("Workspace Settings: {}", name), None, headers, auth)
+            }
+            WorkspaceSettingTarget::Folder(f_id) => {
+                let col = col_clone.read(cx);
+                let folder = col.folders.iter().find(|f| &f.id == f_id).cloned();
+                let name = folder
+                    .as_ref()
+                    .map(|f| f.name.clone())
+                    .unwrap_or_else(|| f_id.clone());
+                let headers = folder
+                    .as_ref()
+                    .map(|f| f.headers.clone())
+                    .unwrap_or_default();
+                let auth = folder
+                    .as_ref()
+                    .map(|f| f.auth.clone())
+                    .unwrap_or(Auth::Inherit);
+                (
+                    format!("Folder Settings: {}", name),
+                    Some(f_id.clone()),
+                    headers,
+                    auth,
+                )
             }
         };
 
@@ -171,8 +171,15 @@ impl RenderOnce for WorkspaceSettingModal {
         );
         let ws_name_input = ws_name_holder.read(cx).0.clone();
 
-        let auth_inputs =
-            use_scope_auth_inputs(window, cx, &target, &current_auth, &ws_clone, &env_clone);
+        let auth_inputs = use_scope_auth_inputs(
+            window,
+            cx,
+            &target,
+            &current_auth,
+            &ws_clone,
+            &col_clone,
+            &env_clone,
+        );
 
         Modal::for_kind(
             "workspace-setting-modal",
@@ -222,6 +229,7 @@ impl RenderOnce for WorkspaceSettingModal {
                     .into_any_element(),
                     WorkspaceSettingTab::Headers => render_headers_tab(
                         &ws_clone,
+                        &col_clone,
                         &self.env_state,
                         &modal_clone,
                         &target,
@@ -232,6 +240,7 @@ impl RenderOnce for WorkspaceSettingModal {
                     WorkspaceSettingTab::Auth => render_auth_tab(
                         AuthTabContext {
                             ws_state: &ws_clone,
+                            col_state: &col_clone,
                             env_state: &self.env_state,
                             modal_state: &modal_clone,
                             target: &target,

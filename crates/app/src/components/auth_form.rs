@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::components::common::mask_secret;
 use crate::components::env_input::{render_disabled_env_input, render_env_input};
-use crate::state::{EnvironmentState, ModalState, WorkspaceDataState};
+use crate::state::{CollectionState, EnvironmentState, ModalState};
 use crate::theme::{theme, AppTheme};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -46,7 +46,7 @@ pub struct AuthFormOptions {
 pub struct AuthFormContext<'a> {
     pub auth: &'a Auth,
     pub folder_id: Option<&'a str>,
-    pub workspace_state: &'a Entity<WorkspaceDataState>,
+    pub workspace_state: &'a Entity<CollectionState>,
     pub env_state: &'a Entity<EnvironmentState>,
     pub modal_state: &'a Entity<ModalState>,
     pub inputs: AuthFormInputs<'a>,
@@ -253,7 +253,7 @@ fn render_type_row(
 #[allow(clippy::too_many_arguments)]
 fn render_inherit_section(
     folder_id: Option<&str>,
-    workspace_state: &Entity<WorkspaceDataState>,
+    workspace_state: &Entity<CollectionState>,
     env_state: &Entity<EnvironmentState>,
     modal_state: &Entity<ModalState>,
     show_inherited_preview: bool,
