@@ -130,6 +130,12 @@ pub fn handle_collection_event(
             if !Arc::ptr_eq(store, &this.state.workspace.read(cx).store) {
                 return;
             }
+            if *announce_opened || !this.initial_restore_done {
+                let collection = this.state.collection.clone();
+                this.state.sidebar.update(cx, |sidebar, cx| {
+                    sidebar.collapse_workspace_folders(&collection, cx);
+                });
+            }
             this.state.workspace.update(cx, |ws, cx| {
                 ws.apply_scan_result(
                     workspace_meta.clone(),

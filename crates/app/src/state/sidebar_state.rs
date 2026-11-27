@@ -183,6 +183,21 @@ impl SidebarState {
         cx.notify();
     }
 
+    pub fn collapse_workspace_folders(
+        &mut self,
+        collection: &Entity<CollectionState>,
+        cx: &mut Context<Self>,
+    ) {
+        self.collapsed_folders = collection
+            .read(cx)
+            .folders
+            .iter()
+            .map(|folder| folder.id.clone())
+            .collect();
+        self.ui_version = self.ui_version.wrapping_add(1);
+        cx.notify();
+    }
+
     pub fn toggle_folder_collapsed(&mut self, folder_id: &str, cx: &mut Context<Self>) {
         if self.collapsed_folders.contains(folder_id) {
             self.collapsed_folders.remove(folder_id);

@@ -33,6 +33,63 @@ fn make_req(
     }
 }
 
+#[gpui_kit::test]
+fn workspace_open_collapses_root_and_nested_folders(cx: &mut gpui_kit::TestAppContext) {
+    use crate::state::{CollectionState, GitState, PersistenceState, SidebarState};
+    use gpui_kit::AppContext as _;
+    use zest_core::storage::FsWorkspaceStore;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().to_path_buf();
+    let store = Arc::new(FsWorkspaceStore::new(&path));
+    let mut collection = CollectionState::new_for_path(path.clone(), store.clone());
+    collection.folders = vec![
+        make_folder("auth", None, "Auth"),
+        make_folder("auth/oauth", Some("auth"), "OAuth"),
+    ];
+    let collection = cx.new(|_| collection);
+    let sidebar = cx.new(|_| SidebarState::new());
+    let persistence = PersistenceState::new(store, path.clone());
+    let git = GitState::new(path);
+
+    sidebar.update(cx, |sidebar, cx| {
+        sidebar.collapse_workspace_folders(&collection, cx);
+        let rows = sidebar.cached_flat_rows(collection.read(cx), &persistence, &git);
+        assert!(matches!(
+            rows.as_slice(),
+            [
+                FlatSidebarRow::Folder {
+                    is_collapsed: true,
+                    ..
+                },
+                FlatSidebarRow::RootDropzone
+            ]
+        ));
+
+        sidebar.toggle_folder_collapsed("auth", cx);
+        let rows = sidebar.cached_flat_rows(collection.read(cx), &persistence, &git);
+        assert!(matches!(
+            rows.as_slice(),
+            [
+                FlatSidebarRow::Folder {
+                    is_collapsed: false,
+                    ..
+                },
+                FlatSidebarRow::Folder {
+                    is_collapsed: true,
+                    depth: 1,
+                    ..
+                },
+                FlatSidebarRow::RootDropzone
+            ]
+        ));
+
+        sidebar.collapse_workspace_folders(&collection, cx);
+        let rows = sidebar.cached_flat_rows(collection.read(cx), &persistence, &git);
+        assert_eq!(rows.len(), 2);
+    });
+}
+
 #[test]
 fn test_flatten_sidebar_tree_hierarchy_and_collapse() {
     let folders = vec![
