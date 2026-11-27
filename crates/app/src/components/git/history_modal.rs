@@ -348,7 +348,7 @@ pub fn render_history_view(
                                                             .child("No text changes (binary file or empty change).")
                                                             .into_any_element()
                                                     } else {
-                                                        render_diff_content(Some(file_diff.to_string()), view_mode)
+                                                        render_diff_content(Some(file_diff), view_mode)
                                                     }),
                                             ),
                                     );

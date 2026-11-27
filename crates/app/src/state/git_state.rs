@@ -1,6 +1,57 @@
 use gpui_kit::Context;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use zest_core::git::{GitFileStatus, GitStatusResult};
+
+/// One row per path, in Git status order. Worktree changes take precedence over
+/// staged changes for the badge and diff mode.
+#[derive(Debug, Clone)]
+pub struct UnifiedChangeItem {
+    pub path: String,
+    pub status: GitFileStatus,
+    pub has_worktree_changes: bool,
+}
+
+#[derive(Debug, Clone, Default)]
+struct GitChanges {
+    rows: Vec<UnifiedChangeItem>,
+    by_path: HashMap<String, usize>,
+}
+
+impl GitChanges {
+    fn from_status(status: &GitStatusResult) -> Self {
+        let mut changes = Self::default();
+        let entries = status.staged_files.iter().map(|file| (file, false)).chain(
+            status
+                .unstaged_files
+                .iter()
+                .chain(&status.untracked_files)
+                .map(|file| (file, true)),
+        );
+
+        for (file, has_worktree_changes) in entries {
+            if let Some(&index) = changes.by_path.get(&file.path) {
+                changes.rows[index].status = file.status;
+                changes.rows[index].has_worktree_changes = has_worktree_changes;
+            } else {
+                changes
+                    .by_path
+                    .insert(file.path.clone(), changes.rows.len());
+                changes.rows.push(UnifiedChangeItem {
+                    path: file.path.clone(),
+                    status: file.status,
+                    has_worktree_changes,
+                });
+            }
+        }
+
+        changes
+    }
+
+    fn get(&self, path: &str) -> Option<&UnifiedChangeItem> {
+        self.by_path.get(path).map(|&index| &self.rows[index])
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GitActiveModal {
@@ -38,7 +89,8 @@ pub struct GitState {
     pub repo_path: PathBuf,
     pub branch: Option<String>,
     pub tracked_warning: bool,
-    pub status: Option<zest_core::git::GitStatusResult>,
+    pub status: Option<GitStatusResult>,
+    changes: GitChanges,
     pub history: Vec<zest_core::git::GitCommitInfo>,
     pub branches: Vec<zest_core::git::GitBranchInfo>,
     pub remotes: Vec<zest_core::git::GitRemote>,
@@ -57,6 +109,7 @@ impl Default for GitState {
             branch: None,
             tracked_warning: false,
             status: None,
+            changes: GitChanges::default(),
             history: Vec::new(),
             branches: Vec::new(),
             remotes: Vec::new(),
@@ -81,7 +134,7 @@ impl GitState {
                 let branch_name = branch_opt.unwrap_or_else(|| "main".to_string());
                 (
                     Some(branch_name.clone()),
-                    Some(zest_core::git::GitStatusResult {
+                    Some(GitStatusResult {
                         is_repo: true,
                         branch: branch_name,
                         ..Default::default()
@@ -90,7 +143,7 @@ impl GitState {
             }
             None => (
                 None,
-                Some(zest_core::git::GitStatusResult {
+                Some(GitStatusResult {
                     is_repo: false,
                     ..Default::default()
                 }),
@@ -112,7 +165,7 @@ impl GitState {
             Some((_root, branch_opt)) => {
                 let branch_name = branch_opt.unwrap_or_else(|| "main".to_string());
                 self.branch = Some(branch_name.clone());
-                self.status = Some(zest_core::git::GitStatusResult {
+                self.status = Some(GitStatusResult {
                     is_repo: true,
                     branch: branch_name,
                     ..Default::default()
@@ -120,12 +173,14 @@ impl GitState {
             }
             None => {
                 self.branch = None;
-                self.status = Some(zest_core::git::GitStatusResult {
+                self.status = Some(GitStatusResult {
                     is_repo: false,
                     ..Default::default()
                 });
             }
         }
+        self.changes = GitChanges::default();
+        self.modal.selected_commit_files.clear();
         self.status_version = self.status_version.wrapping_add(1);
         self.refresh_all(cx);
     }
@@ -222,11 +277,16 @@ impl GitState {
             let ws_status = ws_path.clone();
             let status_res = cx
                 .background_executor()
-                .spawn(async move { zest_core::git::git_status(&ws_status) })
+                .spawn(async move {
+                    zest_core::git::git_status(&ws_status).map(|status| {
+                        let changes = GitChanges::from_status(&status);
+                        (status, changes)
+                    })
+                })
                 .await;
 
-            let st = match status_res {
-                Ok(st) => st,
+            let (st, changes) = match status_res {
+                Ok(result) => result,
                 Err(e) => {
                     if let Some(this_ent) = this.upgrade() {
                         this_ent.update(cx, |git, cx| {
@@ -239,28 +299,15 @@ impl GitState {
             };
 
             let diff_result = if show_modal {
-                let staged_paths: HashSet<String> =
-                    st.staged_files.iter().map(|f| f.path.clone()).collect();
-                let worktree_paths: HashSet<String> = st
-                    .unstaged_files
-                    .iter()
-                    .chain(&st.untracked_files)
-                    .map(|f| f.path.clone())
-                    .collect();
-
                 // Keep the selected file if it still has pending changes; the diff
                 // mode follows its current category (working tree takes priority).
-                let picked_path = selected_file
-                    .filter(|(path, _)| {
-                        staged_paths.contains(path) || worktree_paths.contains(path)
-                    })
-                    .map(|(path, _)| path)
-                    .or_else(|| st.staged_files.first().map(|f| f.path.clone()))
-                    .or_else(|| st.unstaged_files.first().map(|f| f.path.clone()))
-                    .or_else(|| st.untracked_files.first().map(|f| f.path.clone()));
+                let picked_file = selected_file
+                    .and_then(|(path, _)| changes.get(&path))
+                    .or_else(|| changes.rows.first());
 
-                if let Some(path) = picked_path {
-                    let staged = !worktree_paths.contains(&path);
+                if let Some(file) = picked_file {
+                    let path = file.path.clone();
+                    let staged = !file.has_worktree_changes;
                     let ws_diff = ws_path.clone();
                     let p = path.clone();
                     let diff_content = cx
@@ -299,16 +346,9 @@ impl GitState {
                     if st.is_repo && !st.branch.is_empty() {
                         git.branch = Some(st.branch.clone());
                     }
-                    let valid_paths: HashSet<String> = st
-                        .staged_files
-                        .iter()
-                        .chain(&st.unstaged_files)
-                        .chain(&st.untracked_files)
-                        .map(|f| f.path.clone())
-                        .collect();
                     git.modal
                         .selected_commit_files
-                        .retain(|p| valid_paths.contains(p));
+                        .retain(|path| changes.by_path.contains_key(path));
 
                     if let Some((file_sel, diff_content)) = diff_result {
                         git.modal.selected_file = file_sel;
@@ -319,6 +359,7 @@ impl GitState {
                         git.branches = branches;
                     }
                     git.status = Some(st);
+                    git.changes = changes;
                     git.status_version = git.status_version.wrapping_add(1);
                     cx.notify();
                 });
@@ -444,10 +485,16 @@ impl GitState {
         cx.notify();
     }
 
+    pub fn changes(&self) -> &[UnifiedChangeItem] {
+        &self.changes.rows
+    }
+
+    pub fn change(&self, path: &str) -> Option<&UnifiedChangeItem> {
+        self.changes.get(path)
+    }
+
     pub fn toggle_file_selection(&mut self, path: &str, cx: &mut Context<Self>) {
-        if self.modal.selected_commit_files.contains(path) {
-            self.modal.selected_commit_files.remove(path);
-        } else {
+        if !self.modal.selected_commit_files.remove(path) && self.change(path).is_some() {
             self.modal.selected_commit_files.insert(path.to_string());
         }
         cx.notify();
@@ -455,15 +502,12 @@ impl GitState {
 
     pub fn toggle_all_files_selection(&mut self, select: bool, cx: &mut Context<Self>) {
         if select {
-            if let Some(st) = &self.status {
-                self.modal.selected_commit_files = st
-                    .staged_files
-                    .iter()
-                    .chain(&st.unstaged_files)
-                    .chain(&st.untracked_files)
-                    .map(|f| f.path.clone())
-                    .collect();
-            }
+            self.modal.selected_commit_files = self
+                .changes
+                .rows
+                .iter()
+                .map(|file| file.path.clone())
+                .collect();
         } else {
             self.modal.selected_commit_files.clear();
         }
@@ -475,3 +519,7 @@ impl GitState {
         cx.notify();
     }
 }
+
+#[cfg(all(test, debug_assertions))]
+#[path = "git_state_tests.rs"]
+mod tests;

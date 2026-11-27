@@ -1,12 +1,11 @@
 use super::common::{
-    collect_unified_changes, render_checkbox, render_error_banner, render_not_a_repo_view,
-    render_status_badge,
+    render_checkbox, render_error_banner, render_not_a_repo_view, render_status_badge,
 };
 use super::diff_parser::DiffViewMode;
 use super::diff_view::{render_diff_content, render_diff_view_toggle};
 use crate::modals::{DialogHeader, DialogTitle, Modal};
 use crate::services::GitService;
-use crate::state::{CollectionState, GitState};
+use crate::state::{CollectionState, GitState, UnifiedChangeItem};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -18,11 +17,11 @@ use gpui_kit::component::Icon;
 use gpui_kit::component::Sizable as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    div, px, App, AppContext as _, Entity, InteractiveElement as _, IntoElement, ParentElement,
-    RenderOnce, StatefulInteractiveElement as _, Styled, Window,
+    div, px, uniform_list, AnyElement, App, AppContext as _, Entity, InteractiveElement as _,
+    IntoElement, ListSizingBehavior, ParentElement, RenderOnce, StatefulInteractiveElement as _,
+    Styled, UniformListScrollHandle, Window,
 };
-use std::collections::HashSet;
-use zest_core::git::GitStatusResult;
+use zest_core::git::GitFileStatus;
 
 #[derive(IntoElement)]
 pub struct GitCommitModal {
@@ -43,51 +42,195 @@ impl GitCommitModal {
             git_service,
         }
     }
+
+    fn render_changes_list(&self, scroll: &UniformListScrollHandle, cx: &App) -> impl IntoElement {
+        let t = theme();
+        let git = self.git_state.read(cx);
+        let total_files = git.changes().len();
+        let selected_count = git.modal.selected_commit_files.len();
+        let all_selected = total_files > 0 && selected_count == total_files;
+        let partial_selected = selected_count > 0 && !all_selected;
+        let git_toggle_all = self.git_state.clone();
+        let git_state = self.git_state.clone();
+        let workspace_state = self.workspace_state.clone();
+        let service = self.git_service.clone();
+
+        div()
+            .flex_1()
+            .min_h(px(0.))
+            .p(px(10.))
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .child(
+                div()
+                    .flex()
+                    .flex_shrink_0()
+                    .items_center()
+                    .gap(px(6.))
+                    .px(px(4.))
+                    .when(total_files > 0, |this| {
+                        this.child(render_checkbox(
+                            "chk-select-all-files",
+                            all_selected,
+                            partial_selected,
+                            move |_, _, cx| {
+                                git_toggle_all.update(cx, |git, cx| {
+                                    git.toggle_all_files_selection(!all_selected, cx);
+                                });
+                            },
+                        ))
+                    })
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
+                            .text_color(t.text_secondary)
+                            .child("Changes"),
+                    ),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_h(px(0.))
+                    .relative()
+                    .overflow_hidden()
+                    .child(
+                        uniform_list("git-commit-changes", total_files, move |range, _, cx| {
+                            let git = git_state.read(cx);
+                            range
+                                .filter_map(|index| git.changes().get(index))
+                                .map(|item| {
+                                    Self::render_change_row(
+                                        item,
+                                        git,
+                                        &git_state,
+                                        &workspace_state,
+                                        &service,
+                                    )
+                                })
+                                .collect()
+                        })
+                        .size_full()
+                        .with_sizing_behavior(ListSizingBehavior::Auto)
+                        .track_scroll(scroll),
+                    )
+                    .vertical_scrollbar(scroll),
+            )
+    }
+
+    fn render_change_row(
+        item: &UnifiedChangeItem,
+        git: &GitState,
+        git_state: &Entity<GitState>,
+        workspace_state: &Entity<CollectionState>,
+        service: &GitService,
+    ) -> AnyElement {
+        let t = theme();
+        let git_sel = git_state.clone();
+        let git_chk = git_state.clone();
+        let p_chk = item.path.clone();
+        let p_sel = item.path.clone();
+        let is_checked = git.modal.selected_commit_files.contains(&item.path);
+        // Diff mode: working tree when the file has unstaged or
+        // untracked changes, staged otherwise.
+        let staged_diff = !item.has_worktree_changes;
+        let is_selected = git
+            .modal
+            .selected_file
+            .as_ref()
+            .is_some_and(|(path, staged)| path == &item.path && *staged == staged_diff);
+
+        let row = div().id(format!("change-item-{}", item.path));
+        #[cfg(all(test, debug_assertions))]
+        let row = row.debug_selector(|| format!("git-change-row-{}", item.path));
+
+        row.h(px(26.))
+            .px(px(6.))
+            .rounded(px(4.))
+            .flex()
+            .items_center()
+            .justify_between()
+            .cursor_pointer()
+            .when(is_selected, |s| s.bg(t.bg_hover))
+            .hover(|s| s.bg(t.bg_hover))
+            .on_click(move |_, _, cx| {
+                git_sel.update(cx, |git, cx| {
+                    git.select_file(p_sel.clone(), staged_diff, cx);
+                });
+            })
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
+                    .overflow_hidden()
+                    .child(render_checkbox(
+                        &format!("chk-file-{}", item.path),
+                        is_checked,
+                        false,
+                        move |_, _, cx| {
+                            git_chk.update(cx, |git, cx| {
+                                git.toggle_file_selection(&p_chk, cx);
+                            });
+                        },
+                    ))
+                    .child(render_status_badge(item.status))
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_family(".SystemMonoFont")
+                            .text_color(t.text_primary)
+                            .truncate()
+                            .child(item.path.clone()),
+                    ),
+            )
+            .when(item.has_worktree_changes, |this| {
+                let svc_disc = service.clone();
+                let ws_disc = workspace_state.clone();
+                let p_disc = item.path.clone();
+
+                this.child(
+                    // Discard button (↺)
+                    div()
+                        .id(format!("btn-discard-{}", item.path))
+                        .cursor_pointer()
+                        .p(px(2.))
+                        .rounded(px(3.))
+                        .text_xs()
+                        .text_color(t.text_muted)
+                        .hover(|s| s.bg(t.bg_card).text_color(t.status_5xx))
+                        .on_click(move |_, _, cx| {
+                            cx.stop_propagation();
+                            let ws = ws_disc.clone();
+                            svc_disc.discard_file(&p_disc, true, cx, move |cx| {
+                                ws.update(cx, |ws, cx| {
+                                    ws.reload_tree();
+                                    cx.notify();
+                                });
+                            });
+                        })
+                        .child("↺"),
+                )
+            })
+            .into_any_element()
+    }
 }
 
-pub struct ChangesViewProps {
-    pub git_clone: Entity<GitState>,
-    pub ws_clone: Entity<CollectionState>,
-    pub status_opt: Option<GitStatusResult>,
-    pub selected_file: Option<(String, bool)>,
-    pub diff_content: Option<String>,
-    pub commit_input: Entity<InputState>,
-    pub view_mode: DiffViewMode,
-    pub mode_entity: Entity<DiffViewMode>,
-    pub selected_files: HashSet<String>,
-    pub commit_and_push: bool,
-    pub service: GitService,
-    pub is_loading: bool,
-}
-
-pub fn render_changes_view(props: ChangesViewProps) -> gpui_kit::AnyElement {
+fn render_changes_view(
+    modal: &GitCommitModal,
+    commit_input: Entity<InputState>,
+    mode_entity: Entity<DiffViewMode>,
+    scroll: &UniformListScrollHandle,
+    cx: &App,
+) -> AnyElement {
     let t = theme();
-    let ChangesViewProps {
-        git_clone,
-        ws_clone,
-        status_opt,
-        selected_file,
-        diff_content,
-        commit_input,
-        view_mode,
-        mode_entity,
-        selected_files,
-        commit_and_push,
-        service,
-        is_loading,
-    } = props;
-
-    let all_files = status_opt
-        .as_ref()
-        .map(collect_unified_changes)
-        .unwrap_or_default();
-    let total_files = all_files.len();
-    let selected_count = all_files
-        .iter()
-        .filter(|f| selected_files.contains(&f.path))
-        .count();
-    let all_selected = total_files > 0 && selected_count == total_files;
-    let partial_selected = selected_count > 0 && !all_selected;
+    let git = modal.git_state.read(cx);
+    let selected_file = git.modal.selected_file.as_ref();
+    let commit_and_push = git.modal.commit_and_push;
+    let is_loading = git.loading;
+    let can_commit = !git.modal.selected_commit_files.is_empty() && !is_loading;
+    let view_mode = *mode_entity.read(cx);
 
     div()
         .size_full()
@@ -103,134 +246,7 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui_kit::AnyElement {
                 .bg(t.bg_sidebar)
                 .flex()
                 .flex_col()
-                // 1. Unified Changes List (Scrollable top area)
-                .child(
-                    div()
-                        .flex_1()
-                        .overflow_y_scrollbar()
-                        .p(px(10.))
-                        .flex()
-                        .flex_col()
-                        .gap(px(8.))
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(6.))
-                                .px(px(4.))
-                                .when(total_files > 0, |this| {
-                                    let git_toggle_all = git_clone.clone();
-                                    this.child(render_checkbox(
-                                        "chk-select-all-files",
-                                        all_selected,
-                                        partial_selected,
-                                        move |_, _, cx| {
-                                            let select = !all_selected;
-                                            git_toggle_all.update(cx, |git, cx| {
-                                                git.toggle_all_files_selection(select, cx);
-                                            });
-                                        },
-                                    ))
-                                })
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                                        .text_color(t.text_secondary)
-                                        .child("Changes"),
-                                ),
-                        )
-                        .children(all_files.into_iter().map(|item| {
-                            let git_sel = git_clone.clone();
-                            let git_chk = git_clone.clone();
-                            let p_chk = item.path.clone();
-                            let p_sel = item.path.clone();
-                            let is_checked = selected_files.contains(&item.path);
-                            // Diff mode: working tree when the file has unstaged or
-                            // untracked changes, staged otherwise.
-                            let staged_diff = !item.has_worktree_changes;
-                            let is_selected = selected_file
-                                .as_ref()
-                                .map(|(sel, st)| sel == &item.path && *st == staged_diff)
-                                .unwrap_or(false);
-
-                            div()
-                                .id(format!("change-item-{}", item.path))
-                                .px(px(6.))
-                                .py(px(4.))
-                                .rounded(px(4.))
-                                .flex()
-                                .items_center()
-                                .justify_between()
-                                .cursor_pointer()
-                                .when(is_selected, |s| s.bg(t.bg_hover))
-                                .hover(|s| s.bg(t.bg_hover))
-                                .on_click(move |_, _, cx| {
-                                    git_sel.update(cx, |git, cx| {
-                                        git.select_file(p_sel.clone(), staged_diff, cx);
-                                    });
-                                })
-                                .child(
-                                    div()
-                                        .flex()
-                                        .items_center()
-                                        .gap(px(6.))
-                                        .overflow_hidden()
-                                        .child(render_checkbox(
-                                            &format!("chk-file-{}", item.path),
-                                            is_checked,
-                                            false,
-                                            move |_, _, cx| {
-                                                git_chk.update(cx, |git, cx| {
-                                                    git.toggle_file_selection(&p_chk, cx);
-                                                });
-                                            },
-                                        ))
-                                        .child(render_status_badge(item.status))
-                                        .child(
-                                            div()
-                                                .text_xs()
-                                                .font_family(".SystemMonoFont")
-                                                .text_color(t.text_primary)
-                                                .truncate()
-                                                .child(item.path.clone()),
-                                        ),
-                                )
-                                .when(item.has_worktree_changes, |this| {
-                                    let svc_disc = service.clone();
-                                    let ws_disc = ws_clone.clone();
-                                    let p_disc = item.path.clone();
-
-                                    this.child(
-                                        // Discard button (↺)
-                                        div()
-                                            .id(format!("btn-discard-{}", item.path))
-                                            .cursor_pointer()
-                                            .p(px(2.))
-                                            .rounded(px(3.))
-                                            .text_xs()
-                                            .text_color(t.text_muted)
-                                            .hover(|s| s.bg(t.bg_card).text_color(t.status_5xx))
-                                            .on_click(move |_, _, cx| {
-                                                cx.stop_propagation();
-                                                let ws = ws_disc.clone();
-                                                svc_disc.discard_file(
-                                                    &p_disc,
-                                                    true,
-                                                    cx,
-                                                    move |cx| {
-                                                        ws.update(cx, |ws, cx| {
-                                                            ws.reload_tree();
-                                                            cx.notify();
-                                                        });
-                                                    },
-                                                );
-                                            })
-                                            .child("↺"),
-                                    )
-                                })
-                        })),
-                )
+                .child(modal.render_changes_list(scroll, cx))
                 // Separator before commit section
                 .child(Separator::horizontal())
                 // 2. Commit Section (Message input + commit controls)
@@ -241,8 +257,8 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui_kit::AnyElement {
                         .flex()
                         .flex_col()
                         .gap(px(8.))
-                        .child(
-                            div()
+                        .child({
+                            let input = div()
                                 .bg(t.bg_app)
                                 .border_1()
                                 .border_color(t.border)
@@ -251,14 +267,16 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui_kit::AnyElement {
                                 .h(px(68.))
                                 .flex()
                                 .flex_col()
-                                .child(Input::new(&commit_input).appearance(false).bordered(false)),
-                        )
+                                .child(Input::new(&commit_input).appearance(false).bordered(false));
+                            #[cfg(all(test, debug_assertions))]
+                            let input = input.debug_selector(|| "git-commit-input".into());
+                            input
+                        })
                         .child({
-                            let svc_commit = service.clone();
-                            let git_push_flag = git_clone.clone();
-                            let git_push_label = git_clone.clone();
+                            let svc_commit = modal.git_service.clone();
+                            let git_push_flag = modal.git_state.clone();
+                            let git_push_label = modal.git_state.clone();
                             let inp = commit_input.clone();
-                            let can_commit = selected_count > 0 && !is_loading;
 
                             div()
                                 .flex()
@@ -302,7 +320,7 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui_kit::AnyElement {
                                     Button::new("btn-commit-action")
                                         .primary()
                                         .small()
-                                        .disabled(!can_commit || is_loading)
+                                        .disabled(!can_commit)
                                         .loading(is_loading)
                                         .label(if is_loading {
                                             "Committing..."
@@ -310,7 +328,7 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui_kit::AnyElement {
                                             "✓ Commit"
                                         })
                                         .on_click(move |_, window, cx: &mut App| {
-                                            if !can_commit || is_loading {
+                                            if !can_commit {
                                                 return;
                                             }
                                             let msg = inp.read(cx).value().to_string();
@@ -353,11 +371,10 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui_kit::AnyElement {
                                 .flex()
                                 .items_center()
                                 .gap(px(8.))
-                                .when_some(selected_file.as_ref(), |this, (p, staged)| {
-                                    let is_untracked = status_opt
-                                        .as_ref()
-                                        .map(|s| s.untracked_files.iter().any(|f| &f.path == p))
-                                        .unwrap_or(false);
+                                .when_some(selected_file, |this, (p, staged)| {
+                                    let is_untracked = git.change(p).is_some_and(|file| {
+                                        file.status == GitFileStatus::Untracked
+                                    });
                                     let (tag_text, tag_color) = if *staged {
                                         ("staged", t.primary)
                                     } else if is_untracked {
@@ -403,7 +420,10 @@ pub fn render_changes_view(props: ChangesViewProps) -> gpui_kit::AnyElement {
                         .flex_1()
                         .overflow_y_scrollbar()
                         .p(px(8.))
-                        .child(render_diff_content(diff_content, view_mode)),
+                        .child(render_diff_content(
+                            git.modal.diff_content.as_deref(),
+                            view_mode,
+                        )),
                 ),
         )
         .into_any_element()
@@ -413,38 +433,14 @@ impl RenderOnce for GitCommitModal {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let t = theme();
         let git_clone = self.git_state.clone();
-        let ws_clone = self.workspace_state.clone();
-        let svc_clone = self.git_service.clone();
-
-        let (
-            is_repo,
-            branch_name,
-            status_opt,
-            selected_file,
-            diff_content,
-            git_error,
-            selected_files,
-            commit_and_push,
-            is_loading,
-        ) = {
-            let git = self.git_state.read(cx);
-            (
-                git.status.as_ref().map(|s| s.is_repo).unwrap_or(false),
-                git.branch.clone().unwrap_or_else(|| "main".to_string()),
-                git.status.clone(),
-                git.modal.selected_file.clone(),
-                git.modal.diff_content.clone(),
-                git.error.clone(),
-                git.modal.selected_commit_files.clone(),
-                git.modal.commit_and_push,
-                git.loading,
-            )
-        };
-
-        let total_changes = status_opt
-            .as_ref()
-            .map(|s| s.staged_files.len() + s.unstaged_files.len() + s.untracked_files.len())
-            .unwrap_or(0);
+        let git = self.git_state.read(cx);
+        let is_repo = git.status.as_ref().is_some_and(|status| status.is_repo);
+        let branch_name = git.branch.clone().unwrap_or_else(|| "main".to_string());
+        let is_loading = git.loading;
+        let git_error = git.error.clone();
+        let total_changes = git.status.as_ref().map_or(0, |status| {
+            status.staged_files.len() + status.unstaged_files.len() + status.untracked_files.len()
+        });
 
         let commit_input_holder = window.use_keyed_state(
             gpui_kit::SharedString::from("git-commit-msg-input"),
@@ -468,7 +464,9 @@ impl RenderOnce for GitCommitModal {
             },
         );
         let view_mode_entity = view_mode_holder.read(cx).0.clone();
-        let view_mode = *view_mode_entity.read(cx);
+        let scroll = window.use_keyed_state("git-commit-changes-scroll", cx, |_, _| {
+            UniformListScrollHandle::new()
+        });
 
         let header_el = div()
             .h(px(46.))
@@ -549,22 +547,9 @@ impl RenderOnce for GitCommitModal {
             })
             // Body
             .child(div().flex_1().overflow_hidden().child(if !is_repo {
-                render_not_a_repo_view(svc_clone.clone(), is_loading)
+                render_not_a_repo_view(self.git_service.clone(), is_loading)
             } else {
-                render_changes_view(ChangesViewProps {
-                    git_clone: git_clone.clone(),
-                    ws_clone: ws_clone.clone(),
-                    status_opt,
-                    selected_file,
-                    diff_content,
-                    commit_input,
-                    view_mode,
-                    mode_entity: view_mode_entity,
-                    selected_files,
-                    commit_and_push,
-                    service: svc_clone.clone(),
-                    is_loading,
-                })
+                render_changes_view(&self, commit_input, view_mode_entity, scroll.read(cx), cx)
             }))
             .into_any_element()
     }

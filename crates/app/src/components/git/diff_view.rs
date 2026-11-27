@@ -116,7 +116,7 @@ pub fn render_diff_view_toggle(
 }
 
 pub fn render_diff_content(
-    diff_content: Option<String>,
+    diff_content: Option<&str>,
     view_mode: DiffViewMode,
 ) -> gpui_kit::AnyElement {
     let t = theme();
@@ -131,7 +131,7 @@ pub fn render_diff_content(
 
             match view_mode {
                 DiffViewMode::Split => {
-                    let rows = parse_side_by_side_diff(&diff);
+                    let rows = parse_side_by_side_diff(diff);
                     if rows.is_empty() {
                         return div()
                             .p(px(12.))
