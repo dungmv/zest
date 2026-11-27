@@ -1,13 +1,15 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use zest_core::transport::append_realtime_frame;
 
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
 use zest_core::grpc::{
     GrpcCallSummary, GrpcClient, GrpcMethodInfo, GrpcStreamEvent, GrpcUnaryResult,
 };
 use zest_core::models::{Environment, RequestItem};
 use zest_core::transport::{FrameDirection, FrameKind, ResolvedRequest, TransportFrame};
+use zest_core::transport::{MAX_REALTIME_FRAME_BYTES, REALTIME_QUEUE_CAPACITY};
 
 use super::global_tokio_runtime;
 use super::pipeline::{merge_env_mutations, run_pre_request_stage};
@@ -84,11 +86,7 @@ impl GrpcEngine {
             });
         frame.id = log.next_frame_id;
         log.next_frame_id = log.next_frame_id.wrapping_add(1);
-        log.frames.push(frame);
-        if log.frames.len() > MAX_GRPC_LOG_FRAMES {
-            let overflow = log.frames.len() - MAX_GRPC_LOG_FRAMES;
-            log.frames.drain(..overflow);
-        }
+        append_realtime_frame(&mut log.frames, frame, MAX_GRPC_LOG_FRAMES);
     }
 
     /// Records the summary of a finished call (Runner pump).
@@ -123,8 +121,8 @@ impl GrpcEngine {
         mut req_item: RequestItem,
         env: Option<Arc<Environment>>,
         cancel_rx: oneshot::Receiver<()>,
-    ) -> UnboundedReceiver<SendEvent> {
-        let (event_tx, event_rx) = mpsc::unbounded_channel();
+    ) -> Receiver<SendEvent> {
+        let (event_tx, event_rx) = mpsc::channel(REALTIME_QUEUE_CAPACITY);
         let schema_cache = self.schema_cache.clone();
 
         self.tokio_rt.spawn(async move {
@@ -137,7 +135,7 @@ impl GrpcEngine {
                 initial_logs: pre_output.console_entries.clone(),
                 env_mutations: pre_output.env_mutations.clone(),
                 pre_script_error: pre_output.error.clone(),
-            });
+            }).await;
 
             // 2. Merge pre-script env mutations
             let effective_env = merge_env_mutations(&env, &pre_output.env_mutations);
@@ -160,7 +158,7 @@ impl GrpcEngine {
                     let _ = event_tx.send(SendEvent::Failed {
                         request_id: request_id.clone(),
                         error: e.to_string(),
-                    });
+                    }).await;
                     return;
                 }
             };
@@ -169,6 +167,14 @@ impl GrpcEngine {
             // defaults kick in so a bare URL + Send just works.
             let mut payload = req_item.grpc.clone().unwrap_or_default();
 
+            if payload.message_json.len() > MAX_REALTIME_FRAME_BYTES {
+                let _ = event_tx.send(SendEvent::Failed {
+                    request_id,
+                    error: format!("Message exceeds the {MAX_REALTIME_FRAME_BYTES}-byte limit"),
+                }).await;
+                return;
+            }
+
             // 4. Client + schema (cached per endpoint+proto path)
             let client = match GrpcClient::connect(&resolved.url, resolved.settings.timeout_ms) {
                 Ok(c) => c,
@@ -176,7 +182,7 @@ impl GrpcEngine {
                     let _ = event_tx.send(SendEvent::Failed {
                         request_id: request_id.clone(),
                         error: e.to_string(),
-                    });
+                    }).await;
                     return;
                 }
             };
@@ -217,7 +223,7 @@ impl GrpcEngine {
                                     "{e} — tried {} (use grpcs:// if the server requires TLS)",
                                     resolved.url
                                 ),
-                            });
+                            }).await;
                             return;
                         }
                     }
@@ -235,7 +241,7 @@ impl GrpcEngine {
                     summary: summary.clone(),
                     auto_service: selection.as_ref().map(|(svc, _)| svc.clone()),
                     auto_method: selection.as_ref().map(|(_, mth)| mth.clone()),
-                });
+                }).await;
                 match selection {
                     Some((svc, mth)) => {
                         payload.service = svc;
@@ -248,7 +254,7 @@ impl GrpcEngine {
                                 "Schema loaded ({} services) — pick a service and method in the Proto tab, then send again",
                                 summary.services.len()
                             ),
-                        });
+                        }).await;
                         return;
                     }
                 }
@@ -259,7 +265,7 @@ impl GrpcEngine {
                 let _ = event_tx.send(SendEvent::Failed {
                     request_id: request_id.clone(),
                     error: format!("Service '{}' not found in schema", payload.service),
-                });
+                }).await;
                 return;
             };
             let Some(method_desc) = service_desc
@@ -272,7 +278,7 @@ impl GrpcEngine {
                         "Method '{}' not found on service '{}'",
                         payload.method, payload.service
                     ),
-                });
+                }).await;
                 return;
             };
             let input_desc = method_desc.input();
@@ -289,7 +295,7 @@ impl GrpcEngine {
                     payload: payload.message_json.clone().into_bytes(),
                     label: None,
                 },
-            });
+            }).await;
 
             // 7. Invoke, racing a re-usable cancellation watch so streaming
             // calls stay cancellable after the headers arrive.
@@ -301,7 +307,9 @@ impl GrpcEngine {
 
             let is_server_streaming = method_desc.is_server_streaming();
             tokio::select! {
-                _ = cancelled(cancel_flag_rx.clone()) => {}
+                _ = cancelled(cancel_flag_rx.clone()) => {
+                    let _ = event_tx.send(SendEvent::Cancelled).await;
+                }
                 res = async {
                     if is_server_streaming {
                         let mut stream_rx = client
@@ -318,13 +326,12 @@ impl GrpcEngine {
                         // Pump inline so cancellation interrupts the stream.
                         loop {
                             tokio::select! {
-                                _ = cancelled(cancel_flag_rx.clone()) => break,
                                 ev = stream_rx.recv() => match ev {
                                     Some(GrpcStreamEvent::Message { json, .. }) => {
                                         let _ = event_tx.send(SendEvent::Frame {
                                             request_id: request_id.clone(),
                                             frame: log_message(&json),
-                                        });
+                                        }).await;
                                     }
                                     Some(GrpcStreamEvent::Completed { duration_ms }) => {
                                         let _ = event_tx.send(SendEvent::CallCompleted {
@@ -335,7 +342,7 @@ impl GrpcEngine {
                                                 headers: Vec::new(),
                                                 duration_ms,
                                             },
-                                        });
+                                        }).await;
                                         break;
                                     }
                                     Some(GrpcStreamEvent::Failed { code, message, duration_ms }) => {
@@ -347,23 +354,23 @@ impl GrpcEngine {
                                                 headers: Vec::new(),
                                                 duration_ms,
                                             },
-                                        });
+                                        }).await;
                                         break;
                                     }
                                     Some(GrpcStreamEvent::TransportError(err)) => {
                                         let _ = event_tx.send(SendEvent::Failed {
                                             request_id: request_id.clone(),
                                             error: err,
-                                        });
+                                        }).await;
                                         break;
                                     }
                                     None => break,
                                 }
                             }
                         }
-                        Ok(())
+                        Ok::<(), String>(())
                     } else {
-                        client
+                        let result = client
                             .invoke_unary(
                                 input_desc,
                                 output_desc,
@@ -372,18 +379,16 @@ impl GrpcEngine {
                                 &payload.message_json,
                                 &resolved.headers,
                             )
-                            .await
-                            .map(|result| {
-                                finish_unary(&request_id, result, event_tx.clone())
-                            })
-                            .map_err(|e: zest_core::grpc::GrpcError| e.to_string())
+                            .await.map_err(|error| error.to_string())?;
+                        finish_unary(&request_id, result, &event_tx).await;
+                        Ok(())
                     }
                 } => {
                     if let Err(e) = res {
                         let _ = event_tx.send(SendEvent::Failed {
                             request_id: request_id.clone(),
                             error: e.to_string(),
-                        });
+                        }).await;
                     }
                 }
             }
@@ -470,20 +475,33 @@ fn log_message(json: &str) -> TransportFrame {
     }
 }
 
-fn finish_unary(request_id: &str, result: GrpcUnaryResult, event_tx: UnboundedSender<SendEvent>) {
-    let _ = event_tx.send(SendEvent::Frame {
-        request_id: request_id.to_string(),
-        frame: log_message(&result.response_json),
-    });
-    let _ = event_tx.send(SendEvent::CallCompleted {
-        request_id: request_id.to_string(),
-        summary: GrpcCallSummary {
-            status_code: 0,
-            status_message: None,
-            headers: result.headers,
-            duration_ms: result.duration_ms,
-        },
-    });
+async fn finish_unary(request_id: &str, result: GrpcUnaryResult, event_tx: &Sender<SendEvent>) {
+    if result.response_json.len() > MAX_REALTIME_FRAME_BYTES {
+        let _ = event_tx
+            .send(SendEvent::Failed {
+                request_id: request_id.to_string(),
+                error: format!("Response exceeds the {MAX_REALTIME_FRAME_BYTES}-byte limit"),
+            })
+            .await;
+        return;
+    }
+    let _ = event_tx
+        .send(SendEvent::Frame {
+            request_id: request_id.to_string(),
+            frame: log_message(&result.response_json),
+        })
+        .await;
+    let _ = event_tx
+        .send(SendEvent::CallCompleted {
+            request_id: request_id.to_string(),
+            summary: GrpcCallSummary {
+                status_code: 0,
+                status_message: None,
+                headers: result.headers,
+                duration_ms: result.duration_ms,
+            },
+        })
+        .await;
 }
 
 async fn cancelled(mut rx: tokio::sync::watch::Receiver<bool>) {

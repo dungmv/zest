@@ -11,7 +11,9 @@ use crate::state::{
     ResponseTabKind, SessionEvent, WorkspaceEvent,
 };
 use gpui_kit::{Context, Window};
+use std::sync::Arc;
 use zest_core::models::Protocol;
+use zest_core::storage::WorkspaceStore;
 
 pub fn handle_workspace_event(
     this: &mut AppView,
@@ -27,9 +29,29 @@ pub fn handle_workspace_event(
             let path = path.clone();
             let store = store.clone();
             let folder_name = folder_name.clone();
-            this.state.collection.update(cx, |col, cx| {
-                col.switch_workspace(store, path, folder_name, cx);
-            });
+            this.workspace_switch_task = Some(cx.spawn(async move |this, cx| loop {
+                let waiting = this.update(cx, |this, cx| {
+                    let waiting = this
+                        .state
+                        .persistence
+                        .update(cx, |per, cx| per.flush_before_switch(cx));
+                    if waiting.is_none() {
+                        activate_workspace(this, &path, &store, &folder_name, cx);
+                    }
+                    waiting
+                });
+                let Ok(Some(waiting)) = waiting else { break };
+                match waiting.await {
+                    Ok(Ok(())) => {}
+                    Ok(Err(error)) => {
+                        let _ = this.update(cx, |_, cx| {
+                            crate::notify::error("Could Not Switch Workspace", error, cx);
+                        });
+                        break;
+                    }
+                    Err(_) => break,
+                }
+            }));
         }
         WorkspaceEvent::WorkspaceMetaModified => {
             let (meta, name) = {
@@ -48,6 +70,46 @@ pub fn handle_workspace_event(
     }
 }
 
+fn activate_workspace(
+    this: &mut AppView,
+    path: &std::path::Path,
+    store: &Arc<dyn WorkspaceStore>,
+    folder_name: &str,
+    cx: &mut Context<AppView>,
+) {
+    this.state.workspace.update(cx, |ws, cx| {
+        ws.activate_workspace(path.to_path_buf(), store.clone(), folder_name, cx);
+    });
+    this.runner.engines.ws.disconnect_all();
+    this.runner.engines =
+        crate::services::Engines::new(this.state.workspace.read(cx).executor.clone());
+    this.state
+        .session
+        .update(cx, |session, cx| session.reset_workspace(cx));
+    this.state
+        .response
+        .update(cx, |response, cx| response.reset_workspace(cx));
+    this.state.persistence.update(cx, |per, cx| {
+        per.set_workspace(store.clone(), path.to_path_buf(), cx);
+    });
+    this.state.env.update(cx, |env, cx| {
+        *env = crate::state::EnvironmentState::empty(store.clone(), folder_name.to_string());
+        cx.emit(EnvironmentEvent::EnvironmentsReloaded);
+        cx.notify();
+    });
+    this.state.collection.update(cx, |collection, cx| {
+        collection.switch_workspace(
+            store.clone(),
+            path.to_path_buf(),
+            folder_name.to_string(),
+            cx,
+        );
+    });
+    this.state.session.update(cx, |session, cx| {
+        session.set_active_request_id("scratch", cx);
+    });
+}
+
 pub fn handle_collection_event(
     this: &mut AppView,
     event: &CollectionEvent,
@@ -57,12 +119,17 @@ pub fn handle_collection_event(
     match event {
         CollectionEvent::WorkspaceScanLoaded {
             workspace_meta,
+            local_state,
+            environment,
             cookies,
             folder_name,
             store,
             announce_opened,
             workspace_path,
         } => {
+            if !Arc::ptr_eq(store, &this.state.workspace.read(cx).store) {
+                return;
+            }
             this.state.workspace.update(cx, |ws, cx| {
                 ws.apply_scan_result(
                     workspace_meta.clone(),
@@ -72,50 +139,37 @@ pub fn handle_collection_event(
                     cx,
                 );
             });
+            let workspace_name = this.state.workspace.read(cx).workspace_name().to_string();
+            let col_ent = this.state.collection.clone();
+            let env_ent = this.state.env.clone();
+            let git_ent = this.state.git.clone();
+            this.state.persistence.update(cx, |per, cx| {
+                per.local_state = local_state.as_ref().clone();
+                per.start_watcher(col_ent, env_ent, git_ent, cx);
+            });
+            this.state.env.update(cx, |env, cx| {
+                env.workspace_name = workspace_name;
+                env.active_environment_id = local_state.active_environment.clone();
+                env.apply_snapshot(environment.as_ref().clone());
+                cx.emit(EnvironmentEvent::EnvironmentsReloaded);
+                cx.notify();
+            });
 
             if *announce_opened {
-                let workspace_name = this.state.workspace.read(cx).workspace_name().to_string();
-                let col_ent = this.state.collection.clone();
-                let env_ent = this.state.env.clone();
-                let git_ent = this.state.git.clone();
-                this.state.persistence.update(cx, |per, cx| {
-                    per.set_workspace(store.clone(), workspace_path.clone(), cx);
-                    per.start_watcher(col_ent, env_ent, git_ent, cx);
-                });
-
-                let (active_env, next_id) = {
-                    let col_ref = this.state.collection.read(cx);
-                    let per_ref = this.state.persistence.read(cx);
-                    let id = per_ref
-                        .local_state
-                        .active_request
-                        .as_ref()
-                        .and_then(|act_id| {
-                            col_ref
-                                .requests
-                                .iter()
-                                .find(|r| &r.id == act_id)
-                                .map(|r| r.id.clone())
-                        })
-                        .or_else(|| col_ref.requests.first().map(|r| r.id.clone()))
-                        .unwrap_or_else(|| "scratch".to_string());
-                    (per_ref.local_state.active_environment.clone(), id)
-                };
-
-                this.state.env.update(cx, |env, cx| {
-                    env.set_workspace(store.clone(), workspace_name, active_env);
-                    cx.emit(EnvironmentEvent::EnvironmentsReloaded);
-                    cx.notify();
-                });
-
-                this.state.git.update(cx, |git, cx| {
-                    git.set_repo_path(workspace_path.clone(), cx);
-                });
-
-                this.state.session.update(cx, |ed, cx| {
-                    ed.active_request_id = None;
-                    ed.set_active_request_id(&next_id, cx);
-                });
+                this.state
+                    .git
+                    .update(cx, |git, cx| git.set_repo_path(workspace_path.clone(), cx));
+                let col = this.state.collection.read(cx);
+                let next = local_state
+                    .active_request
+                    .as_ref()
+                    .and_then(|id| col.find_request(id))
+                    .or_else(|| col.requests.first())
+                    .map(|request| request.id.clone())
+                    .unwrap_or_else(|| "scratch".to_string());
+                this.state
+                    .session
+                    .update(cx, |session, cx| session.set_active_request_id(&next, cx));
             }
         }
         CollectionEvent::IdsRemapped(pairs) => {
@@ -145,8 +199,18 @@ pub fn handle_collection_event(
             }
 
             // 3. Remap persistence state unsaved requests / active request
+            let collection = this.state.collection.clone();
+            let pins = collection.read(cx).pins.clone();
             this.state.persistence.update(cx, |per, cx| {
+                let pending: Vec<_> = pairs
+                    .iter()
+                    .filter_map(|(old, new)| per.is_dirty(old).then_some(new))
+                    .collect();
                 per.remap_request_ids(pairs, cx);
+                per.schedule_save_pins(pins, cx);
+                for id in pending {
+                    per.schedule_save_active_request(id.clone(), collection.clone(), cx);
+                }
             });
         }
         CollectionEvent::RequestsReloaded { req_ids } => {
@@ -201,12 +265,34 @@ pub fn handle_collection_event(
                 );
             }
         }
-        CollectionEvent::ExampleRenamed {
-            old_name, new_name, ..
-        } => {
-            this.state.response.update(cx, |resp, cx| {
-                resp.rename_example(old_name, new_name, cx);
+        CollectionEvent::ImportApplied(environments) => {
+            this.state
+                .persistence
+                .read(cx)
+                .reconcile_import(environments.clone());
+        }
+        CollectionEvent::RequestDeleted(id) => {
+            this.state
+                .persistence
+                .update(cx, |persistence, cx| persistence.cancel_request(id, cx));
+            this.runner.engines.ws.drop_session(id);
+        }
+        CollectionEvent::RequestContentModified(id) => {
+            let collection = this.state.collection.clone();
+            this.state.persistence.update(cx, |persistence, cx| {
+                persistence.schedule_save_active_request(id.clone(), collection, cx);
             });
+        }
+        CollectionEvent::ExampleRenamed {
+            req_id,
+            old_name,
+            new_name,
+        } => {
+            if this.state.session.read(cx).active_request_id() == req_id {
+                this.state.response.update(cx, |resp, cx| {
+                    resp.rename_example(old_name, new_name, cx);
+                });
+            }
         }
         CollectionEvent::CrudFailed { title, message } => {
             crate::notify::error_in(*title, message.clone(), window, cx);
@@ -338,6 +424,10 @@ pub fn handle_session_event(
 
             // Follow the restored editor content with fresh validation marks.
             this.refresh_grpc_message_diagnostics(cx);
+
+            if this.state.collection.read(cx).is_loading_workspace() {
+                return;
+            }
 
             let is_scratch = req_id == "scratch" || req_id.is_empty();
             let persisted_id = if is_scratch {

@@ -6,6 +6,47 @@ use zest_core::models::Environment;
 use zest_core::storage::models::EnvironmentFile;
 use zest_core::storage::WorkspaceStore;
 
+#[derive(Clone)]
+pub struct EnvironmentSnapshot {
+    environments: Vec<Environment>,
+    globals: Environment,
+    corrupt_secrets_warning: Option<String>,
+}
+
+impl EnvironmentSnapshot {
+    pub fn load(store: &dyn WorkspaceStore, workspace_name: &str) -> Self {
+        let mut corrupt_secrets_warning = None;
+        let mut load_secrets = |name: &str| {
+            store.load_secrets(name).unwrap_or_else(|error| {
+                corrupt_secrets_warning = Some(error.to_string());
+                HashMap::new()
+            })
+        };
+        let mut environments = Vec::new();
+        for name in store.list_environments().unwrap_or_default() {
+            if let Ok(file) = store.load_environment(&name) {
+                let secrets = load_secrets(&name);
+                environments.push(file.to_environment(&name, workspace_name, &name, &secrets));
+            }
+        }
+        environments.sort_by_key(|environment| environment.name.to_lowercase());
+        let globals = store
+            .load_global_environment()
+            .unwrap_or_default()
+            .to_environment(
+                "globals",
+                workspace_name,
+                "Globals",
+                &load_secrets("globals"),
+            );
+        Self {
+            environments,
+            globals,
+            corrupt_secrets_warning,
+        }
+    }
+}
+
 pub struct EnvironmentState {
     pub store: Arc<dyn WorkspaceStore>,
     pub workspace_name: String,
@@ -17,84 +58,49 @@ pub struct EnvironmentState {
 }
 
 impl EnvironmentState {
+    #[cfg(test)]
     pub fn new(
         store: Arc<dyn WorkspaceStore>,
         workspace_name: String,
         initial_active_id: Option<String>,
     ) -> Self {
-        let mut state = Self {
-            store,
-            workspace_name: workspace_name.clone(),
-            environments: Vec::new(),
-            global_environment: Environment::new(&workspace_name, "Globals"),
-            active_environment_id: initial_active_id,
-            corrupt_secrets_warning: None,
-            cached_effective_env: RwLock::new(None),
-        };
+        let mut state = Self::empty(store, workspace_name);
+        state.active_environment_id = initial_active_id;
         state.reload_environments();
         state
     }
 
-    pub fn set_workspace(
-        &mut self,
-        store: Arc<dyn WorkspaceStore>,
-        workspace_name: String,
-        active_env: Option<String>,
-    ) {
-        self.store = store;
-        self.workspace_name = workspace_name.clone();
-        self.active_environment_id = active_env;
-        self.corrupt_secrets_warning = None;
-        self.global_environment = Environment::new(&workspace_name, "Globals");
+    pub(crate) fn empty(store: Arc<dyn WorkspaceStore>, workspace_name: String) -> Self {
+        Self {
+            store,
+            workspace_name: workspace_name.clone(),
+            environments: Vec::new(),
+            global_environment: Environment::new(&workspace_name, "Globals"),
+            active_environment_id: None,
+            corrupt_secrets_warning: None,
+            cached_effective_env: RwLock::new(None),
+        }
+    }
+
+    pub(crate) fn apply_snapshot(&mut self, snapshot: EnvironmentSnapshot) {
         self.invalidate_cache();
-        self.reload_environments();
+        self.environments = snapshot.environments;
+        self.global_environment = snapshot.globals;
+        self.corrupt_secrets_warning = snapshot.corrupt_secrets_warning;
+        if !self.active_environment_id.as_ref().is_some_and(|active| {
+            self.environments
+                .iter()
+                .any(|env| &env.name == active || &env.id == active)
+        }) {
+            self.active_environment_id = self.environments.first().map(|env| env.id.clone());
+        }
     }
 
     pub fn reload_environments(&mut self) {
-        self.invalidate_cache();
-        let ws_name = self.workspace_name.clone();
-        let env_names = self.store.list_environments().unwrap_or_default();
-        let mut envs = Vec::new();
-
-        for name in &env_names {
-            if let Ok(env_file) = self.store.load_environment(name) {
-                let secrets = match self.store.load_secrets(name) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        self.corrupt_secrets_warning = Some(format!("{}", e));
-                        HashMap::new()
-                    }
-                };
-                let env = env_file.to_environment(name, &ws_name, name, &secrets);
-                envs.push(env);
-            }
-        }
-
-        envs.sort_by_key(|a| a.name.to_lowercase());
-        self.environments = envs;
-
-        let global_file = self.store.load_global_environment().unwrap_or_default();
-        let global_secrets = match self.store.load_global_secrets() {
-            Ok(s) => s,
-            Err(e) => {
-                self.corrupt_secrets_warning = Some(format!("{}", e));
-                HashMap::new()
-            }
-        };
-        self.global_environment =
-            global_file.to_environment("globals", &ws_name, "Globals", &global_secrets);
-
-        if let Some(act) = &self.active_environment_id {
-            if !self
-                .environments
-                .iter()
-                .any(|e| &e.name == act || &e.id == act)
-            {
-                self.active_environment_id = self.environments.first().map(|e| e.id.clone());
-            }
-        } else if self.active_environment_id.is_none() {
-            self.active_environment_id = self.environments.first().map(|e| e.id.clone());
-        }
+        self.apply_snapshot(EnvironmentSnapshot::load(
+            self.store.as_ref(),
+            &self.workspace_name,
+        ));
     }
 
     /// Reconciles external disk changes reported by the file watcher while
@@ -104,6 +110,7 @@ impl EnvironmentState {
     /// surface a conflict banner.
     pub fn apply_disk_changes(
         &mut self,
+        snapshot: EnvironmentSnapshot,
         changed: &HashSet<String>,
         dirty: &HashSet<String>,
         cx: &mut Context<Self>,
@@ -124,7 +131,7 @@ impl EnvironmentState {
             .contains("globals")
             .then(|| self.global_environment.clone());
 
-        self.reload_environments();
+        self.apply_snapshot(snapshot);
 
         for env in kept_envs {
             if let Some(slot) = self.environments.iter_mut().find(|e| e.name == env.name) {

@@ -155,3 +155,26 @@ fn test_runaway_line_is_dropped_not_grown() {
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].data, "after", "parser recovers after the cap");
 }
+
+#[test]
+fn test_multiline_event_respects_byte_limit() {
+    let mut parser = SseParser::new();
+    let line = format!("data: {}\n", "x".repeat(1024));
+    for _ in 0..MAX_REALTIME_FRAME_BYTES / 1024 + 1 {
+        assert!(parser.feed(line.as_bytes()).is_empty());
+        if parser.limit_exceeded() {
+            break;
+        }
+    }
+    assert!(parser.limit_exceeded());
+    assert!(parser.finish().is_empty());
+}
+
+#[test]
+fn test_crlf_split_across_chunks_does_not_dispatch_early() {
+    let mut parser = SseParser::new();
+    assert!(feed_str(&mut parser, "data: one\r").is_empty());
+    assert!(feed_str(&mut parser, "\ndata: two\r").is_empty());
+    let events = event_data(feed_str(&mut parser, "\n\r\n"));
+    assert_eq!(events[0].data, "one\ntwo");
+}

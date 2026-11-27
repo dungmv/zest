@@ -165,30 +165,36 @@ impl WorkspaceState {
         if !path.join("workspace.yaml").exists() {
             let _ = store.init_workspace(&folder_name);
         }
-        // .gitignore upkeep shells out to `git` (up to 30s) — background it.
-        {
-            let s = store.clone();
-            cx.background_executor()
-                .spawn(async move {
-                    let _ = s.ensure_gitignore();
-                })
-                .detach();
-        }
-        self.store = store.clone();
-        self.workspace_path = path.clone();
-
-        let mut settings = AppSettings::load();
-        settings.add_recent_workspace(&path.to_string_lossy());
-        self.recent_workspaces = settings.recent_workspaces;
-
-        self.workspace_meta = WorkspaceMeta::default();
-        self.active_workspace = Some(Workspace::new(&folder_name));
-
         cx.emit(WorkspaceEvent::WorkspaceSwitchRequested {
             path,
             store,
             folder_name,
         });
+    }
+
+    pub(crate) fn activate_workspace(
+        &mut self,
+        path: PathBuf,
+        store: Arc<dyn WorkspaceStore>,
+        folder_name: &str,
+        cx: &mut Context<Self>,
+    ) {
+        self.store = store.clone();
+        self.workspace_path = path.clone();
+        self.workspace_meta = WorkspaceMeta::default();
+        self.active_workspace = Some(Workspace::new(folder_name));
+        self.executor = Arc::new(ReqwestExecutor::new());
+        self.cookies.clear();
+
+        let mut settings = AppSettings::load();
+        settings.add_recent_workspace(&path.to_string_lossy());
+        self.recent_workspaces = settings.recent_workspaces;
+
+        cx.background_executor()
+            .spawn(async move {
+                let _ = store.ensure_gitignore();
+            })
+            .detach();
         cx.notify();
     }
 

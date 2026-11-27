@@ -1,5 +1,7 @@
+#[path = "streaming.rs"]
+mod streaming;
+
 use crate::models::{HttpMethod, HttpResponseRecord, ParsedCookie, StoredCookie, TimingBreakdown};
-use crate::sse::{SseOutput, SseParser};
 use crate::transport::{RequestError, ResolvedRequest};
 use chrono::Utc;
 use cookie_store::CookieStore;
@@ -10,13 +12,9 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
-use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::oneshot;
+use tokio::sync::mpsc::Sender;
 
-/// Body bytes captured into the final record for streamed responses. The
-/// byte count keeps growing (so size/progress stay accurate) but memory is
-/// bounded for hours-long streams.
-const MAX_STREAMED_BODY_CAPTURE: usize = 2 * 1024 * 1024;
+const MAX_RESPONSE_BODY_BYTES: usize = 64 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
 pub enum HttpProgress {
@@ -33,7 +31,7 @@ pub trait HttpExecutor: Send + Sync {
     fn send(
         &self,
         req: ResolvedRequest,
-        progress_tx: Option<UnboundedSender<HttpProgress>>,
+        progress_tx: Option<Sender<HttpProgress>>,
     ) -> impl std::future::Future<Output = Result<HttpResponseRecord, RequestError>> + Send;
 }
 
@@ -374,164 +372,23 @@ impl ReqwestExecutor {
             connection_reused: false,
         }
     }
-
-    /// Executes a request as a server-sent-events stream: every parsed
-    /// event or keep-alive comment is forwarded over `sse_tx` as it
-    /// arrives, and the final record carries the (capped) accumulated body
-    /// so the usual response views and cache still apply. `cancel_rx`
-    /// aborts both the connect and the streaming phase. `timeout_ms` acts
-    /// as an idle timeout between chunks — a stream that goes silent ends
-    /// gracefully with whatever was received. Responses whose content type
-    /// is not `text/event-stream` fall back to plain accumulation.
-    pub async fn send_streaming(
-        &self,
-        req: ResolvedRequest,
-        progress_tx: Option<UnboundedSender<HttpProgress>>,
-        sse_tx: UnboundedSender<SseOutput>,
-        cancel_rx: oneshot::Receiver<()>,
-    ) -> Result<HttpResponseRecord, RequestError> {
-        if let Some(tx) = &progress_tx {
-            let _ = tx.send(HttpProgress::Connecting);
-        }
-
-        let start_time = Instant::now();
-        let request_builder = self.build_request_builder(&req, true)?;
-
-        if let Some(tx) = &progress_tx {
-            let _ = tx.send(HttpProgress::Sending);
-        }
-
-        let host_key = extract_host_key(&req.url);
-        let is_reused = Self::check_host_reuse(&self.active_hosts, host_key.as_deref());
-
-        let ttfb_start = Instant::now();
-        let mut cancel_rx = cancel_rx;
-        let response = tokio::select! {
-            _ = &mut cancel_rx => return Err(RequestError::Cancelled),
-            res = request_builder.send() => res.map_err(|e| {
-                if e.is_timeout() {
-                    RequestError::Timeout(req.settings.timeout_secs())
-                } else {
-                    RequestError::Network(e.to_string())
-                }
-            })?,
-        };
-        let ttfb_ms = ttfb_start.elapsed().as_millis() as u64;
-
-        if let Some(tx) = &progress_tx {
-            let _ = tx.send(HttpProgress::WaitingResponse);
-        }
-
-        let status = response.status();
-        let status_code = status.as_u16();
-        let status_text = status.canonical_reason().unwrap_or("").to_string();
-
-        let mut resp_headers = Vec::new();
-        for (name, val) in response.headers() {
-            if let Ok(v_str) = val.to_str() {
-                resp_headers.push((name.as_str().to_string(), v_str.to_string()));
-            }
-        }
-        let is_event_stream = resp_headers.iter().any(|(k, v)| {
-            k.eq_ignore_ascii_case("content-type")
-                && v.to_ascii_lowercase().contains("text/event-stream")
-        });
-
-        Self::update_host_activity(
-            &self.active_hosts,
-            host_key.as_deref(),
-            resp_headers.iter().any(|(k, v)| {
-                k.eq_ignore_ascii_case("connection") && v.eq_ignore_ascii_case("close")
-            }),
-        );
-
-        let idle = Duration::from_millis(req.settings.timeout_ms);
-        let mut parser = SseParser::new();
-        let mut body_bytes: Vec<u8> = Vec::new();
-        let mut total_received = 0usize;
-        let mut stream = response.bytes_stream();
-        const PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(50);
-        let mut last_progress_emit: Option<Instant> = None;
-
-        let download_start = Instant::now();
-        loop {
-            let next = tokio::select! {
-                _ = &mut cancel_rx => return Err(RequestError::Cancelled),
-                next = tokio::time::timeout(idle, stream.next()) => match next {
-                    // Idle timeout on a silent connection ends the stream.
-                    Err(_) => break,
-                    Ok(None) => break,
-                    Ok(Some(chunk_res)) => chunk_res,
-                },
-            };
-            let chunk = next.map_err(|e| RequestError::Network(e.to_string()))?;
-            total_received += chunk.len();
-            if body_bytes.len() < MAX_STREAMED_BODY_CAPTURE {
-                let room = MAX_STREAMED_BODY_CAPTURE - body_bytes.len();
-                body_bytes.extend_from_slice(&chunk[..chunk.len().min(room)]);
-            }
-            if is_event_stream {
-                for out in parser.feed(&chunk) {
-                    let _ = sse_tx.send(out);
-                }
-            }
-            if let Some(tx) = &progress_tx {
-                if last_progress_emit.is_none_or(|t| t.elapsed() >= PROGRESS_EMIT_INTERVAL) {
-                    let _ = tx.send(HttpProgress::Downloading {
-                        received_bytes: total_received,
-                        total_bytes: None,
-                    });
-                    last_progress_emit = Some(Instant::now());
-                }
-            }
-        }
-        let download_ms = download_start.elapsed().as_millis() as u64;
-
-        if is_event_stream {
-            for out in parser.finish() {
-                let _ = sse_tx.send(out);
-            }
-        }
-
-        let total_ms = start_time.elapsed().as_millis() as u64;
-        let is_https = req.url.starts_with("https://");
-        let timing = Self::build_timing(total_ms, ttfb_ms, download_ms, is_reused, is_https);
-        let cookies = self.get_cookies_for_url(&req.url);
-
-        Ok(HttpResponseRecord {
-            id: uuid::Uuid::new_v4().to_string(),
-            request_id: req.request_id,
-            status_code,
-            status_text,
-            duration_ms: total_ms,
-            size_bytes: total_received,
-            headers: resp_headers,
-            cookies,
-            body: body_bytes,
-            timing,
-            request_sent: Some(req.sent_info),
-            test_results: Vec::new(),
-            console_logs: Vec::new(),
-            created_at: Utc::now(),
-        })
-    }
 }
 
 impl HttpExecutor for ReqwestExecutor {
     async fn send(
         &self,
         req: ResolvedRequest,
-        progress_tx: Option<UnboundedSender<HttpProgress>>,
+        progress_tx: Option<Sender<HttpProgress>>,
     ) -> Result<HttpResponseRecord, RequestError> {
         if let Some(tx) = &progress_tx {
-            let _ = tx.send(HttpProgress::Connecting);
+            let _ = tx.try_send(HttpProgress::Connecting);
         }
 
         let start_time = Instant::now();
         let request_builder = self.build_request_builder(&req, false)?;
 
         if let Some(tx) = &progress_tx {
-            let _ = tx.send(HttpProgress::Sending);
+            let _ = tx.try_send(HttpProgress::Sending);
         }
 
         let host_key = extract_host_key(&req.url);
@@ -549,7 +406,7 @@ impl HttpExecutor for ReqwestExecutor {
         let ttfb_ms = ttfb_start.elapsed().as_millis() as u64;
 
         if let Some(tx) = &progress_tx {
-            let _ = tx.send(HttpProgress::WaitingResponse);
+            let _ = tx.try_send(HttpProgress::WaitingResponse);
         }
 
         let status = response.status();
@@ -569,10 +426,14 @@ impl HttpExecutor for ReqwestExecutor {
 
         Self::update_host_activity(&self.active_hosts, host_key.as_deref(), connection_closed);
 
-        let total_size = response.content_length().map(|s| s as usize);
+        let total_size = response.content_length();
+        if total_size.is_some_and(|size| size > MAX_RESPONSE_BODY_BYTES as u64) {
+            return Err(RequestError::ResponseTooLarge(MAX_RESPONSE_BODY_BYTES));
+        }
+        let total_size = total_size.map(|size| size as usize);
 
         let download_start = Instant::now();
-        const MAX_INITIAL_BODY_CAPACITY: usize = 64 * 1024 * 1024;
+        const MAX_INITIAL_BODY_CAPACITY: usize = 1024 * 1024;
         const PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(50);
         let mut body_bytes =
             Vec::with_capacity(total_size.unwrap_or(0).min(MAX_INITIAL_BODY_CAPACITY));
@@ -582,11 +443,21 @@ impl HttpExecutor for ReqwestExecutor {
 
         while let Some(chunk_res) = stream.next().await {
             let chunk = chunk_res.map_err(|e| RequestError::Network(e.to_string()))?;
+            if chunk.len() > MAX_RESPONSE_BODY_BYTES.saturating_sub(body_bytes.len()) {
+                return Err(RequestError::ResponseTooLarge(MAX_RESPONSE_BODY_BYTES));
+            }
+            if chunk.len() > body_bytes.capacity() - body_bytes.len() {
+                let additional = chunk
+                    .len()
+                    .max(body_bytes.capacity())
+                    .min(MAX_RESPONSE_BODY_BYTES - body_bytes.len());
+                body_bytes.reserve_exact(additional);
+            }
             body_bytes.extend_from_slice(&chunk);
             if let Some(tx) = &progress_tx {
                 if last_progress_emit.is_none_or(|t| t.elapsed() >= PROGRESS_EMIT_INTERVAL) {
                     last_reported_bytes = body_bytes.len();
-                    let _ = tx.send(HttpProgress::Downloading {
+                    let _ = tx.try_send(HttpProgress::Downloading {
                         received_bytes: last_reported_bytes,
                         total_bytes: total_size,
                     });
@@ -596,7 +467,7 @@ impl HttpExecutor for ReqwestExecutor {
         }
         if let Some(tx) = &progress_tx {
             if body_bytes.len() != last_reported_bytes {
-                let _ = tx.send(HttpProgress::Downloading {
+                let _ = tx.try_send(HttpProgress::Downloading {
                     received_bytes: body_bytes.len(),
                     total_bytes: total_size,
                 });

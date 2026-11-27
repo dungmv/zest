@@ -24,9 +24,7 @@ pub enum SseOutput {
     Comment(String),
 }
 
-/// Defensive cap for a single buffered line / event so a runaway server
-/// cannot grow memory without bound.
-const MAX_PARSE_BUFFER_BYTES: usize = 4 * 1024 * 1024;
+use crate::transport::MAX_REALTIME_FRAME_BYTES;
 
 #[derive(Debug, Default)]
 pub struct SseParser {
@@ -37,6 +35,8 @@ pub struct SseParser {
     last_id: Option<String>,
     retry: Option<u64>,
     saw_first_byte: bool,
+    limit_exceeded: bool,
+    trailing_cr: bool,
 }
 
 impl SseParser {
@@ -44,27 +44,47 @@ impl SseParser {
         Self::default()
     }
 
+    pub fn limit_exceeded(&self) -> bool {
+        self.limit_exceeded
+    }
+
     /// Feeds one network chunk and returns everything the chunk completed.
     pub fn feed(&mut self, chunk: &[u8]) -> Vec<SseOutput> {
         let mut out = Vec::new();
         // Strip a UTF-8 BOM at the very start of the stream.
+        self.limit_exceeded = false;
         let mut chunk = chunk;
+        if self.trailing_cr && !chunk.is_empty() {
+            self.trailing_cr = false;
+            if let Some(rest) = chunk.strip_prefix(b"\n") {
+                chunk = rest;
+            }
+        }
         if !self.saw_first_byte {
             self.saw_first_byte = true;
             if chunk.starts_with(&[0xEF, 0xBB, 0xBF]) {
                 chunk = &chunk[3..];
             }
         }
-        self.raw.extend_from_slice(chunk);
-        if self.raw.len() > MAX_PARSE_BUFFER_BYTES {
-            // Runaway line — drop the buffer rather than growing forever.
-            self.raw.clear();
-            return out;
+        while !chunk.is_empty() && !self.limit_exceeded {
+            let (len, separator) = find_line_end(chunk).unwrap_or((chunk.len(), 0));
+            if len > MAX_REALTIME_FRAME_BYTES.saturating_sub(self.raw.len()) {
+                self.limit_exceeded = true;
+                break;
+            }
+            self.raw.extend_from_slice(&chunk[..len]);
+            self.trailing_cr = separator == 1 && chunk.get(len..) == Some(b"\r");
+            chunk = &chunk[len + separator..];
+            if separator != 0 {
+                let mut raw = std::mem::take(&mut self.raw);
+                self.process_line(&String::from_utf8_lossy(&raw), &mut out);
+                raw.clear();
+                self.raw = raw;
+            }
         }
-        while let Some((line_end, skip)) = find_line_end(&self.raw) {
-            let line: Vec<u8> = self.raw.drain(..line_end + skip).collect();
-            let line = &line[..line_end];
-            self.process_line(&String::from_utf8_lossy(line), &mut out);
+        if self.limit_exceeded {
+            self.raw.clear();
+            self.data.clear();
         }
         out
     }
@@ -73,16 +93,25 @@ impl SseParser {
     /// pending event is dispatched.
     pub fn finish(&mut self) -> Vec<SseOutput> {
         let mut out = Vec::new();
+        if self.limit_exceeded {
+            return out;
+        }
         if !self.raw.is_empty() {
             let line = String::from_utf8_lossy(&self.raw).into_owned();
             self.raw.clear();
             self.process_line(&line, &mut out);
         }
-        self.dispatch(&mut out);
+        if !self.limit_exceeded {
+            self.dispatch(&mut out);
+        }
         out
     }
 
     fn process_line(&mut self, line: &str, out: &mut Vec<SseOutput>) {
+        if line.len() > MAX_REALTIME_FRAME_BYTES {
+            self.limit_exceeded = true;
+            return;
+        }
         if line.is_empty() {
             self.dispatch(out);
             return;
@@ -100,8 +129,12 @@ impl SseParser {
         match field {
             "event" => self.event_type = Some(value.to_string()),
             "data" => {
-                self.data.push_str(value);
-                self.data.push('\n');
+                if value.len() < MAX_REALTIME_FRAME_BYTES.saturating_sub(self.data.len()) {
+                    self.data.push_str(value);
+                    self.data.push('\n');
+                } else {
+                    self.limit_exceeded = true;
+                }
             }
             "id" => {
                 if !value.contains('\0') {

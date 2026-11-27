@@ -16,7 +16,7 @@ pub use format::{
     ConsoleFilter, FormattedResponseBody, ImageZoomMode, ResponseTabKind, ResponseViewMode,
     MAX_PREVIEW_IMAGE_BYTES,
 };
-use zest_core::transport::TransportFrame;
+use zest_core::transport::{append_realtime_frame, TransportFrame};
 use zest_core::ws::WebSocketStatus;
 
 /// View-side cap for the live WS frame log (service keeps its own copy).
@@ -113,6 +113,19 @@ impl ResponseState {
             wrap_lines: false,
             realtime: RealtimeResponseState::new(),
         }
+    }
+
+    pub(crate) fn reset_workspace(&mut self, cx: &mut Context<Self>) {
+        *self = Self {
+            wrap_lines: self.wrap_lines,
+            active_tab: self.active_tab,
+            view_mode: self.view_mode,
+            ..Self::new()
+        };
+        cx.emit(ResponseEvent::ContentChanged {
+            sync_sent_preview: true,
+        });
+        cx.notify();
     }
 
     pub fn load_for_request_internal(&mut self, req_id: &str, store: &dyn WorkspaceStore) {
@@ -509,12 +522,8 @@ impl ResponseState {
 
     pub fn push_frame(&mut self, message: TransportFrame, cx: &mut Context<Self>) {
         let old_count = self.realtime.frames.len();
-        self.realtime.frames.push(message);
-        if self.realtime.frames.len() > MAX_VIEW_FRAMES {
-            let overflow = self.realtime.frames.len() - MAX_VIEW_FRAMES;
-            self.realtime.frames.drain(..overflow);
-            // Every index shifted: rebuild the virtual list state.
-            self.realtime.frames_list.reset(MAX_VIEW_FRAMES);
+        if append_realtime_frame(&mut self.realtime.frames, message, MAX_VIEW_FRAMES) > 0 {
+            self.realtime.frames_list.reset(self.realtime.frames.len());
         } else {
             self.realtime.frames_list.splice(old_count..old_count, 1);
         }

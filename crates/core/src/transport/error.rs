@@ -17,6 +17,8 @@ pub enum RequestError {
     Timeout(u64),
     #[error("Pre-request script error: {0}")]
     ScriptError(String),
+    #[error("Response exceeds the {0}-byte limit")]
+    ResponseTooLarge(usize),
     #[error("Execution error: {0}")]
     Other(String),
 }

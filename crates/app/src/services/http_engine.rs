@@ -6,8 +6,10 @@ use zest_core::http::{HttpExecutor, HttpProgress, ReqwestExecutor};
 use zest_core::models::{Environment, HttpMethod, Protocol, RequestBody, RequestItem};
 use zest_core::scripting::{PostResponseContext, PostResponseOutput, ScriptCancel, ScriptSandbox};
 use zest_core::sse::SseOutput;
+use zest_core::transport::append_realtime_frame;
 use zest_core::transport::{
     FrameDirection, FrameKind, RequestError, ResolvedRequest, TransportFrame,
+    REALTIME_QUEUE_CAPACITY,
 };
 
 use super::pipeline::{merge_env_mutations, run_pre_request_stage};
@@ -48,10 +50,7 @@ impl HttpEngine {
     pub fn register_sse_frame(&self, request_id: &str, frame: TransportFrame) {
         let mut logs = self.sse_logs.lock().unwrap_or_else(|e| e.into_inner());
         let log = logs.entry(request_id.to_string()).or_default();
-        log.push(frame);
-        if log.len() > MAX_SSE_LOG_FRAMES {
-            log.drain(..log.len() - MAX_SSE_LOG_FRAMES);
-        }
+        append_realtime_frame(log, frame, MAX_SSE_LOG_FRAMES);
     }
 
     /// Snapshot of the SSE frames for a request (oldest first).
@@ -76,11 +75,11 @@ impl HttpEngine {
         mut req_item: RequestItem,
         env: Option<Arc<Environment>>,
         cancel_rx: oneshot::Receiver<()>,
-    ) -> mpsc::UnboundedReceiver<SendEvent> {
+    ) -> mpsc::Receiver<SendEvent> {
         if req_item.protocol == Protocol::Sse {
             self.clear_sse_frames(&req_item.id);
         }
-        let (event_tx, event_rx) = mpsc::unbounded_channel();
+        let (event_tx, event_rx) = mpsc::channel(REALTIME_QUEUE_CAPACITY);
         let executor = self.executor.clone();
         let send_event_tx = event_tx.clone();
 
@@ -111,12 +110,14 @@ impl HttpEngine {
                 .as_ref()
                 .and_then(|s| s.post_response.clone());
 
-            let _ = send_event_tx.send(SendEvent::Started {
-                request_id: req_item.id.clone(),
-                initial_logs: pre_output.console_entries.clone(),
-                env_mutations: pre_output.env_mutations.clone(),
-                pre_script_error: pre_output.error.clone(),
-            });
+            let _ = send_event_tx
+                .send(SendEvent::Started {
+                    request_id: req_item.id.clone(),
+                    initial_logs: pre_output.console_entries.clone(),
+                    env_mutations: pre_output.env_mutations.clone(),
+                    pre_script_error: pre_output.error.clone(),
+                })
+                .await;
 
             // 2. Merge pre-script env mutations into the effective environment
             let effective_env = merge_env_mutations(&env, &pre_output.env_mutations);
@@ -127,19 +128,21 @@ impl HttpEngine {
             {
                 Ok(r) => r,
                 Err(e) => {
-                    let _ = send_event_tx.send(SendEvent::Failed {
-                        request_id: req_item.id.clone(),
-                        error: e.to_string(),
-                    });
+                    let _ = send_event_tx
+                        .send(SendEvent::Failed {
+                            request_id: req_item.id.clone(),
+                            error: e.to_string(),
+                        })
+                        .await;
                     return;
                 }
             };
             resolved.apply_pre_script_mutations(&pre_output);
 
-            let (progress_tx, mut progress_rx) = mpsc::unbounded_channel();
+            let (progress_tx, mut progress_rx) = mpsc::channel(REALTIME_QUEUE_CAPACITY);
             let progress_event_tx = send_event_tx.clone();
 
-            tokio::spawn(async move {
+            let progress_pump = tokio::spawn(async move {
                 while let Some(prog) = progress_rx.recv().await {
                     let text = match prog {
                         HttpProgress::Connecting => "Connecting...".to_string(),
@@ -163,7 +166,7 @@ impl HttpEngine {
                             }
                         }
                     };
-                    let _ = progress_event_tx.send(SendEvent::Progress(text));
+                    let _ = progress_event_tx.try_send(SendEvent::Progress(text));
                 }
             });
 
@@ -182,11 +185,13 @@ impl HttpEngine {
                 .await
             } else {
                 tokio::select! {
+                    biased;
                     _ = transport_cancel_rx => Err(RequestError::Cancelled),
                     res = executor.send(resolved, Some(progress_tx)) => res,
                 }
             };
 
+            let _ = progress_pump.await;
             match result {
                 Ok(mut record) => {
                     // 4. Post-response / Test Script
@@ -205,19 +210,23 @@ impl HttpEngine {
                     combined_console_logs.extend(post_output.console_entries.clone());
                     record.console_logs = combined_console_logs;
 
-                    let _ = send_event_tx.send(SendEvent::HttpSuccess {
-                        record: Arc::new(record),
-                        post_output: Box::new(post_output),
-                    });
+                    let _ = send_event_tx
+                        .send(SendEvent::HttpSuccess {
+                            record: Arc::new(record),
+                            post_output: Box::new(post_output),
+                        })
+                        .await;
                 }
                 Err(RequestError::Cancelled) => {
-                    let _ = send_event_tx.send(SendEvent::Cancelled);
+                    let _ = send_event_tx.send(SendEvent::Cancelled).await;
                 }
                 Err(e) => {
-                    let _ = send_event_tx.send(SendEvent::Failed {
-                        request_id,
-                        error: e.to_string(),
-                    });
+                    let _ = send_event_tx
+                        .send(SendEvent::Failed {
+                            request_id,
+                            error: e.to_string(),
+                        })
+                        .await;
                 }
             }
         });
@@ -231,11 +240,11 @@ impl HttpEngine {
     async fn run_sse_stream(
         executor: Arc<ReqwestExecutor>,
         resolved: ResolvedRequest,
-        progress_tx: mpsc::UnboundedSender<HttpProgress>,
-        send_event_tx: mpsc::UnboundedSender<SendEvent>,
+        progress_tx: mpsc::Sender<HttpProgress>,
+        send_event_tx: mpsc::Sender<SendEvent>,
         cancel_rx: oneshot::Receiver<()>,
     ) -> Result<zest_core::models::HttpResponseRecord, RequestError> {
-        let (sse_tx, mut sse_rx) = mpsc::unbounded_channel::<SseOutput>();
+        let (sse_tx, mut sse_rx) = mpsc::channel::<SseOutput>(REALTIME_QUEUE_CAPACITY);
         let request_id = resolved.request_id.clone();
 
         // Forward parsed SSE outputs to the unified channel as frames,
@@ -272,14 +281,22 @@ impl HttpEngine {
                 };
                 frame.label = event_name;
                 next_id += 1;
-                let _ = send_event_tx.send(SendEvent::Frame {
-                    request_id: request_id.clone(),
-                    frame,
-                });
+                if send_event_tx
+                    .send(SendEvent::Frame {
+                        request_id: request_id.clone(),
+                        frame,
+                    })
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
                 if event_count > 0 && event_count.is_multiple_of(10) {
-                    let _ = send_event_tx.send(SendEvent::Progress(format!(
-                        "Streaming... {event_count} events"
-                    )));
+                    let _ = send_event_tx
+                        .send(SendEvent::Progress(format!(
+                            "Streaming... {event_count} events"
+                        )))
+                        .await;
                 }
             }
         });
@@ -363,12 +380,11 @@ mod tests {
         let executor = Arc::new(ReqwestExecutor::new());
         let engine = HttpEngine::new(executor, rt.clone());
 
-        let req = RequestItem::new(
-            "test-cancel",
-            "Cancel Test",
-            HttpMethod::Get,
-            "http://10.255.255.1",
-        );
+        let listener = rt
+            .block_on(tokio::net::TcpListener::bind("127.0.0.1:0"))
+            .unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let req = RequestItem::new("test-cancel", "Cancel Test", HttpMethod::Get, &url);
         let (cancel_tx, cancel_rx) = oneshot::channel();
         let mut rx = engine.execute(req, None, cancel_rx);
 
@@ -432,5 +448,57 @@ mod tests {
             false
         });
         assert!(got_started_with_mutation);
+    }
+
+    #[test]
+    fn sse_delivers_all_frames_and_terminal_event_after_backpressure() {
+        use std::time::Duration;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+
+        let rt = Arc::new(tokio::runtime::Runtime::new().unwrap());
+        let executor = Arc::new(ReqwestExecutor::new());
+        let engine = HttpEngine::new(executor, rt.clone());
+        rt.block_on(async {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let url = format!("http://{}", listener.local_addr().unwrap());
+            let frame_count = 3 * REALTIME_QUEUE_CAPACITY;
+            let server = tokio::spawn(async move {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut request = [0; 1024];
+                assert!(socket.read(&mut request).await.unwrap() > 0);
+                let body = "data: payload\n\n".repeat(frame_count);
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len(),
+                );
+                socket.write_all(response.as_bytes()).await.unwrap();
+            });
+
+            let mut request = RequestItem::new("stream", "SSE", HttpMethod::Get, &url);
+            request.protocol = Protocol::Sse;
+            let (_cancel, cancel_rx) = oneshot::channel();
+            let mut events = engine.execute(request, None, cancel_rx);
+            tokio::time::timeout(Duration::from_secs(5), async {
+                while events.len() < REALTIME_QUEUE_CAPACITY {
+                    tokio::task::yield_now().await;
+                }
+            }).await.expect("expected the event queue to fill");
+
+            let received = tokio::time::timeout(Duration::from_secs(5), async {
+                let mut received = 0;
+                while let Some(event) = events.recv().await {
+                    match event {
+                        SendEvent::Frame { .. } => received += 1,
+                        SendEvent::HttpSuccess { .. } => return received,
+                        SendEvent::Failed { error, .. } => panic!("{error}"),
+                        _ => {}
+                    }
+                }
+                panic!("missing terminal event");
+            }).await.expect("expected the terminal event after queue drain");
+            assert_eq!(received, frame_count);
+            server.await.unwrap();
+        });
     }
 }

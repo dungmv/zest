@@ -82,7 +82,8 @@ fn test_apply_disk_changes_preserves_dirty_env_and_globals(cx: &mut TestAppConte
             .into_iter()
             .collect();
 
-        let conflicts = env.apply_disk_changes(&changed, &dirty, cx);
+        let snapshot = EnvironmentSnapshot::load(env.store.as_ref(), &env.workspace_name);
+        let conflicts = env.apply_disk_changes(snapshot, &changed, &dirty, cx);
         assert_eq!(conflicts, vec!["dev".to_string()]);
 
         // Dirty `dev` and `globals` must retain user's in-memory text

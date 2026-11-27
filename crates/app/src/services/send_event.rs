@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 use zest_core::grpc::GrpcCallSummary;
 use zest_core::models::{ConsoleLogEntry, HttpResponseRecord};
 use zest_core::scripting::PostResponseOutput;
@@ -47,7 +47,7 @@ pub enum SendEvent {
     /// service registers for outbound sends.
     HandshakeConnected {
         request_id: String,
-        outgoing: UnboundedSender<WsOutgoing>,
+        outgoing: Sender<WsOutgoing>,
         response_headers: Vec<(String, String)>,
         duration_ms: u64,
     },

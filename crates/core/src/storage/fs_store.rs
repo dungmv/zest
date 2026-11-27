@@ -8,7 +8,7 @@ use crate::storage::slug::loc_path_for_yaml;
 use anyhow::Result;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub struct FsWorkspaceStore {
     pub(super) root_dir: PathBuf,
@@ -16,6 +16,7 @@ pub struct FsWorkspaceStore {
     // `fs_store_ops.rs` can reach fingerprints and the write-behind writer.
     pub(super) fingerprints: Arc<DiskFingerprints>,
     pub(super) writer: AtomicWriter,
+    pub(super) request_mutations: Mutex<()>,
 }
 
 impl FsWorkspaceStore {
@@ -28,6 +29,7 @@ impl FsWorkspaceStore {
             root_dir,
             fingerprints,
             writer,
+            request_mutations: Mutex::new(()),
         }
     }
 

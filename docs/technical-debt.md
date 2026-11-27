@@ -6,7 +6,7 @@
 
 ## 1. Nợ kỹ thuật đang mở
 
-Hiện không có khoản nợ kỹ thuật nào đang mở (toàn bộ 9 mục `TD-401..409` từ Audit 2026-11-25 đã được xử lý ngày 2026-11-27).
+Đợt xử lý ngày **27/11/2026** đã đóng TD-501 đến TD-508. Kết quả kiểm chứng và các giới hạn mới được ghi trong [plan xử lý](plans/2026112702-technical-debt-remediation.md#kết-quả).
 
 ---
 

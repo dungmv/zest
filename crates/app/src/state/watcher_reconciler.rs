@@ -1,156 +1,230 @@
 use super::{
-    CollectionEvent, CollectionState, EnvironmentState, GitState, PersistTarget, PersistenceState,
+    CollectionEvent, CollectionState, EnvironmentSnapshot, EnvironmentState, GitState,
+    PersistTarget, PersistenceState,
 };
 use gpui_kit::{Context, Entity};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use std::time::Duration;
-use zest_core::storage::FsEvent;
+use zest_core::storage::{models::RequestFile, FsEvent, WorkspaceStore};
 
-/// File-watcher plumbing and on-disk change reconciliation of
-/// [`PersistenceState`], split from `persistence_state.rs` to keep each file
-/// under the 650 LOC budget.
+#[derive(Default)]
+struct WatchBatch {
+    git_changed: bool,
+    tree_changed: bool,
+    changed_envs: HashSet<String>,
+    changed_requests: HashSet<String>,
+    deleted_requests: HashSet<String>,
+    request_files: Vec<RequestReload>,
+    environment: Option<EnvironmentSnapshot>,
+}
+
+struct RequestReload {
+    id: String,
+    file: Result<RequestFile, String>,
+    last_status: Option<u16>,
+}
+
+impl WatchBatch {
+    fn read(events: Vec<FsEvent>, store: &dyn WorkspaceStore, workspace_name: &str) -> Self {
+        let mut batch = Self::default();
+        for event in events {
+            match event {
+                FsEvent::GitChanged => batch.git_changed = true,
+                FsEvent::TreeChanged => batch.tree_changed = true,
+                FsEvent::EnvironmentChanged(name) => {
+                    batch.changed_envs.insert(name);
+                }
+                FsEvent::RequestChanged(id) => {
+                    batch.changed_requests.insert(id);
+                }
+                FsEvent::RequestDeleted(id) => {
+                    batch.deleted_requests.insert(id);
+                }
+            }
+        }
+
+        // An atomic replace can deliver both removal and creation. Recognize
+        // the replacement even when the events arrive in different batches.
+        let collections = store.workspace_root().join("collections");
+        batch.deleted_requests.retain(|id| {
+            if collections.join(id).is_file() {
+                batch.tree_changed = true;
+                batch.changed_requests.insert(id.clone());
+                false
+            } else {
+                batch.changed_requests.remove(id);
+                true
+            }
+        });
+
+        if !batch.tree_changed {
+            batch.request_files = batch
+                .changed_requests
+                .iter()
+                .map(|id| {
+                    let file = store.read_request(id).map_err(|error| error.to_string());
+                    let last_status = store
+                        .load_response_cache(id)
+                        .ok()
+                        .flatten()
+                        .map(|cache| cache.response.status);
+                    RequestReload {
+                        id: id.clone(),
+                        file,
+                        last_status,
+                    }
+                })
+                .collect();
+        }
+        if !batch.changed_envs.is_empty() {
+            batch.environment = Some(EnvironmentSnapshot::load(store, workspace_name));
+        }
+        batch
+    }
+}
+
+#[derive(Clone)]
+struct WatchTargets {
+    collection: Entity<CollectionState>,
+    environment: Entity<EnvironmentState>,
+    git: Entity<GitState>,
+}
+
 impl PersistenceState {
     pub fn start_watcher(
         &mut self,
-        workspace_data: Entity<CollectionState>,
-        env_state: Entity<EnvironmentState>,
-        git_state: Entity<GitState>,
+        collection: Entity<CollectionState>,
+        environment: Entity<EnvironmentState>,
+        git: Entity<GitState>,
         cx: &mut Context<Self>,
     ) {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<FsEvent>();
-        let fp = self.store.disk_fingerprints();
-        if let Ok(watcher) =
-            zest_core::storage::start_workspace_watcher(&self.workspace_path, fp, tx)
-        {
-            self.watcher = Some(watcher);
-            let ws_clone = workspace_data.clone();
-            let env_clone = env_state.clone();
-            let git_clone = git_state.clone();
-            let task = cx.spawn(async move |this, cx| {
-                while let Some(event) = rx.recv().await {
-                    let mut batch = vec![event];
-                    while let Ok(ev) = rx.try_recv() {
-                        batch.push(ev);
-                    }
-                    cx.background_executor()
-                        .timer(Duration::from_millis(100))
-                        .await;
-                    while let Ok(ev) = rx.try_recv() {
-                        batch.push(ev);
-                    }
+        self.watcher_events = Some(tx.clone());
+        let store = self.store.clone();
+        let path = self.workspace_path.clone();
+        let fingerprints = store.disk_fingerprints();
+        let targets = WatchTargets {
+            collection,
+            environment,
+            git,
+        };
 
-                    if let Some(this) = this.upgrade() {
-                        let ws = ws_clone.clone();
-                        let env = env_clone.clone();
-                        let git = git_clone.clone();
-                        this.update(cx, |p, cx| {
-                            p.handle_fs_events_batch(batch, ws, env, git, cx);
-                        });
-                    }
+        self.watcher_task = Some(cx.spawn(async move |this, cx| {
+            let _watcher = cx
+                .background_executor()
+                .spawn(async move {
+                    zest_core::storage::start_workspace_watcher(&path, fingerprints, tx)
+                })
+                .await
+                .ok();
+
+            while let Some(event) = rx.recv().await {
+                let mut events = vec![event];
+                while let Ok(event) = rx.try_recv() {
+                    events.push(event);
                 }
-            });
-            self.watcher_task = Some(task);
+                cx.background_executor()
+                    .timer(Duration::from_millis(100))
+                    .await;
+                while let Ok(event) = rx.try_recv() {
+                    events.push(event);
+                }
+
+                let snapshot = this.update(cx, |state, cx| {
+                    let name = targets.environment.read(cx).workspace_name.clone();
+                    let revisions = state.coordinator.revisions();
+                    (name, revisions)
+                });
+                let Ok((name, revisions)) = snapshot else {
+                    break;
+                };
+                let read_store = store.clone();
+                let batch = cx
+                    .background_executor()
+                    .spawn(async move { WatchBatch::read(events, read_store.as_ref(), &name) })
+                    .await;
+                let applied = this.update(cx, |state, cx| {
+                    if Arc::ptr_eq(&store, &state.store) {
+                        state.apply_watch_batch(batch, &targets, &revisions, cx);
+                    }
+                });
+                if applied.is_err() {
+                    break;
+                }
+            }
+        }));
+    }
+
+    pub fn reconcile_import(&self, environments: Vec<String>) {
+        if let Some(events) = &self.watcher_events {
+            let _ = events.send(FsEvent::TreeChanged);
+            for environment in environments {
+                let _ = events.send(FsEvent::EnvironmentChanged(environment));
+            }
         }
     }
 
-    #[allow(dead_code)] // Single fs event handler for testing
+    #[cfg(test)]
     pub fn handle_fs_event(
         &mut self,
         event: FsEvent,
-        workspace_data: Entity<CollectionState>,
-        env_state: Entity<EnvironmentState>,
-        git_state: Entity<GitState>,
+        collection: Entity<CollectionState>,
+        environment: Entity<EnvironmentState>,
+        git: Entity<GitState>,
         cx: &mut Context<Self>,
     ) {
-        self.handle_fs_events_batch(vec![event], workspace_data, env_state, git_state, cx);
+        self.handle_fs_events_batch(vec![event], collection, environment, git, cx);
     }
 
+    #[cfg(test)]
     pub fn handle_fs_events_batch(
         &mut self,
         events: Vec<FsEvent>,
-        workspace_data: Entity<CollectionState>,
-        env_state: Entity<EnvironmentState>,
-        git_state: Entity<GitState>,
+        collection: Entity<CollectionState>,
+        environment: Entity<EnvironmentState>,
+        git: Entity<GitState>,
         cx: &mut Context<Self>,
     ) {
-        let mut git_changed = false;
-        let mut tree_changed = false;
-        let mut changed_envs = HashSet::new();
-        let mut req_changed = HashSet::new();
-        let mut req_deleted = HashSet::new();
+        let name = &environment.read(cx).workspace_name;
+        let batch = WatchBatch::read(events, self.store.as_ref(), name);
+        let revisions = self.coordinator.revisions();
+        self.apply_watch_batch(
+            batch,
+            &WatchTargets {
+                collection,
+                environment,
+                git,
+            },
+            &revisions,
+            cx,
+        );
+    }
 
-        for event in events {
-            match event {
-                FsEvent::GitChanged => git_changed = true,
-                FsEvent::TreeChanged => tree_changed = true,
-                FsEvent::EnvironmentChanged(name) => {
-                    changed_envs.insert(name);
-                }
-                FsEvent::RequestDeleted(rel_path) => {
-                    req_deleted.insert(rel_path.clone());
-                    req_changed.remove(&rel_path);
-                }
-                FsEvent::RequestChanged(rel_path) => {
-                    if !req_deleted.contains(&rel_path) {
-                        req_changed.insert(rel_path);
-                    }
-                }
-            }
-        }
-
-        // Deletion events are verified against the filesystem: `git restore`
-        // and editors replace files via remove+recreate, so the file may exist
-        // again by the time the batch is handled.
-        let mut verified_deleted = HashSet::new();
-        for rel_path in &req_deleted {
-            if self
-                .workspace_path
-                .join("collections")
-                .join(rel_path)
-                .is_file()
-            {
-                tree_changed = true;
-                req_changed.insert(rel_path.clone());
-            } else {
-                verified_deleted.insert(rel_path.clone());
-            }
-        }
-        let req_deleted = verified_deleted;
-
-        let mut self_changed = false;
-
-        for rel_path in &req_changed {
-            if self.is_dirty(rel_path) {
-                self.conflicts.insert(
-                    rel_path.clone(),
-                    "File was modified externally while you have unsaved changes.".to_string(),
-                );
-                self_changed = true;
-            }
-        }
-
-        for rel_path in &req_deleted {
-            let target = PersistTarget::Request(rel_path.clone());
-            self.coordinator.cancel_target(&target);
-            self.debounce_tasks.remove(&target);
-            if self.unsaved_requests.remove(rel_path) {
-                self.unsaved_version = self.unsaved_version.wrapping_add(1);
-                self_changed = true;
-            }
-            if self.conflicts.remove(rel_path).is_some() {
-                self_changed = true;
-            }
-        }
-
-        let mut dirty_requests = self.unsaved_requests.clone();
+    fn apply_watch_batch(
+        &mut self,
+        batch: WatchBatch,
+        targets: &WatchTargets,
+        before: &HashMap<PersistTarget, u64>,
+        cx: &mut Context<Self>,
+    ) {
+        let mut dirty_requests = self.dirty_request_ids();
         let mut dirty_envs = HashSet::new();
-        for target in self.coordinator.dirty_targets() {
+        let dirty_targets = self.coordinator.dirty_targets();
+        let revisions = self.coordinator.revisions();
+        for target in
+            dirty_targets
+                .iter()
+                .chain(revisions.iter().filter_map(|(target, revision)| {
+                    (before.get(target) != Some(revision)).then_some(target)
+                }))
+        {
             match target {
                 PersistTarget::Request(id) => {
-                    dirty_requests.insert(id);
+                    dirty_requests.insert(id.clone());
                 }
                 PersistTarget::Environment(name) => {
-                    dirty_envs.insert(name);
+                    dirty_envs.insert(name.clone());
                 }
                 PersistTarget::Globals => {
                     dirty_envs.insert("globals".to_string());
@@ -159,81 +233,92 @@ impl PersistenceState {
             }
         }
 
-        if tree_changed {
-            workspace_data.update(cx, |ws, cx| {
-                // The blocking scan runs on the background executor; the
-                // reload announcement is emitted when it applies.
-                ws.reload_tree_preserving_async(dirty_requests, cx);
-                cx.notify();
-            });
-        } else {
-            let mut reqs_to_update = Vec::new();
-            let mut parse_errors = Vec::new();
-
-            for rel_path in &req_changed {
-                if !self.is_dirty(rel_path) {
-                    match self.store.read_request(rel_path) {
-                        Ok(req_file) => reqs_to_update.push((rel_path.clone(), req_file)),
-                        Err(e) => parse_errors.push((rel_path.clone(), e.to_string())),
-                    }
-                }
-            }
-
-            if !reqs_to_update.is_empty() || !parse_errors.is_empty() || !req_deleted.is_empty() {
-                workspace_data.update(cx, |ws, cx| {
-                    for (path, err) in parse_errors {
-                        ws.parse_errors.insert(path, err);
-                    }
-
-                    let mut reloaded_ids = Vec::with_capacity(reqs_to_update.len());
-                    let mut needs_rescan = false;
-                    for (path, req_file) in reqs_to_update {
-                        ws.parse_errors.remove(&path);
-                        if let Some(r) = ws.requests.iter_mut().find(|r| r.id == path) {
-                            let ws_name = ws.workspace_scope.name.clone();
-                            let prev_status = r.last_status_code.or_else(|| {
-                                ws.store
-                                    .load_response_cache(&r.id)
-                                    .ok()
-                                    .flatten()
-                                    .map(|l| l.response.status)
-                            });
-                            *r = req_file.into_item(&r.id, &ws_name, r.folder_id.clone());
-                            r.last_status_code = prev_status;
-                            reloaded_ids.push(path);
-                        } else {
-                            needs_rescan = true;
-                        }
-                    }
-
-                    for rel_path in &req_deleted {
-                        ws.parse_errors.remove(rel_path);
-                        ws.requests.retain(|r| &r.id != rel_path);
-                    }
-
-                    ws.bump_tree_version();
-                    if needs_rescan {
-                        ws.reload_tree_preserving_async(dirty_requests, cx);
-                    } else if !reloaded_ids.is_empty() {
-                        cx.emit(CollectionEvent::RequestsReloaded {
-                            req_ids: Some(reloaded_ids),
-                        });
-                    }
-                    cx.notify();
-                });
+        let mut self_changed = false;
+        for id in &batch.changed_requests {
+            if dirty_requests.contains(id) {
+                self.conflicts.insert(
+                    id.clone(),
+                    "File was modified externally while you have unsaved changes.".to_string(),
+                );
+                self_changed = true;
             }
         }
+        for id in &batch.deleted_requests {
+            let target = PersistTarget::Request(id.clone());
+            self.coordinator.cancel_target(&target);
+            self.debounce_tasks.remove(&target);
+            if self.unsaved_requests.remove(id) {
+                self.unsaved_version = self.unsaved_version.wrapping_add(1);
+                self_changed = true;
+            }
+            self_changed |= self.conflicts.remove(id).is_some();
+        }
 
-        let env_changed = !changed_envs.is_empty();
-        if env_changed {
-            let new_conflicts = env_state.update(cx, |env, cx| {
-                let c = env.apply_disk_changes(&changed_envs, &dirty_envs, cx);
-                cx.notify();
-                c
+        let working_tree_changed = batch.tree_changed
+            || batch.environment.is_some()
+            || !batch.changed_requests.is_empty()
+            || !batch.deleted_requests.is_empty();
+        let persistence = cx.entity().downgrade();
+        if batch.tree_changed {
+            targets.collection.update(cx, |collection, cx| {
+                collection.reload_tree_preserving_async(persistence, dirty_requests, cx);
             });
-            for env_name in new_conflicts {
+        } else if !batch.request_files.is_empty() || !batch.deleted_requests.is_empty() {
+            targets.collection.update(cx, |collection, cx| {
+                let mut reloaded_ids = Vec::with_capacity(batch.request_files.len());
+                let mut needs_rescan = false;
+                for reload in batch.request_files {
+                    if dirty_requests.contains(&reload.id) {
+                        continue;
+                    }
+                    let file = match reload.file {
+                        Ok(file) => file,
+                        Err(error) => {
+                            collection.parse_errors.insert(reload.id, error);
+                            continue;
+                        }
+                    };
+                    collection.parse_errors.remove(&reload.id);
+                    let workspace_name = collection.workspace_scope.name.clone();
+                    if let Some(request) = collection.find_request_mut(&reload.id) {
+                        let status = request.last_status_code.or(reload.last_status);
+                        let folder = request.folder_id.clone();
+                        *request = file.into_item(&reload.id, &workspace_name, folder);
+                        request.last_status_code = status;
+                        reloaded_ids.push(reload.id);
+                    } else {
+                        needs_rescan = true;
+                    }
+                }
+
+                for id in &batch.deleted_requests {
+                    collection.parse_errors.remove(id);
+                }
+                collection
+                    .requests
+                    .retain(|request| !batch.deleted_requests.contains(&request.id));
+                collection.bump_tree_version();
+                if needs_rescan {
+                    collection.reload_tree_preserving_async(persistence, dirty_requests, cx);
+                } else if !reloaded_ids.is_empty() {
+                    cx.emit(CollectionEvent::RequestsReloaded {
+                        req_ids: Some(reloaded_ids),
+                    });
+                }
+                cx.notify();
+            });
+        }
+
+        if let Some(snapshot) = batch.environment {
+            let conflicts = targets.environment.update(cx, |env, cx| {
+                let conflicts =
+                    env.apply_disk_changes(snapshot, &batch.changed_envs, &dirty_envs, cx);
+                cx.notify();
+                conflicts
+            });
+            for name in conflicts {
                 self.env_conflicts.insert(
-                    env_name,
+                    name,
                     "Environment file was modified externally while you have unsaved changes."
                         .to_string(),
                 );
@@ -244,11 +329,8 @@ impl PersistenceState {
         if self_changed {
             cx.notify();
         }
-
-        let working_tree_changed =
-            tree_changed || env_changed || !req_changed.is_empty() || !req_deleted.is_empty();
-        if git_changed || working_tree_changed {
-            git_state.update(cx, |git, cx| git.refresh_status(cx));
+        if batch.git_changed || working_tree_changed {
+            targets.git.update(cx, |git, cx| git.refresh_status(cx));
         }
     }
 }

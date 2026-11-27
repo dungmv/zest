@@ -72,40 +72,22 @@ impl CollectionState {
         item
     }
 
-    pub fn duplicate_request_internal(&mut self, req_id: &str) -> Option<RequestItem> {
-        let existing = self.requests.iter().find(|r| r.id == req_id)?.clone();
-        let mut req_file = self
+    pub fn duplicate_request_internal(&mut self, req_id: &str) -> anyhow::Result<RequestItem> {
+        let existing = self
+            .find_request(req_id)
+            .ok_or_else(|| anyhow::anyhow!("Request no longer exists"))?;
+        let folder = existing.folder_id.clone();
+        let status = existing.last_status_code;
+        let mut file = RequestFile::from_item(existing);
+        file.name = format!("{} (Copy)", file.name);
+        let (_, path) = self
             .store
-            .read_request(req_id)
-            .unwrap_or_else(|_| RequestFile {
-                name: existing.name.clone(),
-                method: existing.method,
-                url: existing.url.clone(),
-                ..Default::default()
-            });
-
-        let new_name = format!("{} (Copy)", req_file.name);
-        req_file.name = new_name.clone();
-
-        let folder_rel = existing.folder_id.clone();
-        let (_slug, rel_path) = self
-            .store
-            .create_request(
-                folder_rel.as_deref(),
-                &new_name,
-                req_file.method,
-                &req_file.url,
-                req_file.protocol,
-            )
-            .ok()?;
-
-        let _ = self.store.write_request(&rel_path, &req_file);
-        let ws_name = self.workspace_scope.name.clone();
-        let mut dup = req_file.to_item(&rel_path, &ws_name, folder_rel);
-        dup.last_status_code = existing.last_status_code;
-        self.requests.push(dup.clone());
+            .create_request_file(folder.as_deref(), file.clone())?;
+        let mut duplicate = file.into_item(&path, &self.workspace_scope.name, folder);
+        duplicate.last_status_code = status;
+        self.requests.push(duplicate.clone());
         self.bump_tree_version();
-        Some(dup)
+        Ok(duplicate)
     }
 
     pub fn duplicate_request(
@@ -113,25 +95,46 @@ impl CollectionState {
         req_id: &str,
         cx: &mut Context<Self>,
     ) -> Option<RequestItem> {
-        let res = self.duplicate_request_internal(req_id);
-        if res.is_some() {
-            cx.notify();
+        match self.duplicate_request_internal(req_id) {
+            Ok(request) => {
+                cx.notify();
+                Some(request)
+            }
+            Err(error) => {
+                cx.emit(CollectionEvent::CrudFailed {
+                    title: "Could Not Duplicate Request",
+                    message: error.to_string(),
+                });
+                None
+            }
         }
-        res
     }
 
-    pub fn delete_request_internal(&mut self, req_id: &str) {
-        let _ = self.store.delete_request(req_id);
+    pub fn delete_request_internal(&mut self, req_id: &str) -> anyhow::Result<()> {
+        self.store.delete_request(req_id)?;
         self.requests.retain(|r| r.id != req_id);
         self.parse_errors.remove(req_id);
         self.pins.retain(|p| p != req_id);
-        let _ = self.store.save_pins(&self.pins);
         self.bump_tree_version();
+        Ok(())
     }
 
-    pub fn delete_request(&mut self, req_id: &str, cx: &mut Context<Self>) {
-        self.delete_request_internal(req_id);
-        cx.notify();
+    pub fn delete_request(&mut self, req_id: &str, cx: &mut Context<Self>) -> bool {
+        match self.delete_request_internal(req_id) {
+            Ok(()) => {
+                cx.emit(CollectionEvent::RequestDeleted(req_id.to_string()));
+                cx.emit(CollectionEvent::PinsModified);
+                cx.notify();
+                true
+            }
+            Err(error) => {
+                cx.emit(CollectionEvent::CrudFailed {
+                    title: "Could Not Delete Request",
+                    message: error.to_string(),
+                });
+                false
+            }
+        }
     }
 
     pub fn rename_request_internal(&mut self, req_id: &str, new_name: &str) -> Option<String> {
@@ -143,7 +146,7 @@ impl CollectionState {
         // slug (login-2.yaml) while the display name stays as typed.
         // Flush edits still waiting in the save debounce to the old path
         // before the file is renamed away from under them.
-        self.flush_request_to_disk(req_id);
+        self.flush_request_to_disk(req_id).ok()?;
         if let Ok(new_rel_path) = self.store.rename_request(req_id, trimmed) {
             if let Some(r) = self.requests.iter_mut().find(|r| r.id == req_id) {
                 r.id = new_rel_path.clone();
@@ -152,7 +155,6 @@ impl CollectionState {
 
             if let Some(pos) = self.pins.iter().position(|p| p == req_id) {
                 self.pins[pos] = new_rel_path.clone();
-                let _ = self.store.save_pins(&self.pins);
             }
 
             if let Some(err) = self.parse_errors.remove(req_id) {
@@ -266,30 +268,17 @@ impl CollectionState {
             return None;
         }
 
-        if let Ok(mut req_file) = self.store.read_request(req_id) {
-            let mut unique_name = trimmed.to_string();
-            let mut idx = 2;
-            while req_file
-                .examples
-                .iter()
-                .any(|e| e.name == unique_name && e.name != old_name)
-            {
-                unique_name = format!("{}-{}", trimmed, idx);
-                idx += 1;
-            }
-            if let Some(ex) = req_file.examples.iter_mut().find(|e| e.name == old_name) {
-                ex.name = unique_name.clone();
-            }
-            let _ = self.store.write_request(req_id, &req_file);
-            if let Some(r) = self.requests.iter_mut().find(|r| r.id == req_id) {
-                if let Some(ex) = r.examples.iter_mut().find(|e| e.name == old_name) {
-                    ex.name = unique_name.clone();
-                }
-            }
-            self.bump_tree_version();
-            return Some(unique_name);
+        let request = self.find_request_mut(req_id)?;
+        let mut unique_name = trimmed.to_string();
+        let mut idx = 2;
+        while request.examples.iter().any(|e| e.name == unique_name) {
+            unique_name = format!("{trimmed}-{idx}");
+            idx += 1;
         }
-        None
+        let example = request.examples.iter_mut().find(|e| e.name == old_name)?;
+        example.name = unique_name.clone();
+        self.bump_tree_version();
+        Some(unique_name)
     }
 
     pub fn rename_example(
@@ -300,6 +289,7 @@ impl CollectionState {
         cx: &mut Context<Self>,
     ) {
         if let Some(unique_name) = self.rename_example_internal(req_id, old_name, new_name) {
+            cx.emit(CollectionEvent::RequestContentModified(req_id.to_string()));
             cx.emit(CollectionEvent::ExampleRenamed {
                 req_id: req_id.to_string(),
                 old_name: old_name.to_string(),
@@ -315,7 +305,6 @@ impl CollectionState {
         } else {
             self.pins.push(req_id.to_string());
         }
-        let _ = self.store.save_pins(&self.pins);
         cx.emit(CollectionEvent::PinsModified);
         self.bump_tree_version();
         cx.notify();
@@ -327,45 +316,20 @@ impl CollectionState {
 
     pub fn reorder_pins(&mut self, new_pins: Vec<String>, cx: &mut Context<Self>) {
         self.pins = new_pins;
-        let _ = self.store.save_pins(&self.pins);
         cx.emit(CollectionEvent::PinsModified);
         self.bump_tree_version();
         cx.notify();
     }
 
     pub fn get_request_file(&self, req_id: &str) -> Option<RequestFile> {
-        self.store.read_request(req_id).ok()
+        self.find_request(req_id).map(RequestFile::from_item)
     }
 
-    pub(super) fn flush_request_to_disk(&self, req_id: &str) {
-        if req_id == "scratch" {
-            return;
-        }
-        let Some(item) = self.find_request(req_id) else {
-            return;
-        };
-        let mut req_file = self
-            .store
-            .read_request(req_id)
-            .unwrap_or_else(|_| RequestFile {
-                name: item.name.clone(),
-                method: item.method,
-                url: item.url.clone(),
-                ..Default::default()
-            });
-        req_file.update_from_item(item);
-        let _ = self.store.write_request(req_id, &req_file);
-    }
-
-    pub fn save_request_file_internal(&mut self, req_id: &str, req_file: &RequestFile) {
-        let _ = self.store.write_request(req_id, req_file);
-        if let Some(r) = self.requests.iter_mut().find(|r| r.id == req_id) {
-            let prev_status = r.last_status_code;
-            let folder_id = r.folder_id.clone();
-            *r = req_file.to_item(req_id, &self.workspace_scope.name, folder_id);
-            r.last_status_code = prev_status;
-        }
-        self.bump_tree_version();
+    pub(super) fn flush_request_to_disk(&self, req_id: &str) -> anyhow::Result<()> {
+        let request = self
+            .find_request(req_id)
+            .ok_or_else(|| anyhow::anyhow!("Request no longer exists"))?;
+        self.store.update_request_from_item(request)
     }
 
     pub fn save_request_file(
@@ -374,7 +338,11 @@ impl CollectionState {
         req_file: &RequestFile,
         cx: &mut Context<Self>,
     ) {
-        self.save_request_file_internal(req_id, req_file);
-        cx.notify();
+        if let Some(request) = self.find_request_mut(req_id) {
+            request.examples.clone_from(&req_file.examples);
+            self.bump_tree_version();
+            cx.emit(CollectionEvent::RequestContentModified(req_id.to_string()));
+            cx.notify();
+        }
     }
 }

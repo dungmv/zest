@@ -11,8 +11,13 @@ pub mod frame;
 pub mod hierarchy;
 pub mod resolved;
 
+/// Maximum decoded bytes retained by one realtime frame.
+pub const MAX_REALTIME_FRAME_BYTES: usize = 4 * 1024 * 1024;
+/// Backpressure limit for each realtime pipeline stage.
+pub const REALTIME_QUEUE_CAPACITY: usize = 8;
+
 pub use error::RequestError;
-pub use frame::{FrameDirection, FrameKind, TransportFrame};
+pub use frame::{append_realtime_frame, FrameDirection, FrameKind, TransportFrame};
 pub use hierarchy::{
     resolve_hierarchical_headers_and_auth, resolve_inherited_headers, InheritedHeader,
 };

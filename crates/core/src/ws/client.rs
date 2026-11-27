@@ -1,19 +1,22 @@
 use super::types::{WsEvent, WsOutgoing};
-use crate::transport::{FrameDirection, FrameKind, RequestError, ResolvedRequest, TransportFrame};
+use crate::transport::{
+    FrameDirection, FrameKind, RequestError, ResolvedRequest, TransportFrame,
+    MAX_REALTIME_FRAME_BYTES, REALTIME_QUEUE_CAPACITY,
+};
 use futures_util::{SinkExt, StreamExt};
 use tokio::net::TcpStream;
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::{HeaderMap, HeaderName, HeaderValue};
-use tokio_tungstenite::tungstenite::protocol::{CloseFrame, Message};
-use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::tungstenite::protocol::{CloseFrame, Message, WebSocketConfig};
+use tokio_tungstenite::{connect_async_with_config, MaybeTlsStream, WebSocketStream};
 
 /// Handle to one live WebSocket connection.
 pub struct WsHandle {
     /// Connection lifecycle + inbound frames.
-    pub events: UnboundedReceiver<WsEvent>,
+    pub events: Receiver<WsEvent>,
     /// Send frames / close the connection. Dropping all senders closes it.
-    pub outgoing: UnboundedSender<WsOutgoing>,
+    pub outgoing: Sender<WsOutgoing>,
 }
 
 /// Spawns WebSocket connections as background task pairs.
@@ -32,9 +35,6 @@ const RESERVED_HEADERS: [&str; 4] = [
 enum WriteAction {
     Send(Message),
     Close(Option<CloseFrame<'static>>),
-    /// Nothing to do this iteration (e.g. pong channel drained because the
-    /// reader already ended); keep waiting on the outgoing channel.
-    Idle,
 }
 
 impl WebSocketClient {
@@ -46,7 +46,12 @@ impl WebSocketClient {
 
         let timeout_ms = req.settings.timeout_ms;
         let started = std::time::Instant::now();
-        let connect_fut = connect_async(request);
+        let config = WebSocketConfig {
+            max_message_size: Some(MAX_REALTIME_FRAME_BYTES),
+            max_frame_size: Some(MAX_REALTIME_FRAME_BYTES),
+            ..Default::default()
+        };
+        let connect_fut = connect_async_with_config(request, Some(config), false);
         let (stream, response) =
             tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), connect_fut)
                 .await
@@ -64,15 +69,17 @@ impl WebSocketClient {
             })
             .collect();
 
-        let (events_tx, events_rx) = mpsc::unbounded_channel();
-        let (outgoing_tx, outgoing_rx) = mpsc::unbounded_channel::<WsOutgoing>();
+        let (events_tx, events_rx) = mpsc::channel(REALTIME_QUEUE_CAPACITY);
+        let (outgoing_tx, outgoing_rx) = mpsc::channel::<WsOutgoing>(REALTIME_QUEUE_CAPACITY);
 
         // The handshake result opens the event stream so consumers observe
         // the whole lifecycle on one channel.
-        let _ = events_tx.send(WsEvent::Connected {
-            response_headers,
-            duration_ms: started.elapsed().as_millis() as u64,
-        });
+        let _ = events_tx
+            .send(WsEvent::Connected {
+                response_headers,
+                duration_ms: started.elapsed().as_millis() as u64,
+            })
+            .await;
 
         Self::spawn_tasks(stream, events_tx, outgoing_rx);
 
@@ -114,12 +121,12 @@ impl WebSocketClient {
 
     fn spawn_tasks(
         stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
-        events_tx: UnboundedSender<WsEvent>,
-        outgoing_rx: UnboundedReceiver<WsOutgoing>,
+        events_tx: Sender<WsEvent>,
+        outgoing_rx: Receiver<WsOutgoing>,
     ) {
         let (mut sink, mut source) = stream.split();
         // Reader → writer channel for automatic Pong replies.
-        let (pong_tx, mut pong_rx) = mpsc::unbounded_channel::<Message>();
+        let (pong_tx, mut pong_rx) = mpsc::channel::<Message>(REALTIME_QUEUE_CAPACITY);
         let mut outgoing_rx = outgoing_rx;
 
         // Writer: drains user actions and auto-pong responses.
@@ -134,9 +141,7 @@ impl WebSocketClient {
                     },
                     pong = pong_rx.recv() => match pong {
                         Some(msg) => WriteAction::Send(msg),
-                        // Reader ended: the connection is going away either
-                        // way; keep waiting for the user to release us.
-                        None => WriteAction::Idle,
+                        None => WriteAction::Close(None),
                     },
                 };
                 match action {
@@ -150,7 +155,6 @@ impl WebSocketClient {
                         let _ = sink.close().await;
                         break;
                     }
-                    WriteAction::Idle => continue,
                 }
             }
         });
@@ -159,7 +163,11 @@ impl WebSocketClient {
         tokio::spawn(async move {
             let mut next_id: u64 = 0;
             loop {
-                match source.next().await {
+                let next = tokio::select! {
+                    _ = events_tx.closed() => break,
+                    next = source.next() => next,
+                };
+                match next {
                     Some(Ok(msg)) => {
                         let (kind, payload, pong) = match msg {
                             Message::Text(t) => (FrameKind::Text, t.into_bytes(), None),
@@ -173,7 +181,7 @@ impl WebSocketClient {
                                 let (code, reason) = frame
                                     .map(|f| (Some(u16::from(f.code)), f.reason.to_string()))
                                     .unwrap_or((None, String::new()));
-                                let _ = events_tx.send(WsEvent::Closed { code, reason });
+                                let _ = events_tx.send(WsEvent::Closed { code, reason }).await;
                                 // Release the writer so it can flush the
                                 // close ack and exit.
                                 drop(pong_tx);
@@ -182,28 +190,34 @@ impl WebSocketClient {
                             Message::Frame(_) => continue,
                         };
                         if let Some(pong) = pong {
-                            let _ = pong_tx.send(pong);
+                            let _ = pong_tx.send(pong).await;
                         }
                         next_id = next_id.wrapping_add(1);
-                        let _ = events_tx.send(WsEvent::Message(TransportFrame {
-                            id: next_id,
-                            timestamp_ms: chrono::Utc::now().timestamp_millis(),
-                            direction: FrameDirection::Inbound,
-                            kind,
-                            payload,
-                            label: None,
-                        }));
+                        let _ = events_tx
+                            .send(WsEvent::Message(TransportFrame {
+                                id: next_id,
+                                timestamp_ms: chrono::Utc::now().timestamp_millis(),
+                                direction: FrameDirection::Inbound,
+                                kind,
+                                payload,
+                                label: None,
+                            }))
+                            .await;
                     }
                     Some(Err(e)) => {
-                        let _ = events_tx.send(WsEvent::Error(format!("WebSocket error: {e}")));
+                        let _ = events_tx
+                            .send(WsEvent::Error(format!("WebSocket error: {e}")))
+                            .await;
                         drop(pong_tx);
                         break;
                     }
                     None => {
-                        let _ = events_tx.send(WsEvent::Closed {
-                            code: None,
-                            reason: "connection ended".to_string(),
-                        });
+                        let _ = events_tx
+                            .send(WsEvent::Closed {
+                                code: None,
+                                reason: "connection ended".to_string(),
+                            })
+                            .await;
                         drop(pong_tx);
                         break;
                     }

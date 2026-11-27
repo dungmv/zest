@@ -37,3 +37,25 @@ fn test_transport_frame_is_serde_round_trippable() {
     let back: TransportFrame = serde_json::from_str(&json).unwrap();
     assert_eq!(back, msg);
 }
+
+#[test]
+fn frame_log_evicts_old_frames_by_bytes() {
+    let mut frames = Vec::new();
+    for id in 0..3 {
+        append_realtime_frame(
+            &mut frames,
+            TransportFrame::new(
+                id,
+                0,
+                FrameDirection::Inbound,
+                FrameKind::Binary,
+                vec![0; 4 * 1024 * 1024],
+            ),
+            1000,
+        );
+    }
+    assert_eq!(
+        frames.iter().map(|frame| frame.id).collect::<Vec<_>>(),
+        [1, 2]
+    );
+}

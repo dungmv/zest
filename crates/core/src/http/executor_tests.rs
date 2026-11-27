@@ -221,7 +221,7 @@ async fn test_send_streaming_sse_events_and_record() {
     let executor = ReqwestExecutor::new();
     let item = RequestItem::new("sse-1", "SSE", HttpMethod::Get, &server_url);
     let resolved = ResolvedRequest::from_item(&item, None).unwrap();
-    let (tx, mut rx) = mpsc::unbounded_channel();
+    let (tx, mut rx) = mpsc::channel(8);
     let (_cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
 
     let record = executor
@@ -261,7 +261,7 @@ async fn test_send_streaming_cancelled_before_connect() {
     let executor = ReqwestExecutor::new();
     let item = RequestItem::new("sse-2", "SSE", HttpMethod::Get, "http://127.0.0.1:1/x");
     let resolved = ResolvedRequest::from_item(&item, None).unwrap();
-    let (tx, _rx) = mpsc::unbounded_channel();
+    let (tx, _rx) = mpsc::channel(8);
     let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
     drop(cancel_tx); // cancel immediately
 
@@ -369,4 +369,31 @@ async fn test_multipart_form_data_wire_transfer() {
     assert!(req_str.contains("Greetings"));
     assert!(req_str.contains("name=\"attachment\""));
     assert!(req_str.contains("dummy file content 12345"));
+}
+
+#[tokio::test]
+async fn test_http_rejects_body_above_buffer_limit() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let mut request = [0; 1024];
+        assert!(socket.read(&mut request).await.unwrap() > 0);
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            MAX_RESPONSE_BODY_BYTES + 1,
+        );
+        socket.write_all(response.as_bytes()).await.unwrap();
+    });
+    let request = RequestItem::new("ws", "Large response", HttpMethod::Get, &url);
+    let resolved = ResolvedRequest::from_item(&request, None).unwrap();
+    let result = ReqwestExecutor::new().send(resolved, None).await;
+    assert!(matches!(
+        result,
+        Err(RequestError::ResponseTooLarge(MAX_RESPONSE_BODY_BYTES))
+    ));
+    server.await.unwrap();
 }

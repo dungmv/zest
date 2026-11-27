@@ -4,15 +4,15 @@
 //! synchronous dispatch instead of polling intermediate state fields on `cx.notify()`.
 
 use super::{
-    CollectionState, EnvironmentState, ModalState, RequestSessionState, ResponseState,
-    WorkspaceState,
+    CollectionState, EnvironmentSnapshot, EnvironmentState, ModalState, RequestSessionState,
+    ResponseState, WorkspaceState,
 };
 use gpui_kit::EventEmitter;
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use zest_core::models::StoredCookie;
-use zest_core::storage::models::WorkspaceMeta;
+use zest_core::storage::models::{LocalState, WorkspaceMeta};
 use zest_core::storage::WorkspaceStore;
 
 /// Events emitted by `WorkspaceState`.
@@ -76,6 +76,8 @@ pub enum CollectionEvent {
     /// cookies so `WorkspaceState` hydrates from the same single disk pass.
     WorkspaceScanLoaded {
         workspace_meta: Option<WorkspaceMeta>,
+        local_state: Box<LocalState>,
+        environment: Box<EnvironmentSnapshot>,
         cookies: Vec<StoredCookie>,
         folder_name: String,
         store: Arc<dyn WorkspaceStore>,
@@ -90,6 +92,9 @@ pub enum CollectionEvent {
         /// `None` means the entire tree was reloaded; `Some(ids)` lists specific request IDs.
         req_ids: Option<Vec<String>>,
     },
+    ImportApplied(Vec<String>),
+    RequestDeleted(String),
+    RequestContentModified(String),
     /// A saved example of `req_id` was renamed.
     ExampleRenamed {
         req_id: String,
@@ -126,6 +131,11 @@ impl fmt::Debug for CollectionEvent {
                 .debug_struct("RequestsReloaded")
                 .field("req_ids", req_ids)
                 .finish(),
+            Self::ImportApplied(names) => f.debug_tuple("ImportApplied").field(names).finish(),
+            Self::RequestDeleted(id) => f.debug_tuple("RequestDeleted").field(id).finish(),
+            Self::RequestContentModified(id) => {
+                f.debug_tuple("RequestContentModified").field(id).finish()
+            }
             Self::ExampleRenamed {
                 req_id,
                 old_name,
@@ -168,6 +178,9 @@ impl PartialEq for CollectionEvent {
                 },
             ) => f1 == f2 && a1 == a2 && p1 == p2,
             (Self::IdsRemapped(a), Self::IdsRemapped(b)) => a == b,
+            (Self::ImportApplied(a), Self::ImportApplied(b)) => a == b,
+            (Self::RequestDeleted(a), Self::RequestDeleted(b))
+            | (Self::RequestContentModified(a), Self::RequestContentModified(b)) => a == b,
             (Self::RequestsReloaded { req_ids: a }, Self::RequestsReloaded { req_ids: b }) => {
                 a == b
             }

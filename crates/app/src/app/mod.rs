@@ -12,13 +12,12 @@ pub use subscriptions::*;
 
 use crate::components::*;
 use crate::modals::*;
-use crate::services::{HttpEngine, Runner};
+use crate::services::{Engines, Runner};
 use crate::state::*;
 use crate::theme::theme;
 use gpui_kit::component::input::ShowCompletions;
 use gpui_kit::component::resizable::{h_resizable, resizable_panel, v_resizable};
 use gpui_kit::*;
-use std::sync::Arc;
 
 pub struct AppView {
     pub(crate) state: AppState,
@@ -32,6 +31,7 @@ pub struct AppView {
     /// initial request selection is replayed once (in the `RequestsReloaded`
     /// handler) when the first scan lands.
     pub(crate) initial_restore_done: bool,
+    pub(crate) workspace_switch_task: Option<Task<()>>,
 }
 
 impl Focusable for AppView {
@@ -79,10 +79,6 @@ impl AppView {
         };
 
         let executor = state.workspace.read(cx).executor.clone();
-        let tokio_rt = crate::services::global_tokio_runtime();
-        let http_engine = Arc::new(HttpEngine::new(executor, tokio_rt));
-        let ws_service = Arc::new(crate::services::WsService::new());
-        let grpc_engine = Arc::new(crate::services::GrpcEngine::new());
         let runner = Runner::new(
             state.session.clone(),
             state.workspace.clone(),
@@ -90,11 +86,7 @@ impl AppView {
             state.env.clone(),
             state.response.clone(),
             state.modal.clone(),
-            crate::services::Engines {
-                http: http_engine,
-                ws: ws_service,
-                grpc: grpc_engine,
-            },
+            Engines::new(executor),
         );
 
         // Set up subscriptions:
@@ -138,6 +130,7 @@ impl AppView {
             focus_handle,
             _subscriptions,
             initial_restore_done: false,
+            workspace_switch_task: None,
         }
     }
 

@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 use zest_core::models::{Environment, RequestItem};
-use zest_core::storage::models::{
-    EnvironmentFile, FolderFile, LocalState, RequestFile, WorkspaceMeta,
-};
+use zest_core::storage::models::{EnvironmentFile, FolderFile, LocalState, WorkspaceMeta};
 use zest_core::storage::WorkspaceStore;
 
 /// Key identifying a persistence target within a workspace.
@@ -57,16 +55,7 @@ impl PersistPayload {
     pub fn write_to_store(&self, store: &dyn WorkspaceStore) -> anyhow::Result<()> {
         match self {
             Self::Request(item) => {
-                let mut req_file = store
-                    .read_request(&item.id)
-                    .unwrap_or_else(|_| RequestFile {
-                        name: item.name.clone(),
-                        method: item.method,
-                        url: item.url.clone(),
-                        ..Default::default()
-                    });
-                req_file.update_from_item(item);
-                store.write_request(&item.id, &req_file)?;
+                store.update_request_from_item(item)?;
             }
             Self::Environment { name, env } => {
                 let (file, secrets) = EnvironmentFile::from_environment(env);
@@ -142,6 +131,7 @@ impl TargetEntry {
 /// Coordinator that manages ordered, coalesced, write-behind persistence.
 pub struct PersistenceCoordinator {
     workspace_gen: u64,
+    next_revision: u64,
     entries: HashMap<PersistTarget, TargetEntry>,
 }
 
@@ -155,6 +145,7 @@ impl PersistenceCoordinator {
     pub fn new() -> Self {
         Self {
             workspace_gen: 1,
+            next_revision: 0,
             entries: HashMap::new(),
         }
     }
@@ -177,9 +168,10 @@ impl PersistenceCoordinator {
         payload: PersistPayload,
         debounce: Duration,
     ) -> u64 {
+        self.next_revision = self.next_revision.wrapping_add(1);
+        let rev = self.next_revision;
         let entry = self.entries.entry(target).or_default();
-        entry.current_revision = entry.current_revision.wrapping_add(1);
-        let rev = entry.current_revision;
+        entry.current_revision = rev;
 
         entry.pending = Some(PendingWrite {
             revision: rev,
@@ -198,6 +190,12 @@ impl PersistenceCoordinator {
         self.entries
             .get(target)
             .is_some_and(|e| e.in_flight_revision.is_some())
+    }
+
+    pub(crate) fn is_writing_revision(&self, target: &PersistTarget, revision: u64) -> bool {
+        self.entries
+            .get(target)
+            .is_some_and(|entry| entry.in_flight_revision == Some(revision))
     }
 
     /// Transitions a pending write to in-flight.
@@ -267,6 +265,7 @@ impl PersistenceCoordinator {
     }
 
     /// Remaps tracking from old target to new target (e.g. after rename or move).
+    #[cfg(test)]
     pub fn remap_target(&mut self, old: &PersistTarget, new: PersistTarget) {
         if let Some(entry) = self.entries.remove(old) {
             self.entries.insert(new, entry);
@@ -284,9 +283,15 @@ impl PersistenceCoordinator {
         self.status(target) != TargetStatus::Clean
     }
 
-    #[allow(dead_code)] // Coordinator status inspection helper
     pub fn has_any_dirty(&self) -> bool {
         self.entries.values().any(|e| e.is_dirty())
+    }
+
+    pub(crate) fn revisions(&self) -> HashMap<PersistTarget, u64> {
+        self.entries
+            .iter()
+            .map(|(target, entry)| (target.clone(), entry.current_revision))
+            .collect()
     }
 
     pub fn dirty_targets(&self) -> Vec<PersistTarget> {
@@ -305,7 +310,6 @@ impl PersistenceCoordinator {
     }
 
     /// Returns targets that currently have a pending write ready to be flushed.
-    #[allow(dead_code)] // Coordinator pending target query
     pub fn pending_targets(&self) -> Vec<PersistTarget> {
         self.entries
             .iter()

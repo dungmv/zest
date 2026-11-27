@@ -76,7 +76,9 @@ pub fn delete_request_item(
 
     let next_req_id = ws_entity.update(cx, |ws, cx| {
         let deleted_idx = ws.requests.iter().position(|r| r.id == req_id);
-        ws.delete_request(req_id, cx);
+        if !ws.delete_request(req_id, cx) {
+            return Some(req_id.to_string());
+        }
         if let Some(idx) = deleted_idx {
             if !ws.requests.is_empty() {
                 let new_idx = idx.min(ws.requests.len() - 1);

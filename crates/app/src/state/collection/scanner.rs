@@ -1,12 +1,12 @@
 //! Async background scanning and watcher-driven tree reconciliation for [`CollectionState`].
 
 use super::{CollectionState, WorkspaceScopeSnapshot};
-use crate::state::CollectionEvent;
-use gpui_kit::Context;
+use crate::state::{CollectionEvent, EnvironmentSnapshot, PersistenceState};
+use gpui_kit::{Context, WeakEntity};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use zest_core::models::{Folder, RequestItem, StoredCookie};
-use zest_core::storage::models::{FolderNode, WorkspaceMeta, WorkspaceTree};
+use zest_core::storage::models::{FolderNode, LocalState, WorkspaceMeta, WorkspaceTree};
 use zest_core::storage::WorkspaceStore;
 
 /// Read-only snapshot of everything the workspace store holds. Produced by
@@ -14,6 +14,8 @@ use zest_core::storage::WorkspaceStore;
 /// applied on the UI thread.
 pub(crate) struct WorkspaceScan {
     pub(crate) workspace_meta: Option<WorkspaceMeta>,
+    local_state: LocalState,
+    environment: EnvironmentSnapshot,
     pub(crate) pins: Vec<String>,
     pub(crate) cookies: Vec<StoredCookie>,
     pub(crate) tree: Option<WorkspaceTree>,
@@ -49,8 +51,17 @@ impl CollectionState {
         store: Arc<dyn WorkspaceStore>,
         folder_name: String,
     ) -> WorkspaceScan {
+        let workspace_meta = store.load_workspace_meta().ok();
+        let workspace_name = workspace_meta
+            .as_ref()
+            .map(|meta| meta.name.as_str())
+            .filter(|name| !name.trim().is_empty())
+            .unwrap_or(&folder_name);
+        let environment = EnvironmentSnapshot::load(store.as_ref(), workspace_name);
         WorkspaceScan {
-            workspace_meta: store.load_workspace_meta().ok(),
+            workspace_meta,
+            local_state: store.load_state().unwrap_or_default(),
+            environment,
             pins: store.load_pins().unwrap_or_default(),
             cookies: store
                 .load_cookies()
@@ -110,10 +121,15 @@ impl CollectionState {
                 .spawn(async move { Self::scan_workspace_blocking(store, folder_name) })
                 .await;
             this.update(cx, |col, cx| {
+                if !Arc::ptr_eq(&scan.store, &col.store) {
+                    return;
+                }
                 col.scan.load_in_flight = false;
                 if col.apply_collection_scan(&mut scan) {
                     cx.emit(CollectionEvent::WorkspaceScanLoaded {
                         workspace_meta: scan.workspace_meta.take(),
+                        local_state: Box::new(std::mem::take(&mut scan.local_state)),
+                        environment: Box::new(scan.environment),
                         cookies: std::mem::take(&mut scan.cookies),
                         folder_name: scan.folder_name.clone(),
                         store: scan.store.clone(),
@@ -134,29 +150,43 @@ impl CollectionState {
 
     /// Watcher-driven tree rescan off the UI thread, preserving dirty in-memory
     /// requests. Coalesces overlapping rescans.
-    pub fn reload_tree_preserving_async(&mut self, dirty: HashSet<String>, cx: &mut Context<Self>) {
+    pub fn reload_tree_preserving_async(
+        &mut self,
+        persistence: WeakEntity<PersistenceState>,
+        dirty_at_start: HashSet<String>,
+        cx: &mut Context<Self>,
+    ) {
         if self.scan.rescan_in_flight {
             self.scan.rescan_pending = true;
             return;
         }
         self.scan.rescan_in_flight = true;
-        let kept_requests = self.capture_kept_requests(&dirty);
         let store = self.store.clone();
         cx.spawn(async move |this, cx| {
+            let scan_store = store.clone();
             let tree = cx
                 .background_executor()
-                .spawn(async move { store.scan_tree() })
+                .spawn(async move { scan_store.scan_tree() })
                 .await;
             this.update(cx, |col, cx| {
-                col.scan.rescan_in_flight = false;
-                if let Ok(tree) = tree {
-                    col.apply_tree(tree, kept_requests);
+                if !Arc::ptr_eq(&store, &col.store) {
+                    return;
                 }
-                let rerun = std::mem::take(&mut col.scan.rescan_pending);
-                cx.emit(CollectionEvent::RequestsReloaded { req_ids: None });
-                cx.notify();
-                if rerun {
-                    col.reload_tree_preserving_async(HashSet::new(), cx);
+                col.scan.rescan_in_flight = false;
+                let mut preserved = dirty_at_start;
+                preserved.extend(std::mem::take(&mut col.scan.edits_during_rescan));
+                let current_dirty = persistence
+                    .upgrade()
+                    .map(|persistence| persistence.read(cx).dirty_request_ids())
+                    .unwrap_or_default();
+                preserved.extend(current_dirty.iter().cloned());
+                if let Ok(tree) = tree {
+                    col.apply_tree(tree, col.capture_kept_requests(&preserved));
+                    cx.emit(CollectionEvent::RequestsReloaded { req_ids: None });
+                    cx.notify();
+                }
+                if std::mem::take(&mut col.scan.rescan_pending) {
+                    col.reload_tree_preserving_async(persistence, current_dirty, cx);
                 }
             })
             .ok();

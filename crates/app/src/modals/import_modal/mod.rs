@@ -19,6 +19,7 @@ use gpui_kit::{
 };
 use preview::{render_checkbox, render_file_picker_view, render_preview_card};
 use std::path::PathBuf;
+use std::sync::Arc;
 use zest_core::importers::{parse_content, ImportFormat, ImportOptions, ImportResult};
 
 pub struct ImportModalState {
@@ -27,6 +28,7 @@ pub struct ImportModalState {
     pub loaded_content: Option<String>,
     pub create_enclosing_folder: bool,
     pub import_environments: bool,
+    pub importing: bool,
     pub parse_result: Option<Result<ImportResult, String>>,
 }
 
@@ -39,6 +41,7 @@ impl ImportModalState {
             create_enclosing_folder: true,
             import_environments: true,
             parse_result: None,
+            importing: false,
         }
     }
 
@@ -105,7 +108,7 @@ impl RenderOnce for ImportModal {
             .read(cx)
             .clone();
 
-        let (format, selected_file, create_enclosing, import_env, parse_result) = {
+        let (format, selected_file, create_enclosing, import_env, parse_result, importing) = {
             let s = modal_entity.read(cx);
             (
                 s.format,
@@ -113,6 +116,7 @@ impl RenderOnce for ImportModal {
                 s.create_enclosing_folder,
                 s.import_environments,
                 s.parse_result.clone(),
+                s.importing,
             )
         };
 
@@ -346,7 +350,7 @@ impl RenderOnce for ImportModal {
                                     }),
                             )
                             .child({
-                                let is_valid = matches!(&parse_result, Some(Ok(r)) if !r.requests.is_empty());
+                                let is_valid = !importing && matches!(&parse_result, Some(Ok(r)) if !r.requests.is_empty());
                                 let ws_exec = ws_entity.clone();
                                 let modal_exec = modal_entity_ref.clone();
                                 let st_exec = modal_entity.clone();
@@ -355,9 +359,9 @@ impl RenderOnce for ImportModal {
                                     .primary()
                                     .small()
                                     .disabled(!is_valid)
-                                    .label("Import Now")
-                                    .on_click(move |_, window, cx: &mut App| {
-                                        if !is_valid {
+                                    .label(if importing { "Importing…" } else { "Import Now" })
+                                    .on_click(move |_, _, cx: &mut App| {
+                                        if !is_valid || st_exec.read(cx).importing || ws_exec.read(cx).is_loading_workspace() {
                                             return;
                                         }
                                         let state = st_exec.read(cx);
@@ -372,34 +376,47 @@ impl RenderOnce for ImportModal {
                                             import_environments: state.import_environments,
                                         };
 
-                                        let res = ws_exec.update(cx, |ws, cx| {
-                                            ws.execute_import_current_workspace(result, options, cx)
+                                        st_exec.update(cx, |state, cx| {
+                                            state.importing = true;
+                                            cx.notify();
                                         });
-
-                                        match res {
-                                            Ok(summary) => {
-                                                modal_exec.update(cx, |m, cx| {
-                                                    m.close(ModalKind::Import, cx);
+                                        let store = ws_exec.read(cx).store.clone();
+                                        let import_store = store.clone();
+                                        let collection = ws_exec.clone();
+                                        let modal = modal_exec.clone();
+                                        let import_state = st_exec.clone();
+                                        let worker = cx.background_executor().spawn(async move {
+                                            let environments = if options.import_environments {
+                                                result.environments.iter().map(|env| env.name.clone()).collect()
+                                            } else {
+                                                Vec::new()
+                                            };
+                                            let summary = zest_core::importers::apply_import_to_workspace(import_store.as_ref(), &result, &options);
+                                            (summary, environments)
+                                        });
+                                        cx.spawn(async move |cx| {
+                                            let (summary, environments) = worker.await;
+                                            cx.update(|cx| {
+                                                import_state.update(cx, |state, cx| {
+                                                    state.importing = false;
+                                                    cx.notify();
                                                 });
-                                                crate::notify::success_in(
-                                                    "Import Complete",
-                                                    format!(
-                                                        "Imported {} requests and {} folders into workspace",
-                                                        summary.total_requests, summary.total_folders
+                                                if Arc::ptr_eq(&store, &collection.read(cx).store) {
+                                                    collection.update(cx, |collection, cx| collection.finish_import(environments, cx));
+                                                    if summary.is_ok() {
+                                                        modal.update(cx, |m, cx| m.close(ModalKind::Import, cx));
+                                                    }
+                                                }
+                                                match summary {
+                                                    Ok(summary) => crate::notify::success(
+                                                        "Import Complete",
+                                                        format!("Imported {} requests and {} folders into workspace", summary.total_requests, summary.total_folders),
+                                                        cx,
                                                     ),
-                                                    window,
-                                                    cx,
-                                                );
-                                            }
-                                            Err(e) => {
-                                                crate::notify::error_in(
-                                                    "Import Failed",
-                                                    e.to_string(),
-                                                    window,
-                                                    cx,
-                                                );
-                                            }
-                                        }
+                                                    Err(error) => crate::notify::error("Import Failed", error.to_string(), cx),
+                                                }
+                                            });
+                                        }).detach();
                                     })
                             }),
                     ),

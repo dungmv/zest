@@ -1,3 +1,6 @@
+#[path = "runner_schema.rs"]
+mod schema;
+
 use super::grpc_engine::GrpcEngine;
 use super::http_engine::HttpEngine;
 use super::send_event::SendEvent;
@@ -9,6 +12,7 @@ use crate::state::{
 use gpui_kit::{App, Entity};
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
+use zest_core::http::ReqwestExecutor;
 use zest_core::models::{Environment, EnvironmentVariable, Protocol, RequestItem};
 use zest_core::storage::models::LocFile;
 use zest_core::ws::WebSocketStatus;
@@ -20,6 +24,16 @@ pub struct Engines {
     pub http: Arc<HttpEngine>,
     pub ws: Arc<WsService>,
     pub grpc: Arc<GrpcEngine>,
+}
+
+impl Engines {
+    pub fn new(executor: Arc<ReqwestExecutor>) -> Self {
+        Self {
+            http: Arc::new(HttpEngine::new(executor, super::global_tokio_runtime())),
+            ws: Arc::new(WsService::new()),
+            grpc: Arc::new(GrpcEngine::new()),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -124,7 +138,7 @@ impl Runner {
     /// no state is mutated until [`Runner::begin_send`].
     fn gather_send_context(&self, cx: &App) -> Option<SendContext> {
         let ed = self.session_state.read(cx);
-        if ed.is_sending {
+        if ed.is_sending || self.collection_state.read(cx).is_loading_workspace() {
             return None;
         }
         let req_id = ed.active_request_id().to_string();
@@ -178,10 +192,11 @@ impl Runner {
         &self,
         cx: &mut App,
         protocol: Protocol,
-        mut event_rx: mpsc::UnboundedReceiver<SendEvent>,
+        mut event_rx: mpsc::Receiver<SendEvent>,
     ) {
         let session_state = self.session_state.clone();
         let workspace_state = self.workspace_state.clone();
+        let origin = workspace_state.read(cx).store.clone();
         let collection_state = self.collection_state.clone();
         let env_state = self.env_state.clone();
         let response_state = self.response_state.clone();
@@ -191,251 +206,261 @@ impl Runner {
 
         cx.spawn(async move |cx| {
             while let Some(event) = event_rx.recv().await {
-                cx.update(|cx| match event {
-                    SendEvent::Started {
-                        request_id,
-                        initial_logs,
-                        env_mutations,
-                        pre_script_error,
-                    } => {
-                        if let Some(err) = pre_script_error {
-                            session_state.update(cx, |ed, cx| {
-                                ed.set_script_error(Some(err), cx);
-                            });
-                        } else {
-                            session_state.update(cx, |ed, cx| {
-                                ed.set_script_error(None, cx);
-                            });
-                        }
-                        apply_env_mutations(&env_state, &env_mutations, cx);
-                        response_state.update(cx, |resp, cx| {
-                            resp.start_sending(Some(&request_id), cx);
-                            resp.set_pre_request_logs(initial_logs, cx);
-                        });
+                let current = cx.update(|cx| {
+                    if !Arc::ptr_eq(&origin, &workspace_state.read(cx).store) {
+                        return false;
                     }
-                    SendEvent::Progress(text) => {
-                        session_state.update(cx, |ed, cx| {
-                            ed.update_progress(text, cx);
-                        });
-                    }
-                    SendEvent::Frame { request_id, frame } => match protocol {
-                        Protocol::WebSocket => {
-                            ws_service.append_inbound(&request_id, frame.clone());
-                            let active =
-                                session_state.read(cx).active_request_id() == request_id.as_str();
-                            if active {
-                                response_state.update(cx, |resp, cx| {
-                                    resp.push_frame(frame, cx);
+                    match event {
+                        SendEvent::Started {
+                            request_id,
+                            initial_logs,
+                            env_mutations,
+                            pre_script_error,
+                        } => {
+                            if let Some(err) = pre_script_error {
+                                session_state.update(cx, |ed, cx| {
+                                    ed.set_script_error(Some(err), cx);
+                                });
+                            } else {
+                                session_state.update(cx, |ed, cx| {
+                                    ed.set_script_error(None, cx);
                                 });
                             }
+                            apply_env_mutations(&env_state, &env_mutations, cx);
+                            response_state.update(cx, |resp, cx| {
+                                resp.start_sending(Some(&request_id), cx);
+                                resp.set_pre_request_logs(initial_logs, cx);
+                            });
                         }
-                        Protocol::Grpc => {
-                            // The engine log is authoritative: register the
-                            // frame even when another request is active so
-                            // the history survives request switches.
-                            grpc_engine.register_frame(&request_id, frame.clone());
-                            let active =
-                                session_state.read(cx).active_request_id() == request_id.as_str();
-                            if active {
-                                response_state.update(cx, |resp, cx| {
-                                    resp.push_frame(frame, cx);
-                                });
-                            }
-                        }
-                        Protocol::Sse => {
-                            http_engine.register_sse_frame(&request_id, frame.clone());
-                            let active =
-                                session_state.read(cx).active_request_id() == request_id.as_str();
-                            if active {
-                                response_state.update(cx, |resp, cx| {
-                                    resp.push_frame(frame, cx);
-                                });
-                            }
-                        }
-                        Protocol::Http | Protocol::GraphQL => {}
-                    },
-                    SendEvent::HttpSuccess {
-                        record,
-                        post_output,
-                    } => {
-                        let status = record.status_code;
-                        let req_id = record.request_id.clone();
-
-                        // Update workspace environment with post-script
-                        // mutations (pre-script ones arrived on Started)
-                        apply_env_mutations(&env_state, &post_output.env_mutations, cx);
-
-                        if let Some(err) = &post_output.error {
+                        SendEvent::Progress(text) => {
                             session_state.update(cx, |ed, cx| {
-                                ed.set_script_error(Some(err.clone()), cx);
+                                ed.update_progress(text, cx);
                             });
                         }
-
-                        let record_for_disk = record.clone();
-                        let cookies =
-                            workspace_state.update(cx, |ws, _cx| ws.sync_cookies_in_memory());
-                        collection_state.update(cx, |col, cx| {
-                            if let Some(r) = col.find_request_mut(&req_id) {
-                                r.last_status_code = Some(status);
-                            }
-                            col.bump_tree_version();
-                            // Disk writes (response cache + cookies) serialize
-                            // and hash sizable payloads; run them on the
-                            // background executor in one sequential task so
-                            // response-arrival frames never hitch on I/O.
-                            let store = col.store.clone();
-                            let req_id_for_disk = req_id.clone();
-                            cx.background_executor()
-                                .spawn(async move {
-                                    let loc_file = LocFile::from_record(&record_for_disk);
-                                    let _ = store.save_response_cache(&req_id_for_disk, &loc_file);
-                                    if let Ok(val) = serde_json::to_value(&cookies) {
-                                        let _ = store.save_cookies(&val);
-                                    }
-                                })
-                                .detach();
-                            cx.notify();
-                        });
-
-                        response_state.update(cx, |resp, cx| {
-                            resp.set_test_results(
-                                post_output.test_results,
-                                record.console_logs.clone(),
-                                cx,
-                            );
-                            resp.set_response_for_request(req_id.clone(), record, cx);
-                        });
-
-                        session_state.update(cx, |ed, cx| {
-                            ed.stop_sending(cx);
-                        });
-                    }
-                    SendEvent::HandshakeConnected {
-                        request_id,
-                        outgoing,
-                        response_headers,
-                        duration_ms: _,
-                    } => {
-                        ws_service.register_session(
-                            &request_id,
-                            outgoing,
-                            response_headers.clone(),
-                        );
-                        session_state.update(cx, |ed, cx| {
-                            ed.stop_sending(cx);
-                        });
-                        let active =
-                            session_state.read(cx).active_request_id() == request_id.as_str();
-                        if active {
-                            response_state.update(cx, |resp, cx| {
-                                resp.set_ws_handshake_headers(response_headers, cx);
-                                resp.set_ws_status(WebSocketStatus::Connected, cx);
-                            });
-                        }
-                    }
-                    SendEvent::HandshakeClosed {
-                        request_id,
-                        code: _,
-                        reason: _,
-                    } => {
-                        ws_service.mark_disconnected(&request_id);
-                        let active =
-                            session_state.read(cx).active_request_id() == request_id.as_str();
-                        if active {
-                            response_state.update(cx, |resp, cx| {
-                                resp.set_ws_status(WebSocketStatus::Disconnected, cx);
-                            });
-                        }
-                    }
-                    SendEvent::CallCompleted {
-                        request_id,
-                        summary,
-                    } => {
-                        grpc_engine.register_last_call(&request_id, summary.clone());
-                        let active =
-                            session_state.read(cx).active_request_id() == request_id.as_str();
-                        if active {
-                            response_state.update(cx, |resp, cx| {
-                                resp.set_grpc_last_call(Some(summary), cx);
-                            });
-                        }
-                        session_state.update(cx, |ed, cx| {
-                            ed.stop_sending(cx);
-                        });
-                    }
-                    SendEvent::CallFailed {
-                        request_id,
-                        summary,
-                    } => {
-                        let status_message = summary.status_message.clone().unwrap_or_default();
-                        grpc_engine.register_last_call(&request_id, summary.clone());
-                        let active =
-                            session_state.read(cx).active_request_id() == request_id.as_str();
-                        if active {
-                            response_state.update(cx, |resp, cx| {
-                                resp.set_grpc_last_call(Some(summary), cx);
-                            });
-                        }
-                        session_state.update(cx, |ed, cx| {
-                            ed.stop_sending(cx);
-                        });
-                        crate::notify::error("gRPC Error", status_message, cx);
-                    }
-                    SendEvent::SchemaReady {
-                        request_id,
-                        summary,
-                        auto_service,
-                        auto_method,
-                    } => {
-                        session_state.update(cx, |ed, cx| {
-                            ed.set_grpc_schema(Some(std::sync::Arc::new(summary)), cx);
-                        });
-                        if let (Some(svc), Some(mth)) = (auto_service, auto_method) {
-                            collection_state.update(cx, |col, _| {
-                                col.update_active_request(&request_id, |r| {
-                                    let payload = r.grpc_mut();
-                                    payload.service = svc;
-                                    payload.method = mth;
-                                });
-                            });
-                            session_state.update(cx, |ed, cx| {
-                                ed.mark_dirty(cx);
-                            });
-                        }
-                    }
-                    SendEvent::Cancelled => {
-                        session_state.update(cx, |ed, cx| {
-                            ed.stop_sending(cx);
-                        });
-                    }
-                    SendEvent::Failed { request_id, error } => {
-                        session_state.update(cx, |ed, cx| {
-                            ed.stop_sending(cx);
-                        });
-                        match protocol {
+                        SendEvent::Frame { request_id, frame } => match protocol {
                             Protocol::WebSocket => {
-                                ws_service.mark_failed(&request_id, &error);
+                                ws_service.append_inbound(&request_id, frame.clone());
                                 let active = session_state.read(cx).active_request_id()
                                     == request_id.as_str();
                                 if active {
                                     response_state.update(cx, |resp, cx| {
-                                        resp.set_ws_status(
-                                            WebSocketStatus::Failed(error.clone()),
-                                            cx,
-                                        );
+                                        resp.push_frame(frame, cx);
                                     });
                                 }
-                                crate::notify::error("WebSocket Failed", error, cx);
                             }
                             Protocol::Grpc => {
-                                crate::notify::error("gRPC Failed", error, cx);
+                                // The engine log is authoritative: register the
+                                // frame even when another request is active so
+                                // the history survives request switches.
+                                grpc_engine.register_frame(&request_id, frame.clone());
+                                let active = session_state.read(cx).active_request_id()
+                                    == request_id.as_str();
+                                if active {
+                                    response_state.update(cx, |resp, cx| {
+                                        resp.push_frame(frame, cx);
+                                    });
+                                }
                             }
-                            Protocol::Http | Protocol::GraphQL | Protocol::Sse => {
-                                crate::notify::error("Send Failed", error, cx);
+                            Protocol::Sse => {
+                                http_engine.register_sse_frame(&request_id, frame.clone());
+                                let active = session_state.read(cx).active_request_id()
+                                    == request_id.as_str();
+                                if active {
+                                    response_state.update(cx, |resp, cx| {
+                                        resp.push_frame(frame, cx);
+                                    });
+                                }
+                            }
+                            Protocol::Http | Protocol::GraphQL => {}
+                        },
+                        SendEvent::HttpSuccess {
+                            record,
+                            post_output,
+                        } => {
+                            let status = record.status_code;
+                            let req_id = record.request_id.clone();
+
+                            // Update workspace environment with post-script
+                            // mutations (pre-script ones arrived on Started)
+                            apply_env_mutations(&env_state, &post_output.env_mutations, cx);
+
+                            if let Some(err) = &post_output.error {
+                                session_state.update(cx, |ed, cx| {
+                                    ed.set_script_error(Some(err.clone()), cx);
+                                });
+                            }
+
+                            let record_for_disk = record.clone();
+                            let cookies =
+                                workspace_state.update(cx, |ws, _cx| ws.sync_cookies_in_memory());
+                            collection_state.update(cx, |col, cx| {
+                                if let Some(r) = col.find_request_mut(&req_id) {
+                                    r.last_status_code = Some(status);
+                                }
+                                col.bump_tree_version();
+                                // Disk writes (response cache + cookies) serialize
+                                // and hash sizable payloads; run them on the
+                                // background executor in one sequential task so
+                                // response-arrival frames never hitch on I/O.
+                                let store = origin.clone();
+                                let req_id_for_disk = req_id.clone();
+                                cx.background_executor()
+                                    .spawn(async move {
+                                        let loc_file = LocFile::from_record(&record_for_disk);
+                                        let _ =
+                                            store.save_response_cache(&req_id_for_disk, &loc_file);
+                                        if let Ok(val) = serde_json::to_value(&cookies) {
+                                            let _ = store.save_cookies(&val);
+                                        }
+                                    })
+                                    .detach();
+                                cx.notify();
+                            });
+
+                            response_state.update(cx, |resp, cx| {
+                                resp.set_test_results(
+                                    post_output.test_results,
+                                    record.console_logs.clone(),
+                                    cx,
+                                );
+                                resp.set_response_for_request(req_id.clone(), record, cx);
+                            });
+
+                            session_state.update(cx, |ed, cx| {
+                                ed.stop_sending(cx);
+                            });
+                        }
+                        SendEvent::HandshakeConnected {
+                            request_id,
+                            outgoing,
+                            response_headers,
+                            duration_ms: _,
+                        } => {
+                            ws_service.register_session(
+                                &request_id,
+                                outgoing,
+                                response_headers.clone(),
+                            );
+                            session_state.update(cx, |ed, cx| {
+                                ed.stop_sending(cx);
+                            });
+                            let active =
+                                session_state.read(cx).active_request_id() == request_id.as_str();
+                            if active {
+                                response_state.update(cx, |resp, cx| {
+                                    resp.set_ws_handshake_headers(response_headers, cx);
+                                    resp.set_ws_status(WebSocketStatus::Connected, cx);
+                                });
+                            }
+                        }
+                        SendEvent::HandshakeClosed {
+                            request_id,
+                            code: _,
+                            reason: _,
+                        } => {
+                            ws_service.mark_disconnected(&request_id);
+                            let active =
+                                session_state.read(cx).active_request_id() == request_id.as_str();
+                            if active {
+                                response_state.update(cx, |resp, cx| {
+                                    resp.set_ws_status(WebSocketStatus::Disconnected, cx);
+                                });
+                            }
+                        }
+                        SendEvent::CallCompleted {
+                            request_id,
+                            summary,
+                        } => {
+                            grpc_engine.register_last_call(&request_id, summary.clone());
+                            let active =
+                                session_state.read(cx).active_request_id() == request_id.as_str();
+                            if active {
+                                response_state.update(cx, |resp, cx| {
+                                    resp.set_grpc_last_call(Some(summary), cx);
+                                });
+                            }
+                            session_state.update(cx, |ed, cx| {
+                                ed.stop_sending(cx);
+                            });
+                        }
+                        SendEvent::CallFailed {
+                            request_id,
+                            summary,
+                        } => {
+                            let status_message = summary.status_message.clone().unwrap_or_default();
+                            grpc_engine.register_last_call(&request_id, summary.clone());
+                            let active =
+                                session_state.read(cx).active_request_id() == request_id.as_str();
+                            if active {
+                                response_state.update(cx, |resp, cx| {
+                                    resp.set_grpc_last_call(Some(summary), cx);
+                                });
+                            }
+                            session_state.update(cx, |ed, cx| {
+                                ed.stop_sending(cx);
+                            });
+                            crate::notify::error("gRPC Error", status_message, cx);
+                        }
+                        SendEvent::SchemaReady {
+                            request_id,
+                            summary,
+                            auto_service,
+                            auto_method,
+                        } => {
+                            session_state.update(cx, |ed, cx| {
+                                ed.set_grpc_schema(Some(std::sync::Arc::new(summary)), cx);
+                            });
+                            if let (Some(svc), Some(mth)) = (auto_service, auto_method) {
+                                collection_state.update(cx, |col, _| {
+                                    col.update_active_request(&request_id, |r| {
+                                        let payload = r.grpc_mut();
+                                        payload.service = svc;
+                                        payload.method = mth;
+                                    });
+                                });
+                                session_state.update(cx, |ed, cx| {
+                                    ed.mark_dirty(cx);
+                                });
+                            }
+                        }
+                        SendEvent::Cancelled => {
+                            session_state.update(cx, |ed, cx| {
+                                ed.stop_sending(cx);
+                            });
+                        }
+                        SendEvent::Failed { request_id, error } => {
+                            session_state.update(cx, |ed, cx| {
+                                ed.stop_sending(cx);
+                            });
+                            match protocol {
+                                Protocol::WebSocket => {
+                                    ws_service.mark_failed(&request_id, &error);
+                                    let active = session_state.read(cx).active_request_id()
+                                        == request_id.as_str();
+                                    if active {
+                                        response_state.update(cx, |resp, cx| {
+                                            resp.set_ws_status(
+                                                WebSocketStatus::Failed(error.clone()),
+                                                cx,
+                                            );
+                                        });
+                                    }
+                                    crate::notify::error("WebSocket Failed", error, cx);
+                                }
+                                Protocol::Grpc => {
+                                    crate::notify::error("gRPC Failed", error, cx);
+                                }
+                                Protocol::Http | Protocol::GraphQL | Protocol::Sse => {
+                                    crate::notify::error("Send Failed", error, cx);
+                                }
                             }
                         }
                     }
+                    true
                 });
+                if !current {
+                    break;
+                }
             }
         })
         .detach();
@@ -471,88 +496,6 @@ impl Runner {
         self.response_state.update(cx, |resp, cx| {
             resp.set_ws_status(WebSocketStatus::Disconnected, cx);
         });
-    }
-
-    /// Resolves the gRPC schema (reflection or .proto) for the picker UI.
-    pub fn fetch_grpc_schema(&self, cx: &mut App) {
-        let req_id = self.session_state.read(cx).active_request_id().to_string();
-        let Some(req) = self
-            .collection_state
-            .read(cx)
-            .find_request(&req_id)
-            .cloned()
-        else {
-            return;
-        };
-        if req.protocol != Protocol::Grpc {
-            return;
-        }
-        let Some(payload) = req.grpc.clone() else {
-            return;
-        };
-
-        let session_state = self.session_state.clone();
-
-        let rx = self.engines.grpc.fetch_schema(
-            req.url.clone(),
-            payload.proto_path.clone(),
-            payload.use_reflection,
-        );
-        cx.spawn(async move |cx| {
-            let result = rx
-                .await
-                .unwrap_or_else(|_| Err("Schema fetch task dropped".to_string()));
-            cx.update(|cx| match result {
-                Ok(summary) => {
-                    session_state.update(cx, |ed, cx| {
-                        ed.set_grpc_schema(Some(std::sync::Arc::new(summary)), cx);
-                    });
-                }
-                Err(err) => {
-                    crate::notify::error("Schema Fetch Failed", err, cx);
-                }
-            });
-        })
-        .detach();
-    }
-
-    /// Fetches the GraphQL schema via an introspection query for the
-    /// autocomplete provider. Uses the request's URL/headers/auth; runs on
-    /// the tokio runtime and lands the parsed summary on the session.
-    pub fn fetch_graphql_schema(&self, cx: &mut App) {
-        let req_id = self.session_state.read(cx).active_request_id().to_string();
-        let Some(req) = self
-            .collection_state
-            .read(cx)
-            .find_request(&req_id)
-            .cloned()
-        else {
-            return;
-        };
-        if req.protocol != Protocol::GraphQL {
-            return;
-        }
-        let env = Some(self.env_state.read(cx).effective_environment());
-
-        let session_state = self.session_state.clone();
-
-        let rx = self.engines.http.fetch_graphql_schema(req, env);
-        cx.spawn(async move |cx| {
-            let result = rx
-                .await
-                .unwrap_or_else(|_| Err("Schema fetch task dropped".to_string()));
-            cx.update(|cx| match result {
-                Ok(summary) => {
-                    session_state.update(cx, |ed, cx| {
-                        ed.set_graphql_schema(Some(summary), cx);
-                    });
-                }
-                Err(err) => {
-                    crate::notify::error("Schema Fetch Failed", err, cx);
-                }
-            });
-        })
-        .detach();
     }
 }
 
@@ -621,3 +564,7 @@ pub(crate) fn apply_env_mutations(
         }
     });
 }
+
+#[cfg(test)]
+#[path = "runner_tests.rs"]
+mod tests;

@@ -46,17 +46,12 @@ impl AppState {
             col
         });
 
-        let persistence = cx.new(|_| PersistenceState::new(ws_store.clone(), ws_dir.clone()));
-        let initial_active_env = persistence.read(cx).local_state.active_environment.clone();
-        let env = cx.new(|_| EnvironmentState::new(ws_store, ws_name, initial_active_env));
+        let persistence = cx.new(|_| PersistenceState::empty(ws_store.clone(), ws_dir.clone()));
+        let env = cx.new(|_| EnvironmentState::empty(ws_store, ws_name));
 
         let git = cx.new(|_| GitState::new(ws_dir));
         git.update(cx, |g, cx| {
             g.refresh_status(cx);
-        });
-
-        persistence.update(cx, |p, cx| {
-            p.start_watcher(collection.clone(), env.clone(), git.clone(), cx);
         });
 
         let sidebar = cx.new(|_| SidebarState::new());

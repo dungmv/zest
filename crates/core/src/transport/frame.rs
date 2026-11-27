@@ -79,6 +79,34 @@ impl TransportFrame {
     }
 }
 
+/// Retains the newest frames within the count and byte budgets.
+/// Returns the number removed from the front of the log.
+pub fn append_realtime_frame(
+    frames: &mut Vec<TransportFrame>,
+    frame: TransportFrame,
+    max_frames: usize,
+) -> usize {
+    const MAX_LOG_BYTES: usize = 8 * 1024 * 1024;
+    frames.push(frame);
+    let mut available = MAX_LOG_BYTES;
+    let retained = frames
+        .iter()
+        .rev()
+        .take(max_frames)
+        .take_while(|frame| {
+            let bytes = frame.payload.len() + frame.label.as_ref().map_or(0, String::len);
+            if bytes > available {
+                return false;
+            }
+            available -= bytes;
+            true
+        })
+        .count();
+    let removed = frames.len() - retained;
+    frames.drain(..removed);
+    removed
+}
+
 #[cfg(test)]
 #[path = "frame_tests.rs"]
 mod tests;

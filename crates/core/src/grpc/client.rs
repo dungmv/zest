@@ -1,8 +1,9 @@
+use crate::transport::{MAX_REALTIME_FRAME_BYTES, REALTIME_QUEUE_CAPACITY};
 use std::str::FromStr;
 use std::time::Instant;
 
 use prost_reflect::{DynamicMessage, MessageDescriptor};
-use tokio::sync::mpsc::{self, UnboundedReceiver};
+use tokio::sync::mpsc::{self, Receiver};
 use tonic::client::Grpc;
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
 use tonic::{Request, Status};
@@ -107,7 +108,7 @@ impl GrpcClient {
         method: &str,
         message_json: &str,
         metadata: &[(String, String)],
-    ) -> Result<UnboundedReceiver<GrpcStreamEvent>, GrpcError> {
+    ) -> Result<Receiver<GrpcStreamEvent>, GrpcError> {
         let path = Self::path(service, method)?;
         let request = self.build_request(&input_desc, message_json, metadata)?;
 
@@ -122,7 +123,7 @@ impl GrpcClient {
             .await
             .map_err(Self::status_to_error)?;
 
-        let (tx, rx) = mpsc::unbounded_channel();
+        let (tx, rx) = mpsc::channel(REALTIME_QUEUE_CAPACITY);
         let mut stream = response.into_inner();
         let timeout_ms = self.timeout_ms;
         tokio::spawn(async move {
@@ -136,43 +137,63 @@ impl GrpcClient {
                 .await;
                 match next {
                     Err(_) => {
-                        let _ = tx.send(GrpcStreamEvent::TransportError(format!(
-                            "Stream idle beyond {} ms",
-                            timeout_ms
-                        )));
+                        let _ = tx
+                            .send(GrpcStreamEvent::TransportError(format!(
+                                "Stream idle beyond {} ms",
+                                timeout_ms
+                            )))
+                            .await;
                         break;
                     }
                     Ok(Err(status)) => {
                         let duration_ms = started.elapsed().as_millis() as u64;
                         if status.code() == tonic::Code::Ok {
-                            let _ = tx.send(GrpcStreamEvent::Completed { duration_ms });
+                            let _ = tx.send(GrpcStreamEvent::Completed { duration_ms }).await;
                         } else {
-                            let _ = tx.send(GrpcStreamEvent::Failed {
-                                code: status.code() as i32,
-                                message: status.message().to_string(),
-                                duration_ms,
-                            });
+                            let _ = tx
+                                .send(GrpcStreamEvent::Failed {
+                                    code: status.code() as i32,
+                                    message: status.message().to_string(),
+                                    duration_ms,
+                                })
+                                .await;
                         }
                         break;
                     }
                     Ok(Ok(Some(message))) => match serde_json::to_string_pretty(&message) {
-                        Ok(json) => {
+                        Ok(json) if json.len() <= MAX_REALTIME_FRAME_BYTES => {
                             index += 1;
-                            if tx.send(GrpcStreamEvent::Message { index, json }).is_err() {
+                            if tx
+                                .send(GrpcStreamEvent::Message { index, json })
+                                .await
+                                .is_err()
+                            {
                                 break;
                             }
                         }
+                        Ok(_) => {
+                            let _ = tx
+                                .send(GrpcStreamEvent::TransportError(format!(
+                                    "Response exceeds the {MAX_REALTIME_FRAME_BYTES}-byte limit"
+                                )))
+                                .await;
+                            break;
+                        }
                         Err(e) => {
-                            let _ = tx.send(GrpcStreamEvent::TransportError(format!(
-                                "Failed to render response JSON: {e}"
-                            )));
+                            let _ = tx
+                                .send(GrpcStreamEvent::TransportError(format!(
+                                    "Failed to render response JSON: {e}"
+                                )))
+                                .await;
                             break;
                         }
                     },
                     Ok(Ok(None)) => {
-                        let _ = tx.send(GrpcStreamEvent::Completed {
-                            duration_ms: started.elapsed().as_millis() as u64,
-                        });
+                        let _ = tx
+                            .send(GrpcStreamEvent::Completed {
+                                duration_ms: started.elapsed().as_millis() as u64,
+                            })
+                            .await;
                         break;
                     }
                 }

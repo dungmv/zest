@@ -1,4 +1,4 @@
-use crate::models::{HttpMethod, Protocol};
+use crate::models::{HttpMethod, Protocol, RequestItem};
 use crate::storage::fingerprints::DiskFingerprints;
 use crate::storage::models::{
     EnvironmentFile, FolderFile, LocFile, LocalState, RequestFile, WorkspaceMeta, WorkspaceTree,
@@ -43,6 +43,14 @@ pub trait WorkspaceStore: Send + Sync {
         url: &str,
         protocol: Protocol,
     ) -> Result<(String, String)>; // (slug, rel_path)
+    /// Creates a complete request as one atomic file write.
+    fn create_request_file(
+        &self,
+        folder_rel: Option<&str>,
+        request: RequestFile,
+    ) -> Result<(String, String)>;
+    /// Updates an existing request without recreating a deleted file.
+    fn update_request_from_item(&self, item: &RequestItem) -> Result<()>;
     fn delete_request(&self, rel_path: &str) -> Result<()>;
     fn rename_request(&self, rel_path: &str, new_name: &str) -> Result<String>; // new rel_path
     fn move_request(&self, rel_path: &str, target_folder_rel: Option<&str>) -> Result<String>;

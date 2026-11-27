@@ -1,10 +1,14 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use zest_core::transport::append_realtime_frame;
 
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
 use zest_core::models::{Environment, RequestItem};
-use zest_core::transport::{FrameDirection, FrameKind, ResolvedRequest, TransportFrame};
+use zest_core::transport::{
+    FrameDirection, FrameKind, ResolvedRequest, TransportFrame, MAX_REALTIME_FRAME_BYTES,
+    REALTIME_QUEUE_CAPACITY,
+};
 use zest_core::ws::{WebSocketClient, WebSocketStatus, WsEvent, WsOutgoing};
 
 use super::global_tokio_runtime;
@@ -21,7 +25,7 @@ const MAX_SESSION_MESSAGES: usize = 1000;
 /// actions all run on the GPUI thread; the `Mutex` only exists so the
 /// service handle itself is `Send + Sync`.
 pub struct WsSession {
-    pub outgoing: UnboundedSender<WsOutgoing>,
+    pub outgoing: Sender<WsOutgoing>,
     pub status: WebSocketStatus,
     /// Bounded frame log; survives request switches within the app session.
     pub messages: Vec<TransportFrame>,
@@ -33,11 +37,7 @@ impl WsSession {
     fn push_message(&mut self, mut message: TransportFrame) {
         message.id = self.next_message_id;
         self.next_message_id = self.next_message_id.wrapping_add(1);
-        self.messages.push(message);
-        if self.messages.len() > MAX_SESSION_MESSAGES {
-            let overflow = self.messages.len() - MAX_SESSION_MESSAGES;
-            self.messages.drain(..overflow);
-        }
+        append_realtime_frame(&mut self.messages, message, MAX_SESSION_MESSAGES);
     }
 }
 
@@ -76,19 +76,21 @@ impl WsService {
         mut req_item: RequestItem,
         env: Option<Arc<Environment>>,
         cancel_rx: oneshot::Receiver<()>,
-    ) -> UnboundedReceiver<SendEvent> {
-        let (event_tx, event_rx) = mpsc::unbounded_channel();
+    ) -> Receiver<SendEvent> {
+        let (event_tx, event_rx) = mpsc::channel(REALTIME_QUEUE_CAPACITY);
 
         self.tokio_rt.spawn(async move {
             // 1. Resolve dynamic fake variables + run the pre-request script
             let pre_output = run_pre_request_stage(&mut req_item, env.as_deref(), None);
 
-            let _ = event_tx.send(SendEvent::Started {
-                request_id: req_item.id.clone(),
-                initial_logs: pre_output.console_entries.clone(),
-                env_mutations: pre_output.env_mutations.clone(),
-                pre_script_error: pre_output.error.clone(),
-            });
+            let _ = event_tx
+                .send(SendEvent::Started {
+                    request_id: req_item.id.clone(),
+                    initial_logs: pre_output.console_entries.clone(),
+                    env_mutations: pre_output.env_mutations.clone(),
+                    pre_script_error: pre_output.error.clone(),
+                })
+                .await;
 
             // 2. Merge pre-script env mutations into the effective environment
             let effective_env = merge_env_mutations(&env, &pre_output.env_mutations);
@@ -97,17 +99,19 @@ impl WsService {
             let resolved = match ResolvedRequest::from_item(&req_item, effective_env.as_deref()) {
                 Ok(r) => r,
                 Err(e) => {
-                    let _ = event_tx.send(SendEvent::Failed {
-                        request_id: req_item.id.clone(),
-                        error: e.to_string(),
-                    });
+                    let _ = event_tx
+                        .send(SendEvent::Failed {
+                            request_id: req_item.id.clone(),
+                            error: e.to_string(),
+                        })
+                        .await;
                     return;
                 }
             };
 
             // 4. Handshake, racing the cancel channel
             tokio::select! {
-                _ = cancel_rx => {}
+                _ = cancel_rx => { let _ = event_tx.send(SendEvent::Cancelled).await; }
                 res = WebSocketClient::connect(&resolved) => match res {
                     Ok(handle) => {
                         pump_connection(&req_item.id, handle.events, handle.outgoing, event_tx);
@@ -116,7 +120,7 @@ impl WsService {
                         let _ = event_tx.send(SendEvent::Failed {
                             request_id: req_item.id.clone(),
                             error: e.to_string(),
-                        });
+                        }).await;
                     }
                 },
             }
@@ -151,7 +155,7 @@ impl WsService {
     pub fn register_session(
         &self,
         request_id: &str,
-        outgoing: UnboundedSender<WsOutgoing>,
+        outgoing: Sender<WsOutgoing>,
         handshake_headers: Vec<(String, String)>,
     ) {
         self.lock_sessions().insert(
@@ -197,6 +201,11 @@ impl WsService {
         if session.status != WebSocketStatus::Connected {
             return Err("Not connected".to_string());
         }
+        if text.len() > MAX_REALTIME_FRAME_BYTES {
+            return Err(format!(
+                "Message exceeds the {MAX_REALTIME_FRAME_BYTES}-byte limit"
+            ));
+        }
         let message = TransportFrame {
             id: 0, // assigned by push_message
             timestamp_ms: chrono::Utc::now().timestamp_millis(),
@@ -207,8 +216,8 @@ impl WsService {
         };
         session
             .outgoing
-            .send(WsOutgoing::Text(text))
-            .map_err(|_| "Connection closed".to_string())?;
+            .try_send(WsOutgoing::Text(text))
+            .map_err(|error| error.to_string())?;
         session.push_message(message.clone());
         Ok(message)
     }
@@ -223,8 +232,8 @@ impl WsService {
         }
         session
             .outgoing
-            .send(WsOutgoing::Ping)
-            .map_err(|_| "Connection closed".to_string())
+            .try_send(WsOutgoing::Ping)
+            .map_err(|error| error.to_string())
     }
 
     /// Requests a graceful close; status flips immediately so the UI reacts,
@@ -232,15 +241,27 @@ impl WsService {
     pub fn disconnect(&self, request_id: &str) {
         let mut sessions = self.lock_sessions();
         if let Some(session) = sessions.get_mut(request_id) {
-            let _ = session.outgoing.send(WsOutgoing::Close);
+            self.close_outgoing(session.outgoing.clone());
             session.status = WebSocketStatus::Disconnected;
+        }
+    }
+
+    fn close_outgoing(&self, outgoing: Sender<WsOutgoing>) {
+        self.tokio_rt.spawn(async move {
+            let _ = outgoing.send(WsOutgoing::Close).await;
+        });
+    }
+
+    pub fn disconnect_all(&self) {
+        for (_, session) in self.lock_sessions().drain() {
+            self.close_outgoing(session.outgoing.clone());
         }
     }
 
     /// Forgets a session entirely (e.g. its request was deleted).
     pub fn drop_session(&self, request_id: &str) {
         if let Some(session) = self.lock_sessions().remove(request_id) {
-            let _ = session.outgoing.send(WsOutgoing::Close);
+            self.close_outgoing(session.outgoing.clone());
         }
     }
 }
@@ -248,9 +269,9 @@ impl WsService {
 /// Forwards connection events to the UI channel until the connection ends.
 fn pump_connection(
     request_id: &str,
-    mut events: UnboundedReceiver<WsEvent>,
-    outgoing: UnboundedSender<WsOutgoing>,
-    ui_tx: UnboundedSender<SendEvent>,
+    mut events: Receiver<WsEvent>,
+    outgoing: Sender<WsOutgoing>,
+    ui_tx: Sender<SendEvent>,
 ) {
     let request_id = request_id.to_string();
     tokio::spawn(async move {
@@ -279,7 +300,7 @@ fn pump_connection(
                     error,
                 },
             };
-            if ui_tx.send(ui_event).is_err() {
+            if ui_tx.send(ui_event).await.is_err() {
                 break;
             }
         }

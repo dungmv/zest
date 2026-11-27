@@ -379,6 +379,16 @@ pub struct LocFile {
     pub response: LocResponseInfo,
 }
 
+const RESPONSE_CACHE_BODY_LIMIT: usize = 512 * 1024;
+
+pub(super) fn truncate_response_cache_body(body: &mut String) -> bool {
+    if body.len() <= RESPONSE_CACHE_BODY_LIMIT {
+        return false;
+    }
+    body.truncate(body.floor_char_boundary(RESPONSE_CACHE_BODY_LIMIT));
+    true
+}
+
 impl LocFile {
     pub fn from_record(record: &HttpResponseRecord) -> Self {
         let sent_req = record.request_sent.as_ref();
@@ -394,19 +404,13 @@ impl LocFile {
         };
 
         let is_binary = record.body.iter().take(1024).any(|&b| b == 0);
-        let max_body_bytes = 512 * 1024;
         let (body_str, truncated) = if is_binary {
             (None, false)
-        } else if record.body.len() > max_body_bytes {
-            (
-                Some(String::from_utf8_lossy(&record.body[..max_body_bytes]).to_string()),
-                true,
-            )
         } else {
-            (
-                Some(String::from_utf8_lossy(&record.body).to_string()),
-                false,
-            )
+            let captured = record.body.len().min(RESPONSE_CACHE_BODY_LIMIT);
+            let mut text = String::from_utf8_lossy(&record.body[..captured]).into_owned();
+            let clipped_text = truncate_response_cache_body(&mut text);
+            (Some(text), clipped_text || record.body.len() > captured)
         };
 
         Self {

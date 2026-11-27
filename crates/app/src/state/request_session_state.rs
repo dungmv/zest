@@ -257,6 +257,15 @@ impl RequestSessionState {
         cx.notify();
     }
 
+    pub(crate) fn reset_workspace(&mut self, cx: &mut Context<Self>) {
+        if let Some(cancel) = self.cancel_tx.take() {
+            let _ = cancel.send(());
+        }
+        *self = Self::new();
+        self.active_request_id = None;
+        cx.notify();
+    }
+
     pub fn set_grpc_schema(
         &mut self,
         schema: Option<std::sync::Arc<GrpcSchemaSummary>>,

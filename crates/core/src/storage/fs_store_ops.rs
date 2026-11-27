@@ -1,13 +1,13 @@
 use super::fs_store::FsWorkspaceStore;
-use crate::models::{HttpMethod, Protocol};
+use crate::models::{HttpMethod, Protocol, RequestItem};
 use crate::storage::fingerprints::DiskFingerprints;
 use crate::storage::fs_ops::{
     create_group, create_request, delete_group, delete_request, move_group, move_request,
     path_to_forward_slash, rename_group, rename_request, reorder_folder,
 };
 use crate::storage::models::{
-    EnvironmentFile, FolderFile, LocFile, LocalState, PinsFile, RequestAuth, RequestFile,
-    RequestNode, WorkspaceMeta, WorkspaceTree,
+    truncate_response_cache_body, EnvironmentFile, FolderFile, LocFile, LocalState, PinsFile,
+    RequestAuth, RequestFile, RequestNode, WorkspaceMeta, WorkspaceTree,
 };
 use crate::storage::serialize::{to_yaml_string, with_retry};
 use crate::storage::slug::loc_path_for_yaml;
@@ -286,16 +286,57 @@ impl WorkspaceStore for FsWorkspaceStore {
             grpc: None,
             ..Default::default()
         };
-        let (slug, path) =
-            create_request(&self.writer, &self.collections_dir(), folder_rel, name, req)?;
+        self.create_request_file(folder_rel, req)
+    }
+
+    fn create_request_file(
+        &self,
+        folder_rel: Option<&str>,
+        request: RequestFile,
+    ) -> Result<(String, String)> {
+        let _guard = self
+            .request_mutations
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let name = request.name.clone();
+        let (slug, path) = create_request(
+            &self.writer,
+            &self.collections_dir(),
+            folder_rel,
+            &name,
+            request,
+        )?;
         Ok((slug, path_to_forward_slash(&path)))
     }
 
+    fn update_request_from_item(&self, item: &RequestItem) -> Result<()> {
+        let _guard = self
+            .request_mutations
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let mut file = match self.read_request(&item.id) {
+            Ok(file) => file,
+            // Editing the visible placeholder for malformed YAML repairs it.
+            Err(error) if error.is::<serde_yaml::Error>() => RequestFile::default(),
+            Err(error) => return Err(error),
+        };
+        file.update_from_item(item);
+        self.write_request(&item.id, &file)
+    }
+
     fn delete_request(&self, rel_path: &str) -> Result<()> {
+        let _guard = self
+            .request_mutations
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         delete_request(&self.writer, &self.collections_dir(), Path::new(rel_path))
     }
 
     fn rename_request(&self, rel_path: &str, new_name: &str) -> Result<String> {
+        let _guard = self
+            .request_mutations
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let new_path = rename_request(
             &self.writer,
             &self.collections_dir(),
@@ -306,6 +347,10 @@ impl WorkspaceStore for FsWorkspaceStore {
     }
 
     fn move_request(&self, rel_path: &str, target_folder_rel: Option<&str>) -> Result<String> {
+        let _guard = self
+            .request_mutations
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let new_path = move_request(
             &self.writer,
             &self.collections_dir(),
@@ -330,15 +375,27 @@ impl WorkspaceStore for FsWorkspaceStore {
     }
 
     fn delete_group(&self, folder_rel: &str) -> Result<()> {
+        let _guard = self
+            .request_mutations
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         delete_group(&self.collections_dir(), folder_rel)
     }
 
     fn rename_group(&self, folder_rel: &str, new_name: &str) -> Result<String> {
+        let _guard = self
+            .request_mutations
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let new_path = rename_group(&self.writer, &self.collections_dir(), folder_rel, new_name)?;
         Ok(path_to_forward_slash(&new_path))
     }
 
     fn move_group(&self, folder_rel: &str, target_parent_rel: Option<&str>) -> Result<String> {
+        let _guard = self
+            .request_mutations
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let new_path = move_group(&self.collections_dir(), folder_rel, target_parent_rel)?;
         Ok(path_to_forward_slash(&new_path))
     }
@@ -506,18 +563,12 @@ impl WorkspaceStore for FsWorkspaceStore {
         let mut final_cache = cache.clone();
         if final_cache.response.binary {
             final_cache.response.body = None;
-        } else if let Some(body) = &final_cache.response.body {
-            const MAX_BODY_BYTES: usize = 512 * 1024;
-            if body.len() > MAX_BODY_BYTES {
-                let truncated_body = body[..MAX_BODY_BYTES].to_string();
-                final_cache.response.body = Some(truncated_body);
-                final_cache.response.truncated = true;
-            }
+        } else if let Some(body) = &mut final_cache.response.body {
+            final_cache.response.truncated |= truncate_response_cache_body(body);
         }
 
-        if let Ok(json) = serde_json::to_string_pretty(&final_cache) {
-            let _ = self.writer.write_str(&loc_path, &json);
-        }
+        let json = serde_json::to_string_pretty(&final_cache)?;
+        self.writer.write_str(&loc_path, &json)?;
         Ok(())
     }
 

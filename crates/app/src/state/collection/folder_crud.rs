@@ -43,27 +43,41 @@ impl CollectionState {
         res
     }
 
-    pub fn delete_folder_internal(&mut self, folder_id: &str) {
-        let _ = self.store.delete_group(folder_id);
+    pub fn delete_folder_internal(&mut self, folder_id: &str) -> anyhow::Result<Vec<String>> {
+        self.store.delete_group(folder_id)?;
         let prefix = format!("{}/", folder_id);
         self.folders
             .retain(|f| f.id != folder_id && !f.id.starts_with(&prefix));
-        self.requests.retain(|r| {
-            if let Some(fid) = &r.folder_id {
-                fid != folder_id && !fid.starts_with(&prefix)
+        let mut deleted_requests = Vec::new();
+        self.requests.retain(|request| {
+            if request.id.starts_with(&prefix) {
+                deleted_requests.push(request.id.clone());
+                false
             } else {
-                !r.id.starts_with(&prefix)
+                true
             }
         });
+        self.parse_errors.retain(|id, _| !id.starts_with(&prefix));
         self.pins
-            .retain(|p| p != folder_id && !p.starts_with(&prefix));
-        let _ = self.store.save_pins(&self.pins);
+            .retain(|id| id != folder_id && !id.starts_with(&prefix));
         self.bump_tree_version();
+        Ok(deleted_requests)
     }
 
     pub fn delete_folder(&mut self, folder_id: &str, cx: &mut Context<Self>) {
-        self.delete_folder_internal(folder_id);
-        cx.notify();
+        match self.delete_folder_internal(folder_id) {
+            Ok(deleted_requests) => {
+                for id in deleted_requests {
+                    cx.emit(CollectionEvent::RequestDeleted(id));
+                }
+                cx.emit(CollectionEvent::PinsModified);
+                cx.notify();
+            }
+            Err(error) => cx.emit(CollectionEvent::CrudFailed {
+                title: "Could Not Delete Folder",
+                message: error.to_string(),
+            }),
+        }
     }
 
     pub fn rename_folder_internal(
@@ -92,7 +106,9 @@ impl CollectionState {
 
     pub fn rename_folder(&mut self, folder_id: &str, new_name: String, cx: &mut Context<Self>) {
         if let Some((_new_path, pairs)) = self.rename_folder_internal(folder_id, &new_name) {
-            if !pairs.is_empty() {
+            if pairs.is_empty() {
+                cx.emit(CollectionEvent::PinsModified);
+            } else {
                 cx.emit(CollectionEvent::IdsRemapped(pairs));
             }
             cx.notify();
@@ -173,7 +189,9 @@ impl CollectionState {
                 cx.notify();
             }
             Ok(FolderMoveOutcome::Moved(pairs)) => {
-                if !pairs.is_empty() {
+                if pairs.is_empty() {
+                    cx.emit(CollectionEvent::PinsModified);
+                } else {
                     cx.emit(CollectionEvent::IdsRemapped(pairs));
                 }
                 cx.notify();
@@ -310,7 +328,6 @@ impl CollectionState {
         }
         if pins_changed {
             self.pins = new_pins;
-            let _ = self.store.save_pins(&self.pins);
         }
 
         let mut errors_changed = false;
@@ -345,7 +362,7 @@ impl CollectionState {
             return None;
         }
 
-        self.flush_request_to_disk(src_req_id);
+        self.flush_request_to_disk(src_req_id).ok()?;
         let new_rel_path = self
             .store
             .move_request(src_req_id, target_folder_id.as_deref())
@@ -357,7 +374,6 @@ impl CollectionState {
         }
         if let Some(pos) = self.pins.iter().position(|p| p == src_req_id) {
             self.pins[pos] = new_rel_path.clone();
-            let _ = self.store.save_pins(&self.pins);
         }
         self.bump_tree_version();
         Some(new_rel_path)

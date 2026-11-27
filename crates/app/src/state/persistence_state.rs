@@ -7,9 +7,10 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::oneshot;
 use zest_core::models::Environment;
 use zest_core::storage::models::{FolderFile, LocalState, WorkspaceMeta};
-use zest_core::storage::{WorkspaceStore, WorkspaceWatcher};
+use zest_core::storage::{FsEvent, WorkspaceStore};
 
 struct WriteCompletion {
     target: PersistTarget,
@@ -30,25 +31,34 @@ pub struct PersistenceState {
     pub unsaved_version: usize,
     pub coordinator: PersistenceCoordinator,
     pub debounce_tasks: HashMap<PersistTarget, Task<()>>,
-    pub watcher: Option<WorkspaceWatcher>,
+    pub watcher_events: Option<tokio::sync::mpsc::UnboundedSender<FsEvent>>,
     pub watcher_task: Option<Task<()>>,
+    workspace_flush: Option<oneshot::Sender<Result<(), String>>>,
 }
 
 impl PersistenceState {
+    #[cfg(test)]
     pub fn new(store: Arc<dyn WorkspaceStore>, workspace_path: PathBuf) -> Self {
         let local_state = store.load_state().unwrap_or_default();
+        let mut state = Self::empty(store, workspace_path);
+        state.local_state = local_state;
+        state
+    }
+
+    pub(crate) fn empty(store: Arc<dyn WorkspaceStore>, workspace_path: PathBuf) -> Self {
         Self {
             store,
             workspace_path,
-            local_state,
+            local_state: LocalState::default(),
             conflicts: HashMap::new(),
             env_conflicts: HashMap::new(),
             unsaved_requests: HashSet::new(),
             unsaved_version: 0,
             coordinator: PersistenceCoordinator::new(),
             debounce_tasks: HashMap::new(),
-            watcher: None,
+            watcher_events: None,
             watcher_task: None,
+            workspace_flush: None,
         }
     }
 
@@ -58,6 +68,8 @@ impl PersistenceState {
         path: PathBuf,
         cx: &mut Context<Self>,
     ) {
+        self.watcher_task.take();
+        self.watcher_events.take();
         self.store = store;
         self.workspace_path = path;
         self.conflicts.clear();
@@ -66,7 +78,7 @@ impl PersistenceState {
         self.debounce_tasks.clear();
         self.coordinator.bump_workspace_generation();
         self.unsaved_version = self.unsaved_version.wrapping_add(1);
-        self.local_state = self.store.load_state().unwrap_or_default();
+        self.local_state = LocalState::default();
         cx.notify();
     }
 
@@ -104,6 +116,7 @@ impl PersistenceState {
             self.unsaved_version = self.unsaved_version.wrapping_add(1);
             cx.notify();
         }
+        self.finish_workspace_flush(Ok(()));
     }
 
     pub fn is_dirty(&self, req_id: &str) -> bool {
@@ -111,6 +124,16 @@ impl PersistenceState {
             || self
                 .coordinator
                 .is_dirty(&PersistTarget::Request(req_id.to_string()))
+    }
+
+    pub(crate) fn dirty_request_ids(&self) -> HashSet<String> {
+        let mut dirty = self.unsaved_requests.clone();
+        for target in self.coordinator.dirty_targets() {
+            if let PersistTarget::Request(id) = target {
+                dirty.insert(id);
+            }
+        }
+        dirty
     }
 
     #[allow(dead_code)] // Target status query
@@ -139,14 +162,10 @@ impl PersistenceState {
             .map(|(old, new)| (old.as_str(), new.as_str()))
             .collect();
 
-        for (old_id, new_id) in pairs {
+        for (old_id, _) in pairs {
             let old_target = PersistTarget::Request(old_id.clone());
-            let new_target = PersistTarget::Request(new_id.clone());
-            self.coordinator
-                .remap_target(&old_target, new_target.clone());
-            if let Some(task) = self.debounce_tasks.remove(&old_target) {
-                self.debounce_tasks.insert(new_target, task);
-            }
+            self.coordinator.cancel_target(&old_target);
+            self.debounce_tasks.remove(&old_target);
         }
 
         self.unsaved_requests = self
@@ -183,6 +202,14 @@ impl PersistenceState {
         self.coordinator.enqueue(target.clone(), payload, debounce);
         cx.notify();
 
+        if self
+            .workspace_flush
+            .as_ref()
+            .is_some_and(|waiter| !waiter.is_closed())
+        {
+            self.flush_target_if_ready(&target, cx);
+            return;
+        }
         let target_clone = target.clone();
         let task = cx.spawn(async move |this, cx| {
             cx.background_executor().timer(debounce).await;
@@ -241,7 +268,11 @@ impl PersistenceState {
     }
 
     fn handle_write_result(&mut self, completion: WriteCompletion, cx: &mut Context<Self>) {
-        if completion.gen != self.coordinator.workspace_generation() {
+        if completion.gen != self.coordinator.workspace_generation()
+            || !self
+                .coordinator
+                .is_writing_revision(&completion.target, completion.revision)
+        {
             return;
         }
 
@@ -259,18 +290,44 @@ impl PersistenceState {
                 } else {
                     self.flush_target_if_ready(&completion.target, cx);
                 }
+                self.finish_workspace_flush(Ok(()));
                 cx.notify();
             }
             Err(e) => {
+                let error = e.to_string();
                 self.coordinator.mark_failure(
                     &completion.target,
                     completion.revision,
                     completion.payload,
-                    e.to_string(),
+                    error.clone(),
                     completion.debounce,
                 );
                 self.unsaved_version = self.unsaved_version.wrapping_add(1);
+                self.finish_workspace_flush(Err(error.clone()));
+                crate::notify::error("Could Not Save Changes", error, cx);
                 cx.notify();
+            }
+        }
+    }
+
+    /// A workspace can be replaced only after pending and in-flight writes settle.
+    pub(crate) fn flush_before_switch(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> Option<oneshot::Receiver<Result<(), String>>> {
+        if !self.coordinator.has_any_dirty() {
+            return None;
+        }
+        let (sender, receiver) = oneshot::channel();
+        self.workspace_flush = Some(sender);
+        self.flush_all(cx);
+        Some(receiver)
+    }
+
+    fn finish_workspace_flush(&mut self, result: Result<(), String>) {
+        if result.is_err() || !self.coordinator.has_any_dirty() {
+            if let Some(waiter) = self.workspace_flush.take() {
+                let _ = waiter.send(result);
             }
         }
     }
@@ -354,6 +411,7 @@ impl PersistenceState {
         self.unsaved_requests.remove(req_id);
         self.unsaved_version = self.unsaved_version.wrapping_add(1);
         cx.notify();
+        self.finish_workspace_flush(Ok(()));
     }
 
     pub fn cancel_environment(&mut self, env_name: &str, cx: &mut Context<Self>) {
@@ -367,9 +425,9 @@ impl PersistenceState {
         self.env_conflicts.remove(env_name);
         self.unsaved_version = self.unsaved_version.wrapping_add(1);
         cx.notify();
+        self.finish_workspace_flush(Ok(()));
     }
 
-    #[allow(dead_code)] // Useful for synchronous tests and manual sync
     pub fn flush_all(&mut self, cx: &mut Context<Self>) {
         let targets = self.coordinator.pending_targets();
         for target in targets {

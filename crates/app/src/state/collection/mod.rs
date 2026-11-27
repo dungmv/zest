@@ -32,6 +32,7 @@ pub(super) struct CollectionScanState {
     pub(super) load_pending: Option<bool>,
     pub(super) rescan_in_flight: bool,
     pub(super) rescan_pending: bool,
+    pub(super) edits_during_rescan: std::collections::HashSet<String>,
     pub(super) request_index: std::cell::RefCell<Option<(usize, HashMap<String, usize>)>>,
 }
 
@@ -117,12 +118,19 @@ impl CollectionState {
         folder_name: String,
         cx: &mut Context<Self>,
     ) {
+        self.scan = CollectionScanState::default();
         self.store = store;
         self.workspace_path = path;
         self.folders.clear();
         self.requests.clear();
         self.parse_errors.clear();
         self.pins.clear();
+        self.scratch_request = RequestItem::new(
+            "scratch",
+            "Untitled Request",
+            zest_core::models::HttpMethod::Get,
+            "",
+        );
         self.workspace_scope = WorkspaceScopeSnapshot {
             name: folder_name,
             headers: Vec::new(),
@@ -133,21 +141,12 @@ impl CollectionState {
         cx.notify();
     }
 
-    pub fn execute_import_current_workspace(
-        &mut self,
-        result: zest_core::importers::ImportResult,
-        options: zest_core::importers::ImportOptions,
-        cx: &mut Context<Self>,
-    ) -> anyhow::Result<zest_core::importers::ImportSummary> {
-        let summary = zest_core::importers::apply_import_to_workspace(
-            self.store.as_ref(),
-            &result,
-            &options,
-        )?;
-        self.reload_tree();
-        cx.emit(CollectionEvent::RequestsReloaded { req_ids: None });
-        cx.notify();
-        Ok(summary)
+    pub(crate) fn finish_import(&mut self, environments: Vec<String>, cx: &mut Context<Self>) {
+        cx.emit(CollectionEvent::ImportApplied(environments));
+    }
+
+    pub fn is_loading_workspace(&self) -> bool {
+        self.scan.load_in_flight
     }
 
     pub fn find_request(&self, req_id: &str) -> Option<&RequestItem> {
@@ -181,6 +180,9 @@ impl CollectionState {
             .as_ref()
             .and_then(|(_, map)| map.get(req_id))
             .copied()?;
+        if self.scan.rescan_in_flight {
+            self.scan.edits_during_rescan.insert(req_id.to_string());
+        }
         self.requests.get_mut(pos)
     }
 
