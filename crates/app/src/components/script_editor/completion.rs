@@ -24,7 +24,7 @@ pub struct ScriptCompletionProvider {
 }
 
 impl ScriptCompletionProvider {
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn new(kind: ScriptEditorKind) -> Self {
         Self {
             kind,

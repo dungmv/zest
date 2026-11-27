@@ -226,18 +226,25 @@ pub fn handle_session_event(
 
             // Keep the composer tab strip valid for this request's protocol
             // (e.g. an HTTP "Body" tab does not exist on a WebSocket request).
-            let protocol = this
+            let (protocol, binary_path) = this
                 .state
                 .workspace
                 .read(cx)
                 .find_request(req_id)
-                .map(|r| r.protocol)
-                .unwrap_or(Protocol::Http);
+                .map(|r| {
+                    let bin = match &r.body {
+                        zest_core::models::RequestBody::Binary { file_path } => file_path.clone(),
+                        _ => String::new(),
+                    };
+                    (r.protocol, bin)
+                })
+                .unwrap_or((Protocol::Http, String::new()));
             this.state.session.update(cx, |ed, cx| {
                 let clamped = RequestTabKind::clamp_for(ed.active_tab_kind, protocol);
                 if clamped != ed.active_tab_kind {
                     ed.set_active_tab_kind(clamped, cx);
                 }
+                ed.refresh_binary_file_size(binary_path, cx);
             });
 
             // Restore the realtime session view (WS status + shared frame

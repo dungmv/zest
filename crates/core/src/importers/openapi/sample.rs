@@ -3,8 +3,8 @@ use serde_json::{json, Map, Value};
 
 pub fn generate_media_sample(root: &Value, media_obj: &Value) -> String {
     if let Some(ex) = media_obj.get("example") {
-        if ex.is_string() {
-            return ex.as_str().unwrap().to_string();
+        if let Some(s) = ex.as_str() {
+            return s.to_string();
         }
         return serde_json::to_string_pretty(ex).unwrap_or_default();
     }
@@ -12,8 +12,8 @@ pub fn generate_media_sample(root: &Value, media_obj: &Value) -> String {
         if let Some((_, first_ex)) = examples.iter().next() {
             let res_ex = resolve_ref(root, first_ex);
             if let Some(val) = res_ex.get("value") {
-                if val.is_string() {
-                    return val.as_str().unwrap().to_string();
+                if let Some(s) = val.as_str() {
+                    return s.to_string();
                 }
                 return serde_json::to_string_pretty(val).unwrap_or_default();
             }
@@ -113,5 +113,27 @@ pub fn value_to_string(v: &Value) -> String {
             items.join(",")
         }
         _ => v.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::generate_media_sample;
+    use serde_json::json;
+
+    #[test]
+    fn generates_string_and_object_media_examples() {
+        let root = json!({});
+        assert_eq!(
+            generate_media_sample(&root, &json!({"example": "plain-text"})),
+            "plain-text"
+        );
+        assert_eq!(
+            generate_media_sample(
+                &root,
+                &json!({"examples": {"first": {"value": "named-example"}}})
+            ),
+            "named-example"
+        );
     }
 }

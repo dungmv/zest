@@ -13,6 +13,7 @@ mod watcher_reconciler;
 #[cfg(test)]
 pub mod workspace_collision_tests;
 pub mod workspace_crud;
+mod workspace_data_ops;
 pub mod workspace_data_state;
 #[cfg(test)]
 pub mod workspace_data_tests;

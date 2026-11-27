@@ -25,7 +25,7 @@ fn test_start_sending_clears_active_data() {
     let arc_rec = Arc::new(rec);
     state.cache.insert("req-1".to_string(), arc_rec.clone());
     state.current_response = Some(arc_rec);
-    state.show_timing_popover = true;
+    state.ui.show_timing_popover = true;
     state.active_example_name = Some("example-1".to_string());
     state.refresh_formatted_body();
     assert!(state.current_response.is_some());
@@ -36,7 +36,7 @@ fn test_start_sending_clears_active_data() {
 
     assert!(state.current_response.is_none());
     assert!(state.formatted_body.is_none());
-    assert!(!state.show_timing_popover);
+    assert!(!state.ui.show_timing_popover);
     assert!(state.active_example_name.is_none());
     assert!(!state.cache.contains_key(&"req-1".to_string()));
 }
@@ -436,7 +436,7 @@ fn test_formatted_body_caching_on_view_mode_toggle() {
 #[test]
 fn test_jsonpath_incomplete_query_keeps_base_display() {
     let mut state = ResponseState::new();
-    assert!(!state.show_jsonpath_bar);
+    assert!(!state.ui.show_jsonpath_bar);
     let payload = r#"{"total": 3, "items": [1, 2, 3]}"#.as_bytes().to_vec();
     let record = Arc::new(HttpResponseRecord {
         body: payload,
@@ -448,14 +448,14 @@ fn test_jsonpath_incomplete_query_keeps_base_display() {
     let base_text = state.formatted_body.as_ref().unwrap().display_text.clone();
 
     // Incomplete query like "$." keeps the base display without match count
-    state.jsonpath_query = "$.".to_string();
+    state.ui.jsonpath_query = "$.".to_string();
     state.refresh_formatted_body();
     let fmt_incomplete = state.formatted_body.as_ref().unwrap();
     assert_eq!(fmt_incomplete.display_text, base_text);
     assert_eq!(fmt_incomplete.match_count, None);
 
     // Valid query filters the display and sets match count
-    state.jsonpath_query = "$.total".to_string();
+    state.ui.jsonpath_query = "$.total".to_string();
     state.refresh_formatted_body();
     let fmt_valid = state.formatted_body.as_ref().unwrap();
     assert_eq!(&*fmt_valid.display_text, "3");
@@ -536,12 +536,12 @@ fn test_image_response_auto_switches_to_preview_and_falls_back_on_json() {
     });
 
     state.current_response = Some(img_rec);
-    state.image_zoom = ImageZoomMode::Scale(200);
+    state.ui.image_zoom = ImageZoomMode::Scale(200);
     state.refresh_formatted_body();
     state.reconcile_view_mode_for_response();
 
     assert_eq!(state.view_mode, ResponseViewMode::Preview);
-    assert_eq!(state.image_zoom, ImageZoomMode::Fit);
+    assert_eq!(state.ui.image_zoom, ImageZoomMode::Fit);
     let fmt = state.formatted_body.as_ref().unwrap();
     assert_eq!(
         fmt.preview_kind,

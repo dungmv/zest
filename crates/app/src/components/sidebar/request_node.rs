@@ -5,14 +5,17 @@ use super::{SidebarRenderContext, SIDEBAR_ROW_HEIGHT};
 use crate::app::actions::DismissModal;
 use crate::components::{MethodBadge, ProtocolBadge, StatusCodeBadge};
 use crate::services::GitService;
+use crate::state::{
+    GitState, PersistenceState, RequestSessionState, SidebarState, WorkspaceDataState,
+};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
-use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenuItem};
+use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    div, px, AnyElement, AppContext as _, InteractiveElement as _, IntoElement, MouseButton,
-    ParentElement, StatefulInteractiveElement as _, Styled,
+    div, px, AnyElement, App, AppContext as _, Entity, Hsla, InteractiveElement as _, IntoElement,
+    MouseButton, ParentElement, StatefulInteractiveElement as _, Styled,
 };
 use zest_core::models::{HttpMethod, Protocol};
 
@@ -45,46 +48,40 @@ pub fn render_request_inner_pill(
     let t = theme();
     let is_req_active = ctx.active_req_id == Some(req.id.as_str());
     let is_viewing_example = is_req_active && ctx.active_example_name.is_some();
-    let is_in_selected_set = ctx.selected_requests.contains(&req.id);
+    let is_in_selected_set = ctx.selection.selected_requests.contains(&req.id);
     let is_selected = is_in_selected_set
-        || (ctx.selected_requests.is_empty()
-            && ctx.selected_folders.is_empty()
+        || (ctx.selection.selected_requests.is_empty()
+            && ctx.selection.selected_folders.is_empty()
             && is_req_active
             && !is_viewing_example);
-    let is_renaming = ctx.renaming_req_id == Some(req.id.as_str()) && id_prefix == "req-item";
+    let is_renaming = ctx.renaming.req_id == Some(req.id.as_str()) && id_prefix == "req-item";
     let has_examples = !req.examples.is_empty() && id_prefix == "req-item";
 
     let r_id_click = req.id.clone();
     let r_id_right = req.id.clone();
-    let r_id_menu = req.id.clone();
-    let ed_s = ctx.ed.clone();
-    let ed_right = ctx.ed.clone();
-    let ws_click = ctx.ws.clone();
-    let sb_click = ctx.sidebar.clone();
-    let sb_right = ctx.sidebar.clone();
-    let resp_click = ctx.resp.clone();
-
-    let initial_name = req.display_name.clone();
-    let initial_name_click = initial_name.clone();
-    let initial_name_menu = initial_name.clone();
+    let ed_s = ctx.entities.ed.clone();
+    let ed_right = ctx.entities.ed.clone();
+    let ws_click = ctx.entities.ws.clone();
+    let sb_click = ctx.entities.sidebar.clone();
+    let sb_right = ctx.entities.sidebar.clone();
+    let resp_click = ctx.entities.resp.clone();
+    let initial_name_click = req.display_name.clone();
 
     let drag_req_payload = DragRequestItem {
         id: req.id.clone(),
-        name: initial_name.clone(),
+        name: req.display_name.clone(),
         method: req.method,
     };
-    let multi_drag_payload = if is_in_selected_set && ctx.is_multi_select {
-        Some(DragMultiItem::new(
-            ctx.selected_requests.iter().cloned().collect(),
-            ctx.selected_folders.iter().cloned().collect(),
-        ))
-    } else {
-        None
-    };
+    let multi_drag_payload = (is_in_selected_set && ctx.selection.is_multi_select).then(|| {
+        DragMultiItem::new(
+            ctx.selection.selected_requests.iter().cloned().collect(),
+            ctx.selection.selected_folders.iter().cloned().collect(),
+        )
+    });
 
-    let ws_req_drop = ctx.ws.clone();
-    let ws_req_drop_folder = ctx.ws.clone();
-    let ws_req_drop_multi = ctx.ws.clone();
+    let ws_req_drop = ctx.entities.ws.clone();
+    let ws_req_drop_folder = ctx.entities.ws.clone();
+    let ws_req_drop_multi = ctx.entities.ws.clone();
     let target_req_id = req.id.clone();
     let target_req_folder_drop = req.folder_id.clone();
     let target_req_folder_multi = req.folder_id.clone();
@@ -160,9 +157,7 @@ pub fn render_request_inner_pill(
         .on_mouse_down(MouseButton::Right, move |_, _, cx| {
             let is_already_selected = sb_right.read(cx).is_request_selected(&r_id_right);
             let has_multi = sb_right.read(cx).is_multi_selected();
-            if has_multi && is_already_selected {
-                // Keep multi-selection intact
-            } else {
+            if !(has_multi && is_already_selected) {
                 sb_right.update(cx, |state, cx| {
                     state.select_single_request(&r_id_right, cx);
                 });
@@ -176,8 +171,7 @@ pub fn render_request_inner_pill(
                 return;
             }
             let mods = window.modifiers();
-            let is_ctrl_or_cmd = mods.control || mods.platform;
-            if is_ctrl_or_cmd {
+            if mods.control || mods.platform {
                 let current_active = ed_s.read(cx).active_request_id.clone();
                 sb_click.update(cx, |state, cx| {
                     state.toggle_select_request(&r_id_click, current_active.as_deref(), cx);
@@ -211,309 +205,41 @@ pub fn render_request_inner_pill(
             }
         })
         .context_menu({
-            let ws_menu = ctx.ws.clone();
-            let per_menu = ctx.persistence.clone();
-            let sb_menu = ctx.sidebar.clone();
-            let git_menu = ctx.git.clone();
-            let r_id_menu = r_id_menu.clone();
-            let init_name_menu = initial_name_menu.clone();
-            let ed_menu = ctx.ed.clone();
+            let ws_menu = ctx.entities.ws.clone();
+            let per_menu = ctx.entities.persistence.clone();
+            let sb_menu = ctx.entities.sidebar.clone();
+            let git_menu = ctx.entities.git.clone();
+            let ed_menu = ctx.entities.ed.clone();
+            let r_id_menu = req.id.clone();
+            let init_name_menu = req.display_name.clone();
             let is_pinned = ctx.pins.contains(&r_id_menu);
             let is_dirty_git = req_git_status != SidebarGitStatus::Clean;
 
             move |menu, _window, cx| {
-                let is_in_multi = sb_menu.read(cx).is_multi_selected()
-                    && sb_menu.read(cx).is_request_selected(&r_id_menu);
-
-                if is_in_multi {
-                    let ws_del = ws_menu.clone();
-                    let ed_del = ed_menu.clone();
-                    let sb_del = sb_menu.clone();
-                    return menu.item(PopupMenuItem::new("Delete").icon(IconName::Trash).on_click(
-                        move |_, _, cx| {
-                            delete_multi_selected_items(&ws_del, &ed_del, &sb_del, cx);
-                        },
-                    ));
-                }
-                let ws_r = ws_menu.clone();
-                let sb_r = sb_menu.clone();
-                let r_id_r = r_id_menu.clone();
-                let init_r = init_name_menu.clone();
-
-                let ws_d = ws_menu.clone();
-                let ed_d = ed_menu.clone();
-                let r_id_d = r_id_menu.clone();
-
-                let ws_del = ws_menu.clone();
-                let ed_del = ed_menu.clone();
-                let r_id_del = r_id_menu.clone();
-
-                let ws_p = ws_menu.clone();
-                let r_id_p = r_id_menu.clone();
-
-                let ws_curl = ws_menu.clone();
-                let r_id_curl = r_id_menu.clone();
-
-                let mut m = menu
-                    .item(
-                        PopupMenuItem::new("Copy as cURL")
-                            .icon(IconName::Terminal)
-                            .on_click(move |_, _, cx| {
-                                if let Some(r) = ws_curl.read(cx).find_request(&r_id_curl) {
-                                    let mut r_clone = r.clone();
-                                    let (resolved_h, resolved_a) =
-                                        ws_curl.read(cx).resolve_request_hierarchy(&r_clone);
-                                    r_clone.headers = resolved_h;
-                                    r_clone.auth = resolved_a;
-                                    let curl = zest_core::curl::request_to_curl(&r_clone, None);
-                                    cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(
-                                        curl,
-                                    ));
-                                }
-                            }),
-                    )
-                    .separator()
-                    .item(
-                        PopupMenuItem::new(if is_pinned { "Unpin" } else { "Pin to top" })
-                            .icon(IconName::Pin)
-                            .on_click(move |_, _, cx| {
-                                ws_p.update(cx, |state, cx| {
-                                    state.toggle_pin(&r_id_p, cx);
-                                });
-                            }),
-                    )
-                    .item(
-                        PopupMenuItem::new("Rename")
-                            .icon(IconName::Pencil)
-                            .on_click(move |_, window, cx| {
-                                let ws_c = ws_r.clone();
-                                sb_r.update(cx, |state, cx| {
-                                    state.start_renaming_request(
-                                        r_id_r.clone(),
-                                        init_r.clone(),
-                                        ws_c,
-                                        window,
-                                        cx,
-                                    );
-                                });
-                            }),
-                    )
-                    .item(
-                        PopupMenuItem::new("Duplicate")
-                            .icon(IconName::Copy)
-                            .on_click(move |_, _, cx| {
-                                if let Some(dup) = ws_d
-                                    .update(cx, |state, cx| state.duplicate_request(&r_id_d, cx))
-                                {
-                                    ed_d.update(cx, |state, cx| {
-                                        state.set_active_request_id(&dup.id, cx);
-                                    });
-                                }
-                            }),
-                    );
-
-                if is_dirty_git {
-                    let git_disc = git_menu.clone();
-                    let svc_disc = GitService::new(git_menu.clone());
-                    let ws_disc = ws_menu.clone();
-                    let per_disc = per_menu.clone();
-                    let ed_disc = ed_menu.clone();
-                    let r_id_disc = r_id_menu.clone();
-                    let r_name_disc = init_name_menu.clone();
-
-                    m = m.separator().item(
-                        PopupMenuItem::new("Discard Changes")
-                            .icon(IconName::Undo2)
-                            .on_click(move |_, _, cx| {
-                                let req_name = r_name_disc.clone();
-                                let norm_req = r_id_disc.replace('\\', "/");
-                                let coll_rel = format!("collections/{}", norm_req);
-                                let path_to_discard = {
-                                    let g = git_disc.read(cx);
-                                    if let Some(git_st) = &g.status {
-                                        let matches = |p: &str| -> bool {
-                                            let p = p.replace('\\', "/");
-                                            p == norm_req
-                                                || p == coll_rel
-                                                || p.ends_with(&format!("/{}", norm_req))
-                                                || p.ends_with(&format!("/{}", coll_rel))
-                                        };
-                                        git_st
-                                            .untracked_files
-                                            .iter()
-                                            .find(|i| matches(&i.path))
-                                            .or_else(|| {
-                                                git_st
-                                                    .unstaged_files
-                                                    .iter()
-                                                    .find(|i| matches(&i.path))
-                                            })
-                                            .or_else(|| {
-                                                git_st
-                                                    .staged_files
-                                                    .iter()
-                                                    .find(|i| matches(&i.path))
-                                            })
-                                            .map(|i| i.path.clone())
-                                            .unwrap_or(coll_rel)
-                                    } else {
-                                        coll_rel
-                                    }
-                                };
-
-                                // Never delete never-committed request files: for an
-                                // untracked request this only drops unsaved in-memory
-                                // edits via mark_clean + reload_all in on_success below.
-                                per_disc.update(cx, |per, cx| {
-                                    per.cancel_request(&r_id_disc, cx);
-                                });
-                                let r_id_task = r_id_disc.clone();
-                                let per_cb = per_disc.clone();
-                                let ws_cb = ws_disc.clone();
-                                let ed_cb = ed_disc.clone();
-                                let req_name_cb = req_name.clone();
-                                svc_disc.discard_file(&path_to_discard, false, cx, move |cx| {
-                                    per_cb.update(cx, |per, cx| {
-                                        per.mark_clean(&r_id_task, cx);
-                                        if per.conflicts.remove(&r_id_task).is_some() {
-                                            cx.notify();
-                                        }
-                                    });
-                                    ws_cb.update(cx, |ws, cx| {
-                                        ws.reload_all();
-                                        let active_id =
-                                            ed_cb.read(cx).active_request_id().to_string();
-                                        if active_id == r_id_task {
-                                            if ws.find_request(&r_id_task).is_some() {
-                                                ed_cb.update(cx, |ed, cx| {
-                                                    ed.sync_composer_inputs(
-                                                        crate::state::ComposerSyncScope::All,
-                                                        cx,
-                                                    );
-                                                });
-                                            } else {
-                                                ed_cb.update(cx, |ed, cx| {
-                                                    if let Some(first_req) = ws.requests.first() {
-                                                        ed.set_active_request_id(&first_req.id, cx);
-                                                    } else {
-                                                        ed.set_active_request_id("scratch", cx);
-                                                    }
-                                                });
-                                            }
-                                        }
-                                        cx.notify();
-                                    });
-                                    crate::notify::info(
-                                        "Git Discard",
-                                        format!("Discarded changes in '{}'", req_name_cb),
-                                        cx,
-                                    );
-                                });
-                            }),
-                    );
-                }
-
-                m.separator()
-                    .item(PopupMenuItem::new("Delete").icon(IconName::Trash).on_click(
-                        move |_, _, cx| {
-                            delete_request_item(&ws_del, &ed_del, &r_id_del, cx);
-                        },
-                    ))
+                build_request_context_menu(
+                    menu,
+                    &r_id_menu,
+                    &init_name_menu,
+                    is_pinned,
+                    is_dirty_git,
+                    &ws_menu,
+                    &per_menu,
+                    &sb_menu,
+                    &git_menu,
+                    &ed_menu,
+                    cx,
+                )
             }
         })
-        .child(
-            div()
-                .flex_1()
-                .min_w(px(0.))
-                .flex()
-                .items_center()
-                .gap(px(6.))
-                .overflow_hidden()
-                .child(if has_examples {
-                    let sb_toggle = ctx.sidebar.clone();
-                    let r_id = req.id.clone();
-                    div()
-                        .id(format!("req-toggle-{}-{}", id_prefix, r_id))
-                        .w(px(14.))
-                        .h(px(14.))
-                        .flex_shrink_0()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .cursor_pointer()
-                        .hover(|s| s.text_color(t.text_primary))
-                        .text_color(t.text_muted)
-                        .child(
-                            Icon::new(if is_req_collapsed {
-                                IconName::ChevronRight
-                            } else {
-                                IconName::ChevronDown
-                            })
-                            .size(px(11.)),
-                        )
-                        .on_click(move |_, _, cx| {
-                            cx.stop_propagation();
-                            sb_toggle.update(cx, |sb, cx| {
-                                sb.toggle_request_collapsed(&r_id, cx);
-                            });
-                        })
-                        .into_any_element()
-                } else {
-                    div()
-                        .w(px(14.))
-                        .h(px(14.))
-                        .flex_shrink_0()
-                        .into_any_element()
-                })
-                .child(if req.protocol.is_http() {
-                    MethodBadge::new(req.method).into_any_element()
-                } else {
-                    ProtocolBadge::new(req.protocol).into_any_element()
-                })
-                .child(if let (true, Some(inp)) = (is_renaming, ctx.rename_input) {
-                    let sb_esc = ctx.sidebar.clone();
-                    div()
-                        .flex_1()
-                        .min_w(px(0.))
-                        .h(px(22.))
-                        .px(px(4.))
-                        .rounded(px(4.))
-                        .bg(t.bg_input)
-                        .border_1()
-                        .border_color(t.border_focus)
-                        .flex()
-                        .items_center()
-                        .on_mouse_down(MouseButton::Left, |_, _, cx| {
-                            cx.stop_propagation();
-                        })
-                        .on_action(move |_: &DismissModal, _, cx| {
-                            sb_esc.update(cx, |state, cx| {
-                                state.cancel_renaming(cx);
-                            });
-                        })
-                        .child(
-                            gpui_kit::component::input::Input::new(inp)
-                                .id(format!("rename-input-field-{}", req.id))
-                                .appearance(false)
-                                .bordered(false)
-                                .focus_bordered(false)
-                                .cleanable(false)
-                                .xsmall()
-                                .font_family(".SystemMonoFont")
-                                .font_weight(gpui_kit::FontWeight::NORMAL),
-                        )
-                        .into_any_element()
-                } else {
-                    div()
-                        .text_xs()
-                        .font_family(".SystemMonoFont")
-                        .font_weight(gpui_kit::FontWeight::NORMAL)
-                        .text_color(req_name_color)
-                        .truncate()
-                        .child(req.display_name.clone())
-                        .into_any_element()
-                }),
-        )
+        .child(render_request_label(
+            req,
+            id_prefix,
+            has_examples,
+            is_req_collapsed,
+            is_renaming,
+            req_name_color,
+            ctx,
+        ))
         .child(
             div()
                 .flex_shrink_0()
@@ -528,6 +254,327 @@ pub fn render_request_inner_pill(
                 }),
         )
         .into_any_element()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_request_context_menu(
+    menu: PopupMenu,
+    req_id: &str,
+    req_name: &str,
+    is_pinned: bool,
+    is_dirty_git: bool,
+    ws: &Entity<WorkspaceDataState>,
+    per: &Entity<PersistenceState>,
+    sb: &Entity<SidebarState>,
+    git: &Entity<GitState>,
+    ed: &Entity<RequestSessionState>,
+    cx: &App,
+) -> PopupMenu {
+    let is_in_multi = sb.read(cx).is_multi_selected() && sb.read(cx).is_request_selected(req_id);
+    if is_in_multi {
+        let ws_del = ws.clone();
+        let ed_del = ed.clone();
+        let sb_del = sb.clone();
+        return menu.item(PopupMenuItem::new("Delete").icon(IconName::Trash).on_click(
+            move |_, _, cx| {
+                delete_multi_selected_items(&ws_del, &ed_del, &sb_del, cx);
+            },
+        ));
+    }
+
+    let ws_curl = ws.clone();
+    let r_id_curl = req_id.to_string();
+
+    let ws_p = ws.clone();
+    let r_id_p = req_id.to_string();
+
+    let ws_r = ws.clone();
+    let sb_r = sb.clone();
+    let r_id_r = req_id.to_string();
+    let init_r = req_name.to_string();
+
+    let ws_d = ws.clone();
+    let ed_d = ed.clone();
+    let r_id_d = req_id.to_string();
+
+    let ws_del = ws.clone();
+    let ed_del = ed.clone();
+    let r_id_del = req_id.to_string();
+
+    let mut m = menu
+        .item(
+            PopupMenuItem::new("Copy as cURL")
+                .icon(IconName::Terminal)
+                .on_click(move |_, _, cx| {
+                    if let Some(r) = ws_curl.read(cx).find_request(&r_id_curl) {
+                        let mut r_clone = r.clone();
+                        let (resolved_h, resolved_a) =
+                            ws_curl.read(cx).resolve_request_hierarchy(&r_clone);
+                        r_clone.headers = resolved_h;
+                        r_clone.auth = resolved_a;
+                        let curl = zest_core::curl::request_to_curl(&r_clone, None);
+                        cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(curl));
+                    }
+                }),
+        )
+        .separator()
+        .item(
+            PopupMenuItem::new(if is_pinned { "Unpin" } else { "Pin to top" })
+                .icon(IconName::Pin)
+                .on_click(move |_, _, cx| {
+                    ws_p.update(cx, |state, cx| {
+                        state.toggle_pin(&r_id_p, cx);
+                    });
+                }),
+        )
+        .item(
+            PopupMenuItem::new("Rename")
+                .icon(IconName::Pencil)
+                .on_click(move |_, window, cx| {
+                    let ws_c = ws_r.clone();
+                    sb_r.update(cx, |state, cx| {
+                        state.start_renaming_request(
+                            r_id_r.clone(),
+                            init_r.clone(),
+                            ws_c,
+                            window,
+                            cx,
+                        );
+                    });
+                }),
+        )
+        .item(
+            PopupMenuItem::new("Duplicate")
+                .icon(IconName::Copy)
+                .on_click(move |_, _, cx| {
+                    if let Some(dup) =
+                        ws_d.update(cx, |state, cx| state.duplicate_request(&r_id_d, cx))
+                    {
+                        ed_d.update(cx, |state, cx| {
+                            state.set_active_request_id(&dup.id, cx);
+                        });
+                    }
+                }),
+        );
+
+    if is_dirty_git {
+        let git_disc = git.clone();
+        let ws_disc = ws.clone();
+        let per_disc = per.clone();
+        let ed_disc = ed.clone();
+        let r_id_disc = req_id.to_string();
+        let r_name_disc = req_name.to_string();
+
+        m = m.separator().item(
+            PopupMenuItem::new("Discard Changes")
+                .icon(IconName::Undo2)
+                .on_click(move |_, _, cx| {
+                    discard_request_changes(
+                        &r_id_disc,
+                        &r_name_disc,
+                        &git_disc,
+                        &ws_disc,
+                        &per_disc,
+                        &ed_disc,
+                        cx,
+                    );
+                }),
+        );
+    }
+
+    m.separator()
+        .item(
+            PopupMenuItem::new("Delete")
+                .icon(IconName::Trash)
+                .on_click(move |_, _, cx| {
+                    delete_request_item(&ws_del, &ed_del, &r_id_del, cx);
+                }),
+        )
+}
+
+fn discard_request_changes(
+    req_id: &str,
+    req_name: &str,
+    git: &Entity<GitState>,
+    ws: &Entity<WorkspaceDataState>,
+    per: &Entity<PersistenceState>,
+    ed: &Entity<RequestSessionState>,
+    cx: &mut App,
+) {
+    let norm_req = req_id.replace('\\', "/");
+    let coll_rel = format!("collections/{}", norm_req);
+    let path_to_discard = {
+        let g = git.read(cx);
+        if let Some(git_st) = &g.status {
+            let matches = |p: &str| -> bool {
+                let p = p.replace('\\', "/");
+                p == norm_req
+                    || p == coll_rel
+                    || p.ends_with(&format!("/{}", norm_req))
+                    || p.ends_with(&format!("/{}", coll_rel))
+            };
+            git_st
+                .untracked_files
+                .iter()
+                .find(|i| matches(&i.path))
+                .or_else(|| git_st.unstaged_files.iter().find(|i| matches(&i.path)))
+                .or_else(|| git_st.staged_files.iter().find(|i| matches(&i.path)))
+                .map(|i| i.path.clone())
+                .unwrap_or(coll_rel)
+        } else {
+            coll_rel
+        }
+    };
+
+    // Never delete never-committed request files: for an untracked request
+    // this only drops unsaved in-memory edits via mark_clean + reload_all.
+    per.update(cx, |p, cx| {
+        p.cancel_request(req_id, cx);
+    });
+    let r_id_task = req_id.to_string();
+    let per_cb = per.clone();
+    let ws_cb = ws.clone();
+    let ed_cb = ed.clone();
+    let req_name_cb = req_name.to_string();
+    let svc = GitService::new(git.clone());
+    svc.discard_file(&path_to_discard, false, cx, move |cx| {
+        per_cb.update(cx, |p, cx| {
+            p.mark_clean(&r_id_task, cx);
+            if p.conflicts.remove(&r_id_task).is_some() {
+                cx.notify();
+            }
+        });
+        ws_cb.update(cx, |w, cx| {
+            w.reload_all();
+            let active_id = ed_cb.read(cx).active_request_id().to_string();
+            if active_id == r_id_task {
+                if w.find_request(&r_id_task).is_some() {
+                    ed_cb.update(cx, |e, cx| {
+                        e.sync_composer_inputs(crate::state::ComposerSyncScope::All, cx);
+                    });
+                } else {
+                    ed_cb.update(cx, |e, cx| {
+                        if let Some(first_req) = w.requests.first() {
+                            e.set_active_request_id(&first_req.id, cx);
+                        } else {
+                            e.set_active_request_id("scratch", cx);
+                        }
+                    });
+                }
+            }
+            cx.notify();
+        });
+        crate::notify::info(
+            "Git Discard",
+            format!("Discarded changes in '{}'", req_name_cb),
+            cx,
+        );
+    });
+}
+
+fn render_request_label(
+    req: &SidebarReqItem,
+    id_prefix: &str,
+    has_examples: bool,
+    is_req_collapsed: bool,
+    is_renaming: bool,
+    req_name_color: Hsla,
+    ctx: &SidebarRenderContext,
+) -> gpui_kit::Div {
+    let t = theme();
+    div()
+        .flex_1()
+        .min_w(px(0.))
+        .flex()
+        .items_center()
+        .gap(px(6.))
+        .overflow_hidden()
+        .child(if has_examples {
+            let sb_toggle = ctx.entities.sidebar.clone();
+            let r_id = req.id.clone();
+            div()
+                .id(format!("req-toggle-{}-{}", id_prefix, r_id))
+                .w(px(14.))
+                .h(px(14.))
+                .flex_shrink_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .cursor_pointer()
+                .hover(|s| s.text_color(t.text_primary))
+                .text_color(t.text_muted)
+                .child(
+                    Icon::new(if is_req_collapsed {
+                        IconName::ChevronRight
+                    } else {
+                        IconName::ChevronDown
+                    })
+                    .size(px(11.)),
+                )
+                .on_click(move |_, _, cx| {
+                    cx.stop_propagation();
+                    sb_toggle.update(cx, |sb, cx| {
+                        sb.toggle_request_collapsed(&r_id, cx);
+                    });
+                })
+                .into_any_element()
+        } else {
+            div()
+                .w(px(14.))
+                .h(px(14.))
+                .flex_shrink_0()
+                .into_any_element()
+        })
+        .child(if req.protocol.is_http() {
+            MethodBadge::new(req.method).into_any_element()
+        } else {
+            ProtocolBadge::new(req.protocol).into_any_element()
+        })
+        .child(
+            if let (true, Some(inp)) = (is_renaming, ctx.renaming.req_input) {
+                let sb_esc = ctx.entities.sidebar.clone();
+                div()
+                    .flex_1()
+                    .min_w(px(0.))
+                    .h(px(22.))
+                    .px(px(4.))
+                    .rounded(px(4.))
+                    .bg(t.bg_input)
+                    .border_1()
+                    .border_color(t.border_focus)
+                    .flex()
+                    .items_center()
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| {
+                        cx.stop_propagation();
+                    })
+                    .on_action(move |_: &DismissModal, _, cx| {
+                        sb_esc.update(cx, |state, cx| {
+                            state.cancel_renaming(cx);
+                        });
+                    })
+                    .child(
+                        gpui_kit::component::input::Input::new(inp)
+                            .id(format!("rename-input-field-{}", req.id))
+                            .appearance(false)
+                            .bordered(false)
+                            .focus_bordered(false)
+                            .cleanable(false)
+                            .xsmall()
+                            .font_family(".SystemMonoFont")
+                            .font_weight(gpui_kit::FontWeight::NORMAL),
+                    )
+                    .into_any_element()
+            } else {
+                div()
+                    .text_xs()
+                    .font_family(".SystemMonoFont")
+                    .font_weight(gpui_kit::FontWeight::NORMAL)
+                    .text_color(req_name_color)
+                    .truncate()
+                    .child(req.display_name.clone())
+                    .into_any_element()
+            },
+        )
 }
 
 pub fn render_request_row(

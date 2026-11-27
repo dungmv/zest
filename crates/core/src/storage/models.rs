@@ -348,6 +348,7 @@ impl EnvironmentFile {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LocRequestInfo {
     pub method: HttpMethod,
     pub url: String,
@@ -358,6 +359,7 @@ pub struct LocRequestInfo {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LocResponseInfo {
     pub status: u16,
     pub duration_ms: u64,
@@ -370,6 +372,7 @@ pub struct LocResponseInfo {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LocFile {
     pub sent_at: String,
     pub request: LocRequestInfo,
@@ -474,12 +477,14 @@ impl LocFile {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct PinsFile {
     #[serde(default)]
     pub pins: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SidebarState {
     pub width: f32,
     pub collapsed: bool,
@@ -495,6 +500,7 @@ impl Default for SidebarState {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LayoutState {
     pub split: String,
     pub request_pane: String,
@@ -510,12 +516,14 @@ impl Default for LayoutState {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct PerRequestState {
     pub tab: String,
     pub response_scroll: f32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct LocalState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active_request: Option<String>,

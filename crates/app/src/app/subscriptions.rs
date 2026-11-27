@@ -33,23 +33,24 @@ pub fn setup_app_subscriptions(
     cx: &mut Context<AppView>,
 ) -> Vec<Subscription> {
     let mut subscriptions = Vec::new();
+    subscribe_url_input(&targets, &mut subscriptions, window, cx);
+    subscribe_body_editors(&targets, &mut subscriptions, cx);
+    subscribe_protocol_editors(&targets, &mut subscriptions, cx);
+    subscribe_auth_inputs(&targets, &mut subscriptions, cx);
+    subscribe_script_editors(&targets, &mut subscriptions, cx);
+    subscribe_state_events(&targets, &mut subscriptions, window, cx);
+    subscriptions
+}
 
+fn subscribe_url_input(
+    targets: &SubscriptionTargets<'_>,
+    subscriptions: &mut Vec<Subscription>,
+    window: &mut Window,
+    cx: &mut Context<AppView>,
+) {
     let editor_state = targets.editor_state;
     let workspace_state = targets.workspace_state;
     let url_input = &targets.composer_inputs.url_input;
-    let json_editor = &targets.composer_inputs.json_editor;
-    let xml_editor = &targets.composer_inputs.xml_editor;
-    let raw_textarea = &targets.composer_inputs.raw_textarea;
-    let grpc_message_editor = &targets.composer_inputs.grpc.message_editor;
-    let grpc_proto_path_input = &targets.composer_inputs.grpc.proto_path_input;
-    let bearer_token_input = &targets.composer_inputs.bearer_token_input;
-    let basic_user_input = &targets.composer_inputs.basic_user_input;
-    let basic_pass_input = &targets.composer_inputs.basic_pass_input;
-    let apikey_key_input = &targets.composer_inputs.apikey_key_input;
-    let apikey_val_input = &targets.composer_inputs.apikey_val_input;
-    let pre_script_editor = &targets.composer_inputs.pre_script_editor;
-    let test_script_editor = &targets.composer_inputs.test_script_editor;
-    let response_state = targets.response_state;
 
     // 1. Subscribe to URL input change
     let ed_url = editor_state.clone();
@@ -135,6 +136,18 @@ pub fn setup_app_subscriptions(
             _ => {}
         },
     ));
+}
+
+fn subscribe_body_editors(
+    targets: &SubscriptionTargets<'_>,
+    subscriptions: &mut Vec<Subscription>,
+    cx: &mut Context<AppView>,
+) {
+    let editor_state = targets.editor_state;
+    let workspace_state = targets.workspace_state;
+    let json_editor = &targets.composer_inputs.json_editor;
+    let xml_editor = &targets.composer_inputs.xml_editor;
+    let raw_textarea = &targets.composer_inputs.raw_textarea;
 
     // 2. Subscribe to JSON editor change
     let ed_json = editor_state.clone();
@@ -171,6 +184,37 @@ pub fn setup_app_subscriptions(
             ed_xml.update(cx, |ed, cx| ed.mark_dirty(cx));
         }
     }));
+
+    // 3. Subscribe to Raw textarea change
+    let ed_raw = editor_state.clone();
+    let ws_raw = workspace_state.clone();
+    subscriptions.push(cx.subscribe(raw_textarea, move |_, txt, event, cx| {
+        if let InputEvent::Change = event {
+            let val = txt.read(cx).value().to_string();
+            let active_id = ed_raw.read(cx).active_request_id().to_string();
+            ws_raw.update(cx, |ws, _| {
+                ws.update_active_request(&active_id, |r| {
+                    let content_type = match &r.body {
+                        RequestBody::Raw { content_type, .. } => content_type.clone(),
+                        _ => "text/plain".to_string(),
+                    };
+                    r.set_raw_body(val, content_type);
+                });
+            });
+            ed_raw.update(cx, |ed, cx| ed.mark_dirty(cx));
+        }
+    }));
+}
+
+fn subscribe_protocol_editors(
+    targets: &SubscriptionTargets<'_>,
+    subscriptions: &mut Vec<Subscription>,
+    cx: &mut Context<AppView>,
+) {
+    let editor_state = targets.editor_state;
+    let workspace_state = targets.workspace_state;
+    let grpc_message_editor = &targets.composer_inputs.grpc.message_editor;
+    let grpc_proto_path_input = &targets.composer_inputs.grpc.proto_path_input;
 
     // 2b-2. Subscribe to gRPC .proto path input (persisted into GrpcPayload)
     let ed_gpath = editor_state.clone();
@@ -309,26 +353,20 @@ pub fn setup_app_subscriptions(
             }
         },
     ));
+}
 
-    // 3. Subscribe to Raw textarea change
-    let ed_raw = editor_state.clone();
-    let ws_raw = workspace_state.clone();
-    subscriptions.push(cx.subscribe(raw_textarea, move |_, txt, event, cx| {
-        if let InputEvent::Change = event {
-            let val = txt.read(cx).value().to_string();
-            let active_id = ed_raw.read(cx).active_request_id().to_string();
-            ws_raw.update(cx, |ws, _| {
-                ws.update_active_request(&active_id, |r| {
-                    let content_type = match &r.body {
-                        RequestBody::Raw { content_type, .. } => content_type.clone(),
-                        _ => "text/plain".to_string(),
-                    };
-                    r.set_raw_body(val, content_type);
-                });
-            });
-            ed_raw.update(cx, |ed, cx| ed.mark_dirty(cx));
-        }
-    }));
+fn subscribe_auth_inputs(
+    targets: &SubscriptionTargets<'_>,
+    subscriptions: &mut Vec<Subscription>,
+    cx: &mut Context<AppView>,
+) {
+    let editor_state = targets.editor_state;
+    let workspace_state = targets.workspace_state;
+    let bearer_token_input = &targets.composer_inputs.auth.bearer_token_input;
+    let basic_user_input = &targets.composer_inputs.auth.basic_user_input;
+    let basic_pass_input = &targets.composer_inputs.auth.basic_pass_input;
+    let apikey_key_input = &targets.composer_inputs.auth.apikey_key_input;
+    let apikey_val_input = &targets.composer_inputs.auth.apikey_val_input;
 
     // 3b. Subscribe to Auth inputs
     let ed_bearer = editor_state.clone();
@@ -476,6 +514,17 @@ pub fn setup_app_subscriptions(
             });
         }
     }));
+}
+
+fn subscribe_script_editors(
+    targets: &SubscriptionTargets<'_>,
+    subscriptions: &mut Vec<Subscription>,
+    cx: &mut Context<AppView>,
+) {
+    let editor_state = targets.editor_state;
+    let workspace_state = targets.workspace_state;
+    let pre_script_editor = &targets.composer_inputs.pre_script_editor;
+    let test_script_editor = &targets.composer_inputs.test_script_editor;
 
     // 3c. Subscribe to Script editors
     let ed_pre = editor_state.clone();
@@ -503,6 +552,17 @@ pub fn setup_app_subscriptions(
             ed_test.update(cx, |ed, cx| ed.mark_dirty(cx));
         }
     }));
+}
+
+fn subscribe_state_events(
+    targets: &SubscriptionTargets<'_>,
+    subscriptions: &mut Vec<Subscription>,
+    window: &mut Window,
+    cx: &mut Context<AppView>,
+) {
+    let editor_state = targets.editor_state;
+    let workspace_state = targets.workspace_state;
+    let response_state = targets.response_state;
 
     // 4. Subscribe to typed state events (synchronous, single-dispatch command channel)
     subscriptions.push(cx.subscribe_in(
@@ -572,6 +632,4 @@ pub fn setup_app_subscriptions(
             }
         });
     }));
-
-    subscriptions
 }

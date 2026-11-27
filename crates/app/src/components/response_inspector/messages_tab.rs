@@ -24,9 +24,9 @@ pub(super) fn render_messages_tab(
     let (status, frame_count, frames_list) = {
         let resp_s = ri.response_state.read(cx);
         (
-            resp_s.ws_status.clone(),
-            resp_s.frames.len(),
-            resp_s.frames_list.clone(),
+            resp_s.realtime.ws_status.clone(),
+            resp_s.realtime.frames.len(),
+            resp_s.realtime.frames_list.clone(),
         )
     };
     let protocol = ri
@@ -79,7 +79,7 @@ pub(super) fn render_messages_tab(
                         // user is scrolled to the bottom.
                         list(frames_list, move |idx, _window, cx| {
                             let state = resp_state.read(cx);
-                            match state.frames.get(idx) {
+                            match state.realtime.frames.get(idx) {
                                 Some(frame) => render_message_card(frame),
                                 // Stale index during a reset rebuild.
                                 None => div().into_any_element(),
@@ -209,9 +209,9 @@ fn render_payload(msg: &TransportFrame) -> AnyElement {
 pub(super) fn render_realtime_headers_tab(ri: &ResponseInspector, cx: &App) -> AnyElement {
     let t = theme();
     let resp_s = ri.response_state.read(cx);
-    let headers = match &resp_s.grpc_last_call {
+    let headers = match &resp_s.realtime.grpc_last_call {
         Some(call) if !call.headers.is_empty() => call.headers.clone(),
-        _ => resp_s.ws_handshake_headers.clone(),
+        _ => resp_s.realtime.ws_handshake_headers.clone(),
     };
 
     div()

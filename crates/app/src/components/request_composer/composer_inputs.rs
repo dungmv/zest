@@ -52,6 +52,15 @@ pub struct EnvEditorDecorationSet {
     pub graphql_variables: EnvEditorDecorations,
 }
 
+/// Auth tab input handles (Bearer, Basic, and API Key fields).
+pub struct AuthComposerFields {
+    pub bearer_token_input: Entity<InputState>,
+    pub basic_user_input: Entity<InputState>,
+    pub basic_pass_input: Entity<InputState>,
+    pub apikey_key_input: Entity<InputState>,
+    pub apikey_val_input: Entity<InputState>,
+}
+
 pub struct ComposerInputs {
     pub url_input: Entity<InputState>,
     pub json_editor: Entity<CodeEditorState>,
@@ -59,11 +68,7 @@ pub struct ComposerInputs {
     pub raw_textarea: Entity<TextareaState>,
     pub pre_script_editor: Entity<CodeEditorState>,
     pub test_script_editor: Entity<CodeEditorState>,
-    pub bearer_token_input: Entity<InputState>,
-    pub basic_user_input: Entity<InputState>,
-    pub basic_pass_input: Entity<InputState>,
-    pub apikey_key_input: Entity<InputState>,
-    pub apikey_val_input: Entity<InputState>,
+    pub auth: AuthComposerFields,
     pub grpc: GrpcComposerFields,
     pub graphql: GraphQLComposerFields,
     pub env_decorations: EnvEditorDecorationSet,
@@ -207,11 +212,13 @@ impl ComposerInputs {
             raw_textarea,
             pre_script_editor,
             test_script_editor,
-            bearer_token_input,
-            basic_user_input,
-            basic_pass_input,
-            apikey_key_input,
-            apikey_val_input,
+            auth: AuthComposerFields {
+                bearer_token_input,
+                basic_user_input,
+                basic_pass_input,
+                apikey_key_input,
+                apikey_val_input,
+            },
             grpc: GrpcComposerFields {
                 message_editor: grpc_message_editor,
                 proto_path_input: grpc_proto_path_input,
@@ -284,7 +291,7 @@ impl ComposerInputs {
             match &req.auth {
                 Auth::Bearer { token } => {
                     let env_m = env_holder.clone();
-                    self.bearer_token_input.update(cx, |inp, cx| {
+                    self.auth.bearer_token_input.update(cx, |inp, cx| {
                         let env = env_m.read(cx);
                         inp.set_value(crate::env::build_tokenized_content(token, env), window, cx);
                     });
@@ -292,7 +299,7 @@ impl ComposerInputs {
                 Auth::Basic { username, password } => {
                     let env_u = env_holder.clone();
                     let env_p = env_holder.clone();
-                    self.basic_user_input.update(cx, |inp, cx| {
+                    self.auth.basic_user_input.update(cx, |inp, cx| {
                         let env = env_u.read(cx);
                         inp.set_value(
                             crate::env::build_tokenized_content(username, env),
@@ -300,7 +307,7 @@ impl ComposerInputs {
                             cx,
                         );
                     });
-                    self.basic_pass_input.update(cx, |inp, cx| {
+                    self.auth.basic_pass_input.update(cx, |inp, cx| {
                         let env = env_p.read(cx);
                         inp.set_value(
                             crate::env::build_tokenized_content(password, env),
@@ -312,29 +319,29 @@ impl ComposerInputs {
                 Auth::ApiKey { key, value, .. } => {
                     let env_k = env_holder.clone();
                     let env_v = env_holder.clone();
-                    self.apikey_key_input.update(cx, |inp, cx| {
+                    self.auth.apikey_key_input.update(cx, |inp, cx| {
                         let env = env_k.read(cx);
                         inp.set_value(crate::env::build_tokenized_content(key, env), window, cx);
                     });
-                    self.apikey_val_input.update(cx, |inp, cx| {
+                    self.auth.apikey_val_input.update(cx, |inp, cx| {
                         let env = env_v.read(cx);
                         inp.set_value(crate::env::build_tokenized_content(value, env), window, cx);
                     });
                 }
                 Auth::Inherit | Auth::None => {
-                    self.bearer_token_input.update(cx, |inp, cx| {
+                    self.auth.bearer_token_input.update(cx, |inp, cx| {
                         inp.set_value(String::new(), window, cx);
                     });
-                    self.basic_user_input.update(cx, |inp, cx| {
+                    self.auth.basic_user_input.update(cx, |inp, cx| {
                         inp.set_value(String::new(), window, cx);
                     });
-                    self.basic_pass_input.update(cx, |inp, cx| {
+                    self.auth.basic_pass_input.update(cx, |inp, cx| {
                         inp.set_value(String::new(), window, cx);
                     });
-                    self.apikey_key_input.update(cx, |inp, cx| {
+                    self.auth.apikey_key_input.update(cx, |inp, cx| {
                         inp.set_value(String::new(), window, cx);
                     });
-                    self.apikey_val_input.update(cx, |inp, cx| {
+                    self.auth.apikey_val_input.update(cx, |inp, cx| {
                         inp.set_value(String::new(), window, cx);
                     });
                 }

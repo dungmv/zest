@@ -1,4 +1,4 @@
-use super::request::*;
+use super::request_types::{Auth, KeyValuePair};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

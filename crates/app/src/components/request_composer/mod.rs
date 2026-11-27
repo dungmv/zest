@@ -133,11 +133,14 @@ impl AppView {
                                     editor_state: &self.state.session,
                                 },
                                 auth_tab::AuthTabInputs {
-                                    bearer_token_input: &self.composer_inputs.bearer_token_input,
-                                    basic_user_input: &self.composer_inputs.basic_user_input,
-                                    basic_pass_input: &self.composer_inputs.basic_pass_input,
-                                    apikey_key_input: &self.composer_inputs.apikey_key_input,
-                                    apikey_val_input: &self.composer_inputs.apikey_val_input,
+                                    bearer_token_input: &self
+                                        .composer_inputs
+                                        .auth
+                                        .bearer_token_input,
+                                    basic_user_input: &self.composer_inputs.auth.basic_user_input,
+                                    basic_pass_input: &self.composer_inputs.auth.basic_pass_input,
+                                    apikey_key_input: &self.composer_inputs.auth.apikey_key_input,
+                                    apikey_val_input: &self.composer_inputs.auth.apikey_val_input,
                                 },
                                 window,
                                 cx,

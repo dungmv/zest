@@ -49,6 +49,7 @@ pub fn resolve_theme_mode(pref: ThemePreference, appearance: WindowAppearance) -
     }
 }
 
+// Complete semantic design-token palette; some tokens are reserved for upcoming surfaces.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 pub struct AppTheme {
@@ -458,6 +459,7 @@ pub fn current_theme_mode() -> ThemeMode {
     }
 }
 
+// Public theme preference accessor; currently exercised by unit tests.
 #[allow(dead_code)]
 pub fn current_theme_preference() -> ThemePreference {
     match CURRENT_PREF.load(std::sync::atomic::Ordering::Relaxed) {

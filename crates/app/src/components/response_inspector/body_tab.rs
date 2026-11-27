@@ -1,3 +1,4 @@
+use super::body_tab_toolbar::{render_body_toolbar, BodyToolbarProps};
 use super::{preview_image, ResponseInspector};
 use crate::state::ResponseViewMode;
 use crate::theme::theme;
@@ -10,12 +11,10 @@ use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::AppContext as _;
 use gpui_kit::{
-    div, px, uniform_list, AnyElement, App, InteractiveElement as _, IntoElement, ParentElement,
-    StatefulInteractiveElement as _, Styled, Window,
+    div, px, uniform_list, AnyElement, App, Div, Entity, IntoElement, ParentElement, Styled, Window,
 };
 use std::sync::Arc;
 use zest_core::models::{HttpResponseRecord, ResponsePreviewKind};
-use zest_core::storage::models::{RequestExampleFile, RequestKvItem};
 
 pub(super) fn render_body_tab(
     ri: &ResponseInspector,
@@ -24,621 +23,420 @@ pub(super) fn render_body_tab(
     is_sending_this_request: bool,
     current_resp: &Option<Arc<HttpResponseRecord>>,
 ) -> AnyElement {
-    let t = theme();
-    let ed_s = ri.editor_state.read(cx);
-    let active_id = ed_s.active_request_id.clone();
-    let resp_state_clone = ri.response_state.clone();
-    let current_resp = current_resp.clone();
-    if is_sending_this_request {
-        let progress_text = ed_s
-            .send_progress
-            .clone()
-            .unwrap_or_else(|| "Waiting for response from server...".to_string());
-        let ed_s_cancel = ri.editor_state.clone();
+    let active_id = ri.editor_state.read(cx).active_request_id.clone();
 
-        div()
-            .size_full()
-            .flex()
-            .flex_col()
-            .items_center()
-            .justify_center()
-            .gap(px(14.))
-            .child(
+    if is_sending_this_request {
+        return render_sending_state(ri, cx);
+    }
+    let Some(c_resp) = current_resp.clone() else {
+        return render_waiting_state();
+    };
+
+    let jsonpath_input = use_jsonpath_input(ri, window, cx);
+    let resp_s = ri.response_state.read(cx);
+    let view_mode = resp_s.view_mode;
+    let body_len = c_resp.body.len();
+
+    let (lines, is_json, is_binary, is_truncated) = if let Some(fmt) = &resp_s.formatted_body {
+        (
+            fmt.lines.clone(),
+            fmt.is_json,
+            fmt.is_binary,
+            fmt.is_truncated,
+        )
+    } else {
+        (Arc::new(Vec::new()), false, false, false)
+    };
+
+    let is_large_payload = is_truncated || body_len > 10 * 1024 * 1024 || lines.len() > 20000;
+    let preview_kind = resp_s
+        .formatted_body
+        .as_ref()
+        .and_then(|f| f.preview_kind)
+        .or_else(|| c_resp.preview_kind());
+    let is_preview_mode = matches!(view_mode, ResponseViewMode::Preview) && preview_kind.is_some();
+    let is_raster_image = matches!(
+        preview_kind,
+        Some(ResponsePreviewKind::Image(fmt)) if fmt.is_raster()
+    );
+
+    // Query bar is offered only when the body parsed as JSON (the
+    // retained parsed value in CachedResponseFormat is what gets queried).
+    let jsonpath_active = !is_preview_mode
+        && resp_s
+            .formatted_body
+            .as_ref()
+            .and_then(|f| f.cached_format.as_ref())
+            .is_some_and(|cf| cf.parsed_json.is_some());
+    let show_jsonpath_bar = resp_s.ui.show_jsonpath_bar;
+    let jsonpath_matches = resp_s.formatted_body.as_ref().and_then(|f| f.match_count);
+    let is_viewing_example = resp_s.active_example_name.is_some();
+    let wrap_lines = resp_s.wrap_lines;
+
+    let toolbar = render_body_toolbar(
+        ri,
+        BodyToolbarProps {
+            active_id,
+            current_resp: c_resp.clone(),
+            view_mode,
+            preview_kind,
+            is_preview_mode,
+            is_viewing_example,
+            is_raster_image,
+            is_binary,
+            is_large_payload,
+            wrap_lines,
+            jsonpath_active,
+            show_jsonpath_bar,
+            jsonpath_input: jsonpath_input.clone(),
+        },
+    );
+
+    let content = render_body_content(
+        ri,
+        &c_resp,
+        lines,
+        is_json,
+        is_large_payload,
+        is_preview_mode,
+        preview_kind,
+        cx,
+    );
+
+    let t = theme();
+    div()
+        .size_full()
+        .flex()
+        .flex_col()
+        .child(toolbar)
+        .when(jsonpath_active && show_jsonpath_bar, |this| {
+            this.child(render_jsonpath_bar(
+                &ri.response_state,
+                &jsonpath_input,
+                jsonpath_matches,
+            ))
+        })
+        .when(!is_preview_mode && is_large_payload, |this| {
+            this.child(
                 div()
+                    .px(px(12.))
+                    .py(px(6.))
+                    .bg(t.var_unresolved.opacity(0.12))
+                    .border_b_1()
+                    .border_color(t.var_unresolved.opacity(0.3))
                     .flex()
-                    .flex_col()
                     .items_center()
-                    .gap(px(4.))
-                    .child(
-                        div()
-                            .text_base()
-                            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                            .text_color(t.text_primary)
-                            .child("Sending request..."),
-                    )
+                    .justify_between()
                     .child(
                         div()
                             .text_xs()
-                            .text_color(t.text_secondary)
-                            .child(progress_text),
+                            .text_color(t.var_unresolved)
+                            .child(format!(
+                                "⚠ Large payload ({}). Showing bounded preview — use \"Save to File\" for full content.",
+                                c_resp.formatted_size()
+                            )),
                     ),
             )
-            .child(
-                Progress::new("response-send-progress")
-                    .loading(true)
-                    .w(px(240.))
-                    .color(t.primary),
-            )
-            .child(
-                div()
-                    .w(px(240.))
-                    .flex()
-                    .flex_col()
-                    .gap(px(6.))
-                    .py(px(4.))
-                    .child(Skeleton::new().h(px(8.)).rounded(px(4.)))
-                    .child(Skeleton::new().w(px(180.)).h(px(8.)).rounded(px(4.)))
-                    .child(Skeleton::new().w(px(210.)).h(px(8.)).rounded(px(4.))),
-            )
-            .child(
-                Button::new("btn-cancel-in-response-view")
-                    .danger()
-                    .small()
-                    .label("Cancel Request")
-                    .on_click(move |_, _, cx: &mut App| {
-                        ed_s_cancel.update(cx, |state, cx| {
-                            if let Some(tx) = state.cancel_tx.take() {
-                                let _ = tx.send(());
-                            }
-                            state.stop_sending(cx);
-                        });
-                    }),
-            )
-            .into_any_element()
-    } else if current_resp.is_none() {
-        div()
-            .size_full()
-            .flex()
-            .flex_col()
-            .items_center()
-            .justify_center()
-            .gap(px(10.))
-            .child(
-                div()
-                    .text_3xl()
-                    .text_color(t.text_muted)
-                    .child(Icon::new(IconName::Globe).size(px(14.))),
-            )
-            .child(
-                div()
-                    .text_sm()
-                    .font_weight(gpui_kit::FontWeight::MEDIUM)
-                    .text_color(t.text_secondary)
-                    .child("Waiting for response..."),
-            )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(t.text_muted)
-                    .child("Press \"Send\" or Ctrl+Enter to execute this request"),
-            )
-            .into_any_element()
-    } else {
-        // JSONPath query input for the response Body toolbar. `ResponseState`
-        // owns the query text; this input mirrors it (created once, keyed) and
-        // pushes edits back live on every keystroke.
-        let resp_state_for_input = resp_state_clone.clone();
-        let jsonpath_input = window
-            .use_keyed_state(
-                gpui_kit::SharedString::from("response-jsonpath-input-holder"),
-                cx,
-                |window, cx| {
-                    let query_input = cx.new(|cx| {
-                        InputState::new(window, cx)
-                            .placeholder("JSONPath (e.g. $.data.items[*].id)")
-                    });
-                    let q_in = query_input.clone();
-                    let rs_c = resp_state_for_input;
-                    let sub = cx.subscribe_in(&query_input, window, move |_, _, event, _, cx| {
-                        if let gpui_kit::component::input::InputEvent::Change = event {
-                            let q = q_in.read(cx).value().to_string();
-                            rs_c.update(cx, |state, cx| {
-                                state.set_jsonpath_query(q, cx);
-                            });
-                        }
-                    });
-                    (query_input, sub)
-                },
-            )
-            .read(cx)
-            .0
-            .clone();
+        })
+        .child(content)
+        .into_any_element()
+}
 
-        // Two-way sync: state-side resets (cleared on response switch) are
-        // mirrored back into the input.
-        let state_query = ri.response_state.read(cx).jsonpath_query.clone();
-        if jsonpath_input.read(cx).value().as_str() != state_query.as_str() {
-            jsonpath_input.update(cx, |inp, cx| {
-                inp.set_value(state_query.clone(), window, cx);
-            });
-        }
+fn render_sending_state(ri: &ResponseInspector, cx: &App) -> AnyElement {
+    let t = theme();
+    let progress_text = ri
+        .editor_state
+        .read(cx)
+        .send_progress
+        .clone()
+        .unwrap_or_else(|| "Waiting for response from server...".to_string());
+    let ed_s_cancel = ri.editor_state.clone();
 
-        let resp_s = ri.response_state.read(cx);
-        let is_viewing_example = resp_s.active_example_name.is_some();
-        let view_mode = resp_s.view_mode;
-        let body_len = current_resp.as_ref().map(|r| r.body.len()).unwrap_or(0);
-
-        let (_display_text, lines, is_json, is_binary, is_truncated) =
-            if let Some(fmt) = &resp_s.formatted_body {
-                (
-                    fmt.display_text.clone(),
-                    fmt.lines.clone(),
-                    fmt.is_json,
-                    fmt.is_binary,
-                    fmt.is_truncated,
-                )
-            } else {
-                (
-                    std::sync::Arc::new(String::new()),
-                    std::sync::Arc::new(Vec::new()),
-                    false,
-                    false,
-                    false,
-                )
-            };
-
-        let total_lines = lines.len();
-        let is_large_payload =
-            is_truncated || body_len > 10 * 1024 * 1024 || total_lines > 20000;
-
-        let rs_toggle = resp_state_clone.clone();
-        let rs_filter = resp_state_clone.clone();
-        let rs_close_filter = resp_state_clone.clone();
-        let rs_copy = resp_state_clone.clone();
-        let rs_save = resp_state_clone.clone();
-        let rs_wrap = resp_state_clone.clone();
-        let resp_ed = ri.response_editor.clone();
-        let ws_s = ri.workspace_state.clone();
-        let c_resp = current_resp.clone().unwrap_or_else(|| {
-            std::sync::Arc::new(zest_core::models::HttpResponseRecord::default())
-        });
-        let req_id_opt = active_id.clone();
-        let wrap_lines = resp_s.wrap_lines;
-        let show_jsonpath_bar = resp_s.show_jsonpath_bar;
-        let preview_kind = resp_s
-            .formatted_body
-            .as_ref()
-            .and_then(|f| f.preview_kind)
-            .or_else(|| c_resp.preview_kind());
-        let is_preview_mode =
-            matches!(view_mode, ResponseViewMode::Preview) && preview_kind.is_some();
-        let is_raster_image = matches!(
-            preview_kind,
-            Some(ResponsePreviewKind::Image(fmt)) if fmt.is_raster()
-        );
-
-        // Query bar is offered only when the body parsed as JSON (the
-        // retained parsed value in CachedResponseFormat is what gets queried).
-        let jsonpath_active = !is_preview_mode
-            && resp_s
-                .formatted_body
-                .as_ref()
-                .and_then(|f| f.cached_format.as_ref())
-                .is_some_and(|cf| cf.parsed_json.is_some());
-        let jsonpath_matches = resp_s.formatted_body.as_ref().and_then(|f| f.match_count);
-        let jsonpath_hint = jsonpath_matches.map(|n| {
+    div()
+        .size_full()
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
+        .gap(px(14.))
+        .child(
             div()
-                .flex_shrink_0()
+                .flex()
+                .flex_col()
+                .items_center()
+                .gap(px(4.))
+                .child(
+                    div()
+                        .text_base()
+                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
+                        .text_color(t.text_primary)
+                        .child("Sending request..."),
+                )
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(t.text_secondary)
+                        .child(progress_text),
+                ),
+        )
+        .child(
+            Progress::new("response-send-progress")
+                .loading(true)
+                .w(px(240.))
+                .color(t.primary),
+        )
+        .child(
+            div()
+                .w(px(240.))
+                .flex()
+                .flex_col()
+                .gap(px(6.))
+                .py(px(4.))
+                .child(Skeleton::new().h(px(8.)).rounded(px(4.)))
+                .child(Skeleton::new().w(px(180.)).h(px(8.)).rounded(px(4.)))
+                .child(Skeleton::new().w(px(210.)).h(px(8.)).rounded(px(4.))),
+        )
+        .child(
+            Button::new("btn-cancel-in-response-view")
+                .danger()
+                .small()
+                .label("Cancel Request")
+                .on_click(move |_, _, cx: &mut App| {
+                    ed_s_cancel.update(cx, |state, cx| {
+                        if let Some(tx) = state.cancel_tx.take() {
+                            let _ = tx.send(());
+                        }
+                        state.stop_sending(cx);
+                    });
+                }),
+        )
+        .into_any_element()
+}
+
+fn render_waiting_state() -> AnyElement {
+    let t = theme();
+    div()
+        .size_full()
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
+        .gap(px(10.))
+        .child(
+            div()
+                .text_3xl()
+                .text_color(t.text_muted)
+                .child(Icon::new(IconName::Globe).size(px(14.))),
+        )
+        .child(
+            div()
+                .text_sm()
+                .font_weight(gpui_kit::FontWeight::MEDIUM)
+                .text_color(t.text_secondary)
+                .child("Waiting for response..."),
+        )
+        .child(
+            div()
                 .text_xs()
                 .text_color(t.text_muted)
-                .child(if n == 1 {
-                    "1 match".to_string()
-                } else {
-                    format!("{n} matches")
-                })
-        });
+                .child("Press \"Send\" or Ctrl+Enter to execute this request"),
+        )
+        .into_any_element()
+}
 
+/// Keyed JSONPath query input synced bidirectionally with `ResponseState::ui.jsonpath_query`.
+fn use_jsonpath_input(
+    ri: &ResponseInspector,
+    window: &mut Window,
+    cx: &mut App,
+) -> Entity<InputState> {
+    let resp_state_for_input = ri.response_state.clone();
+    let jsonpath_input = window
+        .use_keyed_state(
+            gpui_kit::SharedString::from("response-jsonpath-input-holder"),
+            cx,
+            |window, cx| {
+                let query_input = cx.new(|cx| {
+                    InputState::new(window, cx).placeholder("JSONPath (e.g. $.data.items[*].id)")
+                });
+                let q_in = query_input.clone();
+                let rs_c = resp_state_for_input;
+                let sub = cx.subscribe_in(&query_input, window, move |_, _, event, _, cx| {
+                    if let gpui_kit::component::input::InputEvent::Change = event {
+                        let q = q_in.read(cx).value().to_string();
+                        rs_c.update(cx, |state, cx| {
+                            state.set_jsonpath_query(q, cx);
+                        });
+                    }
+                });
+                (query_input, sub)
+            },
+        )
+        .read(cx)
+        .0
+        .clone();
+
+    let state_query = ri.response_state.read(cx).ui.jsonpath_query.clone();
+    if jsonpath_input.read(cx).value().as_str() != state_query.as_str() {
+        jsonpath_input.update(cx, |inp, cx| {
+            inp.set_value(state_query.clone(), window, cx);
+        });
+    }
+    jsonpath_input
+}
+
+fn render_jsonpath_bar(
+    response_state: &Entity<crate::state::ResponseState>,
+    jsonpath_input: &Entity<InputState>,
+    match_count: Option<usize>,
+) -> Div {
+    let t = theme();
+    let rs_close = response_state.clone();
+    let jsonpath_hint = match_count.map(|n| {
         div()
-                                    .size_full()
+            .flex_shrink_0()
+            .text_xs()
+            .text_color(t.text_muted)
+            .child(if n == 1 {
+                "1 match".to_string()
+            } else {
+                format!("{n} matches")
+            })
+    });
+
+    div()
+        .h(px(36.))
+        .px(px(8.))
+        .border_b_1()
+        .border_color(t.border)
+        .bg(t.bg_editor)
+        .flex()
+        .items_center()
+        .gap(px(8.))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .h(px(26.))
+                .px(px(8.))
+                .rounded(px(6.))
+                .bg(t.bg_input)
+                .border_1()
+                .border_color(t.border_subtle)
+                .flex()
+                .items_center()
+                .gap(px(6.))
+                .child(
+                    Icon::new(IconName::Funnel)
+                        .size(px(13.))
+                        .text_color(t.text_muted),
+                )
+                .child(
+                    div().flex_1().min_w_0().child(
+                        Input::new(jsonpath_input)
+                            .id("response-jsonpath-input")
+                            .appearance(false)
+                            .bordered(false)
+                            .focus_bordered(false)
+                            .cleanable(true),
+                    ),
+                ),
+        )
+        .children(jsonpath_hint)
+        .child(
+            Button::new("btn-close-jsonpath")
+                .ghost()
+                .xsmall()
+                .icon(IconName::Close)
+                .tooltip("Close filter")
+                .on_click(move |_, _, cx: &mut App| {
+                    rs_close.update(cx, |state, cx| {
+                        state.close_jsonpath_bar(cx);
+                    });
+                }),
+        )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_body_content(
+    ri: &ResponseInspector,
+    c_resp: &Arc<HttpResponseRecord>,
+    lines: Arc<Vec<String>>,
+    is_json: bool,
+    is_large_payload: bool,
+    is_preview_mode: bool,
+    preview_kind: Option<ResponsePreviewKind>,
+    cx: &App,
+) -> Div {
+    let t = theme();
+    if let (true, Some(ResponsePreviewKind::Image(fmt))) = (is_preview_mode, preview_kind) {
+        return div().flex_1().size_full().overflow_hidden().child(
+            preview_image::render_image_preview(&ri.response_state, c_resp, fmt, cx),
+        );
+    }
+
+    if is_large_payload {
+        let scroll_handle = ri.response_state.read(cx).scroll_handle.clone();
+        return div()
+            .flex_1()
+            .size_full()
+            .overflow_hidden()
+            .p(px(8.))
+            .child(
+                uniform_list("response-lines-virtual", lines.len(), {
+                    let lines = lines.clone();
+                    move |range, _window, _cx| {
+                        range
+                            .map(|idx| {
+                                let line_num = idx + 1;
+                                let line = &lines[idx];
+                                div()
+                                    .h(px(20.))
                                     .flex()
-                                    .flex_col()
-                                    // Response sub-toolbar
+                                    .items_center()
+                                    .gap(px(12.))
                                     .child(
                                         div()
-                                            .h(px(32.))
-                                            .px(px(8.))
-                                            .border_b_1()
-                                            .border_color(t.border)
-                                            .bg(t.bg_editor)
+                                            .w(px(40.))
                                             .flex()
-                                            .items_center()
-                                            .justify_between()
-                                            .child(
-                                                div()
-                                                    .flex()
-                                                    .items_center()
-                                                    .gap(px(4.))
-                                                    // Pretty Button
-                                                    .child({
-                                                        let rs_c = rs_toggle.clone();
-                                                        let is_pretty = matches!(view_mode, ResponseViewMode::Pretty);
-                                                        div()
-                                                            .id("btn-view-pretty")
-                                                            .px(px(8.))
-                                                            .py(px(2.))
-                                                            .rounded(px(4.))
-                                                            .border_1()
-                                                            .border_color(if is_pretty { t.border } else { t.transparent })
-                                                            .bg(if is_pretty { t.bg_selected } else { t.transparent })
-                                                            .text_color(if is_pretty { t.text_primary } else { t.text_secondary })
-                                                            .text_xs()
-                                                            .font_weight(if is_pretty { gpui_kit::FontWeight::SEMIBOLD } else { gpui_kit::FontWeight::NORMAL })
-                                                            .cursor_pointer()
-                                                            .hover(|s| if is_pretty { s } else { s.text_color(t.text_primary).bg(t.bg_hover) })
-                                                            .on_click(move |_, _, cx| {
-                                                                rs_c.update(cx, |state, cx| {
-                                                                    state.set_view_mode(ResponseViewMode::Pretty, cx);
-                                                                });
-                                                            })
-                                                            .child("Pretty")
-                                                    })
-                                                    // Raw Button
-                                                    .child({
-                                                        let rs_c = rs_toggle.clone();
-                                                        let is_raw = matches!(view_mode, ResponseViewMode::Raw);
-                                                        div()
-                                                            .id("btn-view-raw")
-                                                            .px(px(8.))
-                                                            .py(px(2.))
-                                                            .rounded(px(4.))
-                                                            .border_1()
-                                                            .border_color(if is_raw { t.border } else { t.transparent })
-                                                            .bg(if is_raw { t.bg_selected } else { t.transparent })
-                                                            .text_color(if is_raw { t.text_primary } else { t.text_secondary })
-                                                            .text_xs()
-                                                            .font_weight(if is_raw { gpui_kit::FontWeight::SEMIBOLD } else { gpui_kit::FontWeight::NORMAL })
-                                                            .cursor_pointer()
-                                                            .hover(|s| if is_raw { s } else { s.text_color(t.text_primary).bg(t.bg_hover) })
-                                                            .on_click(move |_, _, cx| {
-                                                                rs_c.update(cx, |state, cx| {
-                                                                    state.set_view_mode(ResponseViewMode::Raw, cx);
-                                                                });
-                                                            })
-                                                            .child("Raw")
-                                                    })
-                                                    // Preview Button (shown for previewable responses)
-                                                    .when(preview_kind.is_some(), |this| {
-                                                        let rs_c = rs_toggle.clone();
-                                                        this.child(
-                                                            div()
-                                                                .id("btn-view-preview")
-                                                                .px(px(8.))
-                                                                .py(px(2.))
-                                                                .rounded(px(4.))
-                                                                .border_1()
-                                                                .border_color(if is_preview_mode { t.border } else { t.transparent })
-                                                                .bg(if is_preview_mode { t.bg_selected } else { t.transparent })
-                                                                .text_color(if is_preview_mode { t.text_primary } else { t.text_secondary })
-                                                                .text_xs()
-                                                                .font_weight(if is_preview_mode { gpui_kit::FontWeight::SEMIBOLD } else { gpui_kit::FontWeight::NORMAL })
-                                                                .cursor_pointer()
-                                                                .hover(|s| if is_preview_mode { s } else { s.text_color(t.text_primary).bg(t.bg_hover) })
-                                                                .on_click(move |_, _, cx| {
-                                                                    rs_c.update(cx, |state, cx| {
-                                                                        state.set_view_mode(ResponseViewMode::Preview, cx);
-                                                                    });
-                                                                })
-                                                                .child("Preview"),
-                                                        )
-                                                    })
-                                            )
-                                            .child(
-                                                div()
-                                                    .flex()
-                                                    .items_center()
-                                                    .gap(px(6.))
-                                                    // Toggle JSONPath Filter Button (JSON bodies only)
-                                                    .when(jsonpath_active, |this| {
-                                                        let rs_f = rs_filter.clone();
-                                                        let jp_in = jsonpath_input.clone();
-                                                        let filter_icon = if show_jsonpath_bar {
-                                                            Icon::new(IconName::Funnel).text_color(t.primary)
-                                                        } else {
-                                                            Icon::new(IconName::Funnel)
-                                                        };
-                                                        this.child(
-                                                            Button::new("btn-toggle-jsonpath")
-                                                                .ghost()
-                                                                .xsmall()
-                                                                .icon(filter_icon)
-                                                                .tooltip("Filter with JSONPath")
-                                                                .on_click(move |_, window, cx: &mut App| {
-                                                                    let now_open = rs_f.update(cx, |state, cx| {
-                                                                        state.toggle_jsonpath_bar(cx)
-                                                                    });
-                                                                    if now_open {
-                                                                        jp_in.update(cx, |inp, cx| {
-                                                                            inp.focus(window, cx);
-                                                                        });
-                                                                    }
-                                                                }),
-                                                        )
-                                                    })
-                                                    // Save as Example Button (text responses within size limit only)
-                                                    .when_some(req_id_opt.clone(), |this, req_id| {
-                                                        if is_viewing_example || is_raster_image || is_binary || is_large_payload {
-                                                            return this;
-                                                        }
-                                                        let ws_s = ws_s.clone();
-                                                        let c_resp = c_resp.clone();
-                                                        this.child(
-                                                            Button::new("btn-save-example")
-                                                                .ghost()
-                                                                .xsmall()
-                                                                .icon(IconName::Save)
-                                                                .tooltip("Save as Example")
-                                                                .on_click(move |_, _, cx: &mut App| {
-                                                                    ws_s.update(cx, |ws, cx| {
-                                                                        if let Some(mut req) = ws.get_request_file(&req_id) {
-                                                                            let base_name = format!("{} {}", c_resp.status_code, c_resp.status_text);
-                                                                            let mut name = base_name.clone();
-                                                                            let mut idx = 2;
-                                                                            while req.examples.iter().any(|e| e.name == name) {
-                                                                                name = format!("{}-{}", base_name, idx);
-                                                                                idx += 1;
-                                                                            }
-                                                                            let ex = RequestExampleFile {
-                                                                                name,
-                                                                                status: c_resp.status_code,
-                                                                                headers: c_resp.headers.iter().map(|(k, v)| RequestKvItem::new(k, v)).collect(),
-                                                                                body: Some(String::from_utf8_lossy(&c_resp.body).to_string()),
-                                                                            };
-                                                                            req.examples.push(ex);
-                                                                            ws.save_request_file(&req_id, &req, cx);
-                                                                        }
-                                                                    });
-                                                                }),
-                                                        )
-                                                    })
-                                                    // Toggle Wrap Line Button (text view only)
-                                                    .when(!is_preview_mode, |this| {
-                                                        let rs_w = rs_wrap.clone();
-                                                        let r_ed = resp_ed.clone();
-                                                        let wrap_icon = if wrap_lines {
-                                                            Icon::new(IconName::TextWrap).text_color(t.primary)
-                                                        } else {
-                                                            Icon::new(IconName::TextWrap)
-                                                        };
-
-                                                        this.child(
-                                                            Button::new("btn-toggle-wrap")
-                                                                .ghost()
-                                                                .xsmall()
-                                                                .icon(wrap_icon)
-                                                                .tooltip("Toggle line wrap")
-                                                                .on_click(move |_, window, cx: &mut App| {
-                                                                    rs_w.update(cx, |state, cx| {
-                                                                        state.toggle_wrap_lines(cx);
-                                                                    });
-                                                                    let new_wrap = rs_w.read(cx).wrap_lines;
-                                                                    r_ed.update(cx, |ed, cx| {
-                                                                        ed.set_soft_wrap(new_wrap, window, cx);
-                                                                    });
-                                                                }),
-                                                        )
-                                                    })
-                                                    // Copy Button (text responses only)
-                                                    .when(!is_raster_image && !is_binary, |this| {
-                                                        let rs_c = rs_copy.clone();
-                                                        this.child(
-                                                            Button::new("btn-copy-response")
-                                                                .ghost()
-                                                                .xsmall()
-                                                                .icon(IconName::Copy)
-                                                                .tooltip("Copy Response")
-                                                                .on_click(move |_, _, cx: &mut App| {
-                                                                    let copy_text = rs_c.read(cx).formatted_body.as_ref()
-                                                                        .map(|f| f.display_text.to_string())
-                                                                        .unwrap_or_default();
-                                                                    cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(copy_text));
-                                                                }),
-                                                        )
-                                                    })
-                                                    // Save to File (Download) Button
-                                                    .child({
-                                                        let rs_s = rs_save.clone();
-                                                        Button::new("btn-save-response")
-                                                            .ghost()
-                                                            .xsmall()
-                                                            .icon(IconName::Download)
-                                                            .tooltip("Save to File")
-                                                            .on_click(move |_, _, cx: &mut App| {
-                                                                // Zero-copy Arc clone: never duplicate a 100MB Vec<u8> on the UI thread.
-                                                                let save_data = rs_s
-                                                                    .read(cx)
-                                                                    .current_response
-                                                                    .as_ref()
-                                                                    .map(|r| (r.clone(), r.suggested_filename()));
-                                                                if let Some((record, file_name)) = save_data {
-                                                                    cx.spawn(async move |cx| {
-                                                                        if let Some(file) = rfd::AsyncFileDialog::new()
-                                                                            .set_file_name(&file_name)
-                                                                            .save_file()
-                                                                            .await
-                                                                        {
-                                                                            let path = file.path().to_path_buf();
-                                                                            cx.background_executor()
-                                                                                .spawn(async move {
-                                                                                    let _ = std::fs::write(path, &record.body);
-                                                                                })
-                                                                                .await;
-                                                                        }
-                                                                    })
-                                                                    .detach();
-                                                                }
-                                                            })
-                                                    }),
-                                            ),
+                                            .justify_end()
+                                            .text_xs()
+                                            .font_family(".SystemMonoFont")
+                                            .text_color(t.text_muted)
+                                            .child(format!("{}", line_num)),
                                     )
-                                    // JSONPath filter row (shown below toolbar when toggled)
-                                    .when(jsonpath_active && show_jsonpath_bar, |this| {
-                                        let rs_close = rs_close_filter.clone();
-                                        this.child(
-                                            div()
-                                                .h(px(36.))
-                                                .px(px(8.))
-                                                .border_b_1()
-                                                .border_color(t.border)
-                                                .bg(t.bg_editor)
-                                                .flex()
-                                                .items_center()
-                                                .gap(px(8.))
-                                                .child(
-                                                    div()
-                                                        .flex_1()
-                                                        .min_w_0()
-                                                        .h(px(26.))
-                                                        .px(px(8.))
-                                                        .rounded(px(6.))
-                                                        .bg(t.bg_input)
-                                                        .border_1()
-                                                        .border_color(t.border_subtle)
-                                                        .flex()
-                                                        .items_center()
-                                                        .gap(px(6.))
-                                                        .child(
-                                                            Icon::new(IconName::Funnel)
-                                                                .size(px(13.))
-                                                                .text_color(t.text_muted),
-                                                        )
-                                                        .child(
-                                                            div().flex_1().min_w_0().child(
-                                                                Input::new(&jsonpath_input)
-                                                                    .id("response-jsonpath-input")
-                                                                    .appearance(false)
-                                                                    .bordered(false)
-                                                                    .focus_bordered(false)
-                                                                    .cleanable(true),
-                                                            ),
-                                                        ),
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .text_xs()
+                                            .font_family(".SystemMonoFont")
+                                            .text_color(t.text_primary)
+                                            .child(if line.is_empty() {
+                                                div().child(" ")
+                                            } else if is_json {
+                                                div().child(
+                                                    super::json_highlight::highlight_json_line(
+                                                        line, t,
+                                                    ),
                                                 )
-                                                .children(jsonpath_hint)
-                                                .child(
-                                                    Button::new("btn-close-jsonpath")
-                                                        .ghost()
-                                                        .xsmall()
-                                                        .icon(IconName::Close)
-                                                        .tooltip("Close filter")
-                                                        .on_click(move |_, _, cx: &mut App| {
-                                                            rs_close.update(cx, |state, cx| {
-                                                                state.close_jsonpath_bar(cx);
-                                                            });
-                                                        }),
-                                                ),
-                                        )
-                                    })
-                                    // Large payload notice banner
-                                    .when(!is_preview_mode && is_large_payload, |this| {
-                                        this.child(
-                                            div()
-                                                .px(px(12.))
-                                                .py(px(6.))
-                                                .bg(t.var_unresolved.opacity(0.12))
-                                                .border_b_1()
-                                                .border_color(t.var_unresolved.opacity(0.3))
-                                                .flex()
-                                                .items_center()
-                                                .justify_between()
-                                                .child(
-                                                    div()
-                                                        .text_xs()
-                                                        .text_color(t.var_unresolved)
-                                                        .child(format!(
-                                                            "⚠ Large payload ({}). Showing bounded preview — use \"Save to File\" for full content.",
-                                                            c_resp.formatted_size()
-                                                        )),
-                                                )
-                                        )
-                                    })
-                                    // Response content area: Preview renderer, virtualized list for large payloads, or Editor
-                                    .child({
-                                        if let (true, Some(ResponsePreviewKind::Image(fmt))) =
-                                            (is_preview_mode, preview_kind)
-                                        {
-                                            div()
-                                                .flex_1()
-                                                .size_full()
-                                                .overflow_hidden()
-                                                .child(preview_image::render_image_preview(
-                                                    &ri.response_state,
-                                                    &c_resp,
-                                                    fmt,
-                                                    cx,
-                                                ))
-                                        } else if is_large_payload {
-                                            div()
-                                                .flex_1()
-                                                .size_full()
-                                                .overflow_hidden()
-                                                .p(px(8.))
-                                                .child(
-                                                uniform_list("response-lines-virtual", lines.len(), {
-                                                    let lines = lines.clone();
-                                                    move |range, _window, _cx| {
-                                                        range
-                                                            .map(|idx| {
-                                                                let line_num = idx + 1;
-                                                                let line = &lines[idx];
-                                                                div()
-                                                                    .h(px(20.))
-                                                                    .flex()
-                                                                    .items_center()
-                                                                    .gap(px(12.))
-                                                                    .child(
-                                                                        div()
-                                                                            .w(px(40.))
-                                                                            .flex()
-                                                                            .justify_end()
-                                                                            .text_xs()
-                                                                            .font_family(".SystemMonoFont")
-                                                                            .text_color(t.text_muted)
-                                                                            .child(format!("{}", line_num)),
-                                                                    )
-                                                                    .child(
-                                                                        div()
-                                                                            .flex_1()
-                                                                            .text_xs()
-                                                                            .font_family(".SystemMonoFont")
-                                                                            .text_color(t.text_primary)
-                                                                            .child(if line.is_empty() {
-                                                                                div().child(" ")
-                                                                            } else if is_json {
-                                                                                div().child(super::json_highlight::highlight_json_line(line, t))
-                                                                            } else {
-                                                                                div().child(line.clone())
-                                                                            }),
-                                                                    )
-                                                            })
-                                                            .collect::<Vec<_>>()
-                                                    }
-                                                })
-                                                .track_scroll(&resp_s.scroll_handle)
-                                                .size_full(),
-                                            )
-                                        } else {
-                                            div()
-                                                .flex_1()
-                                                .size_full()
-                                                .overflow_hidden()
-                                                .child(
-                                                    Editor::new(&ri.response_editor)
-                                                        .readonly(true)
-                                                        .appearance(false)
-                                                        .bordered(false)
-                                                        .h(gpui_kit::relative(1.))
-                                                )
-                                        }
-                                    })
-                                    .into_any_element()
+                                            } else {
+                                                div().child(line.clone())
+                                            }),
+                                    )
+                            })
+                            .collect::<Vec<_>>()
+                    }
+                })
+                .track_scroll(&scroll_handle)
+                .size_full(),
+            );
     }
+
+    div().flex_1().size_full().overflow_hidden().child(
+        Editor::new(&ri.response_editor)
+            .readonly(true)
+            .appearance(false)
+            .bordered(false)
+            .h(gpui_kit::relative(1.)),
+    )
 }

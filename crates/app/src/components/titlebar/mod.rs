@@ -283,6 +283,7 @@ impl RenderOnce for AppTitleBar {
             .child(center_section)
             .child(right_toolbar);
 
+        // Mutated only on non-macOS targets below when appending window caption buttons.
         #[allow(unused_mut)]
         let mut bar = bar.child(drag_region);
 

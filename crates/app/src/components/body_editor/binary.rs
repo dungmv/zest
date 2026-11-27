@@ -8,49 +8,21 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled,
 };
 
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::time::Instant;
-
-thread_local! {
-    static FILE_SIZE_CACHE: RefCell<HashMap<String, (Instant, String)>> = RefCell::new(HashMap::new());
-}
-
-pub fn format_file_size(path_str: &str) -> String {
-    if path_str.is_empty() {
-        return "".to_string();
+/// Formats a byte count into a human-readable size string (pure, no disk I/O).
+pub fn format_byte_size(bytes: u64) -> String {
+    if bytes < 1024 {
+        format!("{} B", bytes)
+    } else if bytes < 1024 * 1024 {
+        format!("{:.1} KB", bytes as f64 / 1024.0)
+    } else {
+        format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
     }
-    FILE_SIZE_CACHE.with(|cache| {
-        let mut map = cache.borrow_mut();
-        let now = Instant::now();
-        if let Some((cached_at, cached_str)) = map.get(path_str) {
-            // Re-stat at most once every 5 seconds per file path to keep render 100% pure & fast
-            if now.duration_since(*cached_at).as_secs() < 5 {
-                return cached_str.clone();
-            }
-        }
-
-        let formatted = if let Ok(meta) = std::fs::metadata(path_str) {
-            let bytes = meta.len();
-            if bytes < 1024 {
-                format!("{} B", bytes)
-            } else if bytes < 1024 * 1024 {
-                format!("{:.1} KB", bytes as f64 / 1024.0)
-            } else {
-                format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
-            }
-        } else {
-            "File not found".to_string()
-        };
-
-        map.insert(path_str.to_string(), (now, formatted.clone()));
-        formatted
-    })
 }
 
 pub fn render_binary_editor(
     req_id_str: &str,
     file_path: &str,
+    size_label: &str,
     editor_state: &Entity<RequestSessionState>,
     workspace_state: Option<&Entity<WorkspaceDataState>>,
 ) -> AnyElement {
@@ -58,7 +30,7 @@ pub fn render_binary_editor(
     let file_path = file_path.to_string();
     let ed_c = editor_state.clone();
     let has_file = !file_path.is_empty();
-    let size_str = format_file_size(&file_path);
+    let size_str = size_label.to_string();
     let req_id_str = req_id_str.to_string();
     let ws_state = workspace_state.cloned();
 
@@ -180,16 +152,20 @@ pub fn render_binary_editor(
                                                         file.path().to_string_lossy().to_string();
                                                     cx.update(|cx| {
                                                         if let Some(ws) = &ws_bg {
+                                                            let path_for_req = p.clone();
                                                             ws.update(cx, |ws, _| {
                                                                 ws.update_active_request(
                                                                     &id_bg,
                                                                     |r| {
-                                                                        r.set_binary_file(p);
+                                                                        r.set_binary_file(
+                                                                            path_for_req,
+                                                                        );
                                                                     },
                                                                 );
                                                             });
                                                         }
                                                         ed_bg.update(cx, |state, cx| {
+                                                            state.refresh_binary_file_size(p, cx);
                                                             state.mark_dirty(cx);
                                                         });
                                                     });
@@ -225,6 +201,10 @@ pub fn render_binary_editor(
                                                     });
                                                 }
                                                 ed_clr.update(cx, |state, cx| {
+                                                    state.refresh_binary_file_size(
+                                                        String::new(),
+                                                        cx,
+                                                    );
                                                     state.mark_dirty(cx);
                                                 });
                                             })
@@ -235,4 +215,17 @@ pub fn render_binary_editor(
                 ),
         )
         .into_any_element()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_byte_size;
+
+    #[test]
+    fn formats_byte_sizes_across_units() {
+        assert_eq!(format_byte_size(0), "0 B");
+        assert_eq!(format_byte_size(512), "512 B");
+        assert_eq!(format_byte_size(1536), "1.5 KB");
+        assert_eq!(format_byte_size(2 * 1024 * 1024), "2.0 MB");
+    }
 }

@@ -125,7 +125,7 @@ impl RenderOnce for WorkspaceSettingModal {
             ),
             (
                 WorkspaceSettingTab::Auth,
-                format!("Auth ({})", auth_type_label(&current_auth)),
+                format!("Auth ({})", current_auth.display_label()),
             ),
         ]
         .into_iter()

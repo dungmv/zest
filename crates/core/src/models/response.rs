@@ -1,4 +1,4 @@
-use super::request::*;
+use super::request_types::{HttpMethod, TestResult};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 

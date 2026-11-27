@@ -146,3 +146,20 @@ fn test_workspace_tree_counting() {
     assert_eq!(tree.count_requests(), 2);
     assert_eq!(tree.count_folders(), 2);
 }
+
+#[test]
+fn local_storage_models_reject_unknown_fields() {
+    assert!(serde_yaml::from_str::<PinsFile>("pins: []\nextra: 1\n").is_err());
+    assert!(
+        serde_yaml::from_str::<SidebarState>("width: 260.0\ncollapsed: false\nextra: 1\n").is_err()
+    );
+    assert!(serde_yaml::from_str::<LayoutState>(
+        "split: horizontal\nrequest_pane: editor\nextra: 1\n"
+    )
+    .is_err());
+    assert!(
+        serde_yaml::from_str::<PerRequestState>("tab: body\nresponse_scroll: 0.0\nextra: 1\n")
+            .is_err()
+    );
+    assert!(serde_yaml::from_str::<LocalState>("extra: 1\n").is_err());
+}

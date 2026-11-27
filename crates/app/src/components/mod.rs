@@ -1,3 +1,4 @@
+pub mod auth_form;
 pub mod body_editor;
 pub mod common;
 pub mod console_panel;

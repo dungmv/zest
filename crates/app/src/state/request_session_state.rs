@@ -98,6 +98,10 @@ pub struct RequestSessionState {
     pub grpc_schema: Option<std::sync::Arc<GrpcSchemaSummary>>,
     /// Resolved GraphQL schema for the completion provider (session-only).
     pub graphql_schema: Option<GraphQLSchemaSummary>,
+    /// Cached `(file_path, formatted_size)` for the active request's binary body,
+    /// populated asynchronously on the background executor to keep `render()` pure.
+    pub binary_file_size: Option<(String, String)>,
+    binary_stat_task: Option<Task<()>>,
     input_refresh_task: Option<Task<()>>,
 }
 
@@ -113,8 +117,53 @@ impl RequestSessionState {
             script_error: None,
             grpc_schema: None,
             graphql_schema: None,
+            binary_file_size: None,
+            binary_stat_task: None,
             input_refresh_task: None,
         }
+    }
+
+    /// Returns the cached size label for `path` without touching the filesystem.
+    pub fn binary_file_size_label(&self, path: &str) -> &str {
+        if path.is_empty() {
+            return "";
+        }
+        match &self.binary_file_size {
+            Some((cached_path, label)) if cached_path == path => label.as_str(),
+            _ => "Checking...",
+        }
+    }
+
+    /// Queries `std::fs::metadata` off the UI thread and caches the formatted
+    /// size for the active binary payload path.
+    pub fn refresh_binary_file_size(&mut self, path: String, cx: &mut Context<Self>) {
+        if path.is_empty() {
+            self.binary_file_size = None;
+            self.binary_stat_task = None;
+            cx.notify();
+            return;
+        }
+        let path_for_bg = path.clone();
+        let task = cx.spawn(async move |this, cx| {
+            let formatted = cx
+                .background_executor()
+                .spawn(async move {
+                    match std::fs::metadata(&path_for_bg) {
+                        Ok(meta) => {
+                            crate::components::body_editor::binary::format_byte_size(meta.len())
+                        }
+                        Err(_) => "File not found".to_string(),
+                    }
+                })
+                .await;
+            if let Some(this) = this.upgrade() {
+                this.update(cx, |state, cx| {
+                    state.binary_file_size = Some((path, formatted));
+                    cx.notify();
+                });
+            }
+        });
+        self.binary_stat_task = Some(task);
     }
 
     pub fn active_request_id(&self) -> &str {
@@ -234,6 +283,7 @@ impl RequestSessionState {
     }
 }
 
+#[cfg(test)]
 pub const MAX_DEFAULT_DOMAIN_LEN: usize = 28;
 pub const MAX_DISPLAY_TITLE_LEN: usize = 36;
 
@@ -248,6 +298,7 @@ pub fn truncate_text(s: &str, max_chars: usize) -> String {
 }
 
 /// Extracts the domain (host) from a URL and limits its length.
+#[cfg(test)]
 pub fn default_name_from_url(url: &str) -> String {
     let trimmed = url.trim();
     if trimmed.is_empty() {
@@ -273,30 +324,6 @@ pub fn default_name_from_url(url: &str) -> String {
     }
 
     truncate_text(domain, MAX_DEFAULT_DOMAIN_LEN)
-}
-
-#[allow(dead_code)]
-pub fn is_legacy_url_name(name: &str, url: &str) -> bool {
-    let clean = url
-        .trim()
-        .trim_start_matches("https://")
-        .trim_start_matches("http://");
-    if clean.is_empty() {
-        return false;
-    }
-    let without_query = clean.split('?').next().unwrap_or(clean);
-    let default_dom = default_name_from_url(url);
-    (name == clean || name == without_query) && name != default_dom
-}
-
-#[allow(dead_code)]
-pub fn is_auto_name(name: &str, old_url: &str) -> bool {
-    let trimmed = name.trim();
-    trimmed.is_empty()
-        || trimmed == "New Request"
-        || trimmed == "Untitled Request"
-        || trimmed == default_name_from_url(old_url)
-        || is_legacy_url_name(trimmed, old_url)
 }
 
 /// Returns the display name of a request (custom name if set, otherwise "Untitled Request"),

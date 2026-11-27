@@ -73,7 +73,8 @@ impl RenderOnce for RequestBar {
             let req = self.workspace_state.read(cx).find_request(active_id);
             let method = req.map(|r| r.method).unwrap_or(HttpMethod::Get);
             let protocol = req.map(|r| r.protocol).unwrap_or(Protocol::Http);
-            let ws_connected = self.response_state.read(cx).ws_status == WebSocketStatus::Connected;
+            let ws_connected =
+                self.response_state.read(cx).realtime.ws_status == WebSocketStatus::Connected;
             (method, ed.is_sending, protocol, ws_connected)
         };
         let is_ws = protocol == Protocol::WebSocket;

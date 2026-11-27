@@ -20,7 +20,7 @@ pub(super) fn render_image_preview(
 ) -> AnyElement {
     let t = theme();
     let resp_s = response_state.read(cx);
-    let zoom = resp_s.image_zoom;
+    let zoom = resp_s.ui.image_zoom;
     let preview_image = resp_s
         .formatted_body
         .as_ref()

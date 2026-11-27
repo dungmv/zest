@@ -23,13 +23,14 @@ pub fn render_example_row(
     let is_req_active = ctx.active_req_id == Some(parent_id);
     let is_this_ex_active = is_req_active && ctx.active_example_name == Some(ex.name.as_str());
     let is_renaming_this_ex = ctx
-        .renaming_example
+        .renaming
+        .example
         .map(|(r_id, ex_name)| r_id == parent_id && ex_name == &ex.name)
         .unwrap_or(false);
-    let ed_ex_click = ctx.ed.clone();
-    let resp_ex_click = ctx.resp.clone();
-    let ws_ex_click = ctx.ws.clone();
-    let sb_ex_click = ctx.sidebar.clone();
+    let ed_ex_click = ctx.entities.ed.clone();
+    let resp_ex_click = ctx.entities.resp.clone();
+    let ws_ex_click = ctx.entities.ws.clone();
+    let sb_ex_click = ctx.entities.sidebar.clone();
     let r_id_for_click = parent_id.to_string();
     let ex_name_for_click = ex.name.clone();
 
@@ -93,9 +94,9 @@ pub fn render_example_row(
             }
         })
         .context_menu({
-            let ws_ctx = ctx.ws.clone();
-            let sb_ctx = ctx.sidebar.clone();
-            let resp_ctx = ctx.resp.clone();
+            let ws_ctx = ctx.entities.ws.clone();
+            let sb_ctx = ctx.entities.sidebar.clone();
+            let resp_ctx = ctx.entities.resp.clone();
             let r_id_ctx = parent_id.to_string();
             let ex_name_ctx = ex.name.clone();
 
@@ -227,8 +228,8 @@ pub fn render_example_row(
                 .gap(px(6.))
                 .overflow_hidden()
                 .child(
-                    if let (true, Some(inp)) = (is_renaming_this_ex, ctx.rename_example_input) {
-                        let sb_esc = ctx.sidebar.clone();
+                    if let (true, Some(inp)) = (is_renaming_this_ex, ctx.renaming.example_input) {
+                        let sb_esc = ctx.entities.sidebar.clone();
                         div()
                             .flex_1()
                             .min_w(px(0.))

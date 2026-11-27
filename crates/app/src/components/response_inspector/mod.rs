@@ -1,4 +1,5 @@
 mod body_tab;
+mod body_tab_toolbar;
 mod console_tab;
 mod cookies_tab;
 mod headers_tab;
@@ -78,7 +79,7 @@ impl RenderOnce for ResponseInspector {
         let current_resp = resp_s.current_response.clone();
         let active_tab = resp_s.active_tab;
         let _view_mode = resp_s.view_mode;
-        let show_timing = resp_s.show_timing_popover;
+        let show_timing = resp_s.ui.show_timing_popover;
 
         let resp_state_clone = self.response_state.clone();
 
@@ -135,9 +136,12 @@ impl RenderOnce for ResponseInspector {
                                 )
                                 .into_any_element()
                         } else if protocol == Protocol::Grpc {
-                            Self::render_grpc_status_pill(resp_s.grpc_last_call.as_ref(), t)
+                            Self::render_grpc_status_pill(
+                                resp_s.realtime.grpc_last_call.as_ref(),
+                                t,
+                            )
                         } else if protocol == Protocol::WebSocket {
-                            Self::render_realtime_status_pill(&resp_s.ws_status, t)
+                            Self::render_realtime_status_pill(&resp_s.realtime.ws_status, t)
                         } else if let Some(resp) = &current_resp {
                             let status_color = t.status_color(resp.status_code);
                             let rs_clone = resp_state_clone.clone();
@@ -231,7 +235,7 @@ impl RenderOnce for ResponseInspector {
                 let header_count = if is_sending_this_request {
                     "-".to_string()
                 } else if is_realtime {
-                    format!("{}", resp_s.ws_handshake_headers.len())
+                    format!("{}", resp_s.realtime.ws_handshake_headers.len())
                 } else {
                     current_resp
                         .as_ref()
@@ -251,7 +255,7 @@ impl RenderOnce for ResponseInspector {
                 } else {
                     format!("{}", resp_s.console_logs.len())
                 };
-                let message_count = format!("{}", resp_s.frames.len());
+                let message_count = format!("{}", resp_s.realtime.frames.len());
                 let rs_c = resp_state_clone.clone();
 
                 let mut bar = TabBar::new("response-inspector-tabs")
