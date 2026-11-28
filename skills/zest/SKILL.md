@@ -56,7 +56,7 @@ Files and folders in `collections/` must use ASCII slug names derived from their
 
 ## 3. Request File Schema (`RequestFile`)
 
-Zest uses strict Rust deserialization with `#[serde(deny_unknown_fields)]`. **Any unrecognized field will fail to load.**
+Zest rejects unrecognized top-level request fields during deserialization. Use the documented fields for nested objects and tagged variants as well.
 
 ### 3.1 Field Order & Specification
 
@@ -65,25 +65,26 @@ Use plain YAML strings when possible. Quote values that start with `{{`, such as
 flow mapping. A value like `Bearer {{auth_token}}` can stay unquoted. Quote
 numeric-looking values such as `'1'` when the field stores a string.
 
-Order your YAML fields as follows:
+Use this field order to match Zest's YAML output. The loader accepts fields in any order.
+
 1. `name` (string, required)
-2. `method` (string: `GET` | `POST` | `PUT` | `DELETE` | `PATCH` | `HEAD` | `OPTIONS`, default `GET`)
+2. `method` (required string: `GET` | `POST` | `PUT` | `DELETE` | `PATCH` | `HEAD` | `OPTIONS`)
 3. `url` (string, required; supports interpolation like `{{base_url}}/api/v1/resource`)
-4. `protocol` (string: `http` | `websocket` | `grpc` | `graphql` | `sse`, optional; defaults to `http` and is **omitted** for HTTP requests)
+4. `protocol` (optional string: `http` | `websocket` | `grpc` | `graphql` | `sse`, defaults to `http`, which Zest omits when saving)
 5. `grpc` (object, optional; **only** when `protocol: grpc`)
 6. `graphql` (object, optional; **only** when `protocol: graphql`)
 7. `ws_message_format` (string: `text` | `json`, optional; defaults to `text` and is **omitted** when `text`; used when `protocol: websocket`)
 8. `params` (array of KeyValuePair, optional)
 9. `headers` (array of KeyValuePair, optional)
-10. `auth` (tagged enum object, optional)
-11. `body` (tagged enum object, optional)
+10. `auth` (optional tagged enum object, defaults to `type: inherit`)
+11. `body` (optional tagged enum object, defaults to `type: none`)
 12. `settings` (object, optional)
 13. `script` (object, optional)
-14. `examples` (**MUST be last** if present, array of example objects)
+14. `examples` (array of saved response examples, optional)
 
 ### 3.2 Protocols & Protocol-Specific Fields
 
-- **HTTP (`http`, default):** Omit `protocol` completely for standard REST/HTTP requests.
+- **HTTP (`http`, default):** Omit `protocol` to use the default HTTP transport.
 - **WebSocket (`websocket`):**
   - Set `protocol: websocket`, `method: GET`, and a `ws://` or `wss://` URL.
   - Optional `ws_message_format`: `text` (default, omit if `text`) or `json`.
@@ -169,7 +170,7 @@ Auth is a tagged object using `type`:
 - **API Key**:
   ```yaml
   auth:
-    type: api_key
+    type: apikey         # 'api_key' is also accepted
     key: X-API-Key
     value: '{{api_key}}'
     add_to: header       # "header" or "query" (default: "header")
@@ -210,7 +211,7 @@ Body is a tagged object using `type`:
         enabled: true
         is_file: false
       - name: avatar
-        value: avatar.png
+        value: /path/to/avatar.png
         enabled: true
         is_file: true
         file_path: /path/to/avatar.png
@@ -243,16 +244,19 @@ Pre-request scripts run before transmission; post-response scripts run after res
 script:
   pre_request: |
     // Generate timestamp or dynamic data
-    z.setEnv("request_timestamp", Date.now().toString());
+    z.environment.set("request_timestamp", Date.now().toString());
   post_response: |
-    z.assert(res.status === 200, "Expected HTTP 200 OK");
-    if (res.status === 200) {
-      z.setEnv("token", res.body.token);
-    }
+    z.test("Response contains a token", function () {
+      z.assert(z.response.status === 200, "Expected HTTP 200 OK");
+      const body = z.response.json();
+      z.assert(typeof body?.token === "string" && body.token.length > 0, "Expected a token");
+      z.environment.set("auth_token", body.token);
+    });
 ```
 
 ### 3.8 Saved Examples
-Examples must be placed at the bottom of the request file:
+Each saved response requires `name` and `status`. `headers` and `body` are optional. Store `body` as text, including for JSON responses.
+
 ```yaml
 examples:
   - name: Successful Login
@@ -284,7 +288,7 @@ auth:
 - `version`: Schema version (integer, default `1`).
 - `name`: Workspace display name.
 - `headers`: Optional headers inherited by all collections and requests.
-- `auth`: Optional default auth (defaults to `type: none` if omitted).
+- `auth`: Optional workspace auth. Omitting it loads `type: inherit`, which adds no authentication at the workspace level.
 
 ---
 
@@ -307,7 +311,7 @@ auth:
 ```
 
 - `name`: Display name of the folder in the sidebar.
-- `order`: List of request/subfolder file stems determining display order.
+- `order`: List of request file stems determining the order of requests in this folder.
 - `headers`: Headers inherited by all child requests.
 - `auth`: Shared auth (default `type: inherit`).
 
@@ -325,8 +329,7 @@ variables:
     secret: false
     enabled: true
   - name: api_key
-    value: null
-    secret: true           # Private value goes into .local/secrets/development.yaml
+    secret: true           # Store the value in .local/secrets/development.yaml
     enabled: true
 ```
 
@@ -386,10 +389,12 @@ settings:
   validate_tls: true
 script:
   post_response: |
-    z.assert(res.status === 200, "Login must return 200 OK");
-    if (res.body && res.body.token) {
-      z.setEnv("auth_token", res.body.token);
-    }
+    z.test("Login returns a token", function () {
+      z.assert(z.response.status === 200, "Login must return 200 OK");
+      const body = z.response.json();
+      z.assert(typeof body?.token === "string" && body.token.length > 0, "Expected a token");
+      z.environment.set("auth_token", body.token);
+    });
 examples:
   - name: Success Response
     status: 200
@@ -438,7 +443,7 @@ auth:
   type: inherit
 ```
 
-*(If using a local `.proto` file instead of Server Reflection, set `use_reflection: false` and `proto_path: ./protos/helloworld.proto`.)*
+*(For a local `.proto` file, set `use_reflection: false` and give its absolute path in `proto_path`, for example `proto_path: /path/to/protos/helloworld.proto`.)*
 
 ### Example 5: GraphQL Query with Variables
 File: `collections/graphql/get-country.yaml`
