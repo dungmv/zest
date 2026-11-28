@@ -102,7 +102,10 @@ impl EnvVarTable {
                         cx.notify();
                     }
                 }
-                EnvironmentEvent::ActiveEnvironmentChanged(_) => {}
+                EnvironmentEvent::ActiveEnvironmentChanged(_)
+                | EnvironmentEvent::RenameRequested { .. }
+                | EnvironmentEvent::DeleteRequested(_)
+                | EnvironmentEvent::EnvironmentRenamed { .. } => {}
             },
         );
 

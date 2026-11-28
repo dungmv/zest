@@ -84,6 +84,10 @@ pub enum CollectionEvent {
         announce_opened: bool,
         workspace_path: PathBuf,
     },
+    WorkspaceMetaReloaded {
+        meta: Box<WorkspaceMeta>,
+        store: Arc<dyn WorkspaceStore>,
+    },
     /// Request/folder ids changed on disk (request rename, folder rename/move,
     /// cross-folder request move). `(old_id, new_id)` pairs.
     IdsRemapped(Vec<(String, String)>),
@@ -126,6 +130,7 @@ impl fmt::Debug for CollectionEvent {
                 .field("announce_opened", announce_opened)
                 .field("workspace_path", workspace_path)
                 .finish(),
+            Self::WorkspaceMetaReloaded { .. } => write!(f, "WorkspaceMetaReloaded"),
             Self::IdsRemapped(pairs) => f.debug_tuple("IdsRemapped").field(pairs).finish(),
             Self::RequestsReloaded { req_ids } => f
                 .debug_struct("RequestsReloaded")
@@ -177,6 +182,10 @@ impl PartialEq for CollectionEvent {
                     ..
                 },
             ) => f1 == f2 && a1 == a2 && p1 == p2,
+            (
+                Self::WorkspaceMetaReloaded { meta: a, store: sa },
+                Self::WorkspaceMetaReloaded { meta: b, store: sb },
+            ) => a == b && Arc::ptr_eq(sa, sb),
             (Self::IdsRemapped(a), Self::IdsRemapped(b)) => a == b,
             (Self::ImportApplied(a), Self::ImportApplied(b)) => a == b,
             (Self::RequestDeleted(a), Self::RequestDeleted(b))
@@ -277,6 +286,15 @@ pub enum EnvironmentEvent {
     GlobalsModified,
     /// Environments were reloaded or externally/programmatically updated; UI inputs must re-sync.
     EnvironmentsReloaded,
+    RenameRequested {
+        id: String,
+        name: String,
+    },
+    DeleteRequested(String),
+    EnvironmentRenamed {
+        old_id: String,
+        new_id: String,
+    },
 }
 
 impl EventEmitter<EnvironmentEvent> for EnvironmentState {}
@@ -510,8 +528,10 @@ mod tests {
             &[
                 EnvironmentEvent::EnvironmentsReloaded,
                 EnvironmentEvent::ActiveEnvironmentChanged(Some("Staging".to_string())),
-                EnvironmentEvent::EnvironmentsReloaded,
-                EnvironmentEvent::ActiveEnvironmentChanged(Some("Production".to_string())),
+                EnvironmentEvent::RenameRequested {
+                    id: "Staging".to_string(),
+                    name: "Production".to_string(),
+                },
             ]
         );
         let _ = std::fs::remove_dir_all(dir);

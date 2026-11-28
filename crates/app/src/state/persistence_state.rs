@@ -12,6 +12,10 @@ use zest_core::models::Environment;
 use zest_core::storage::models::{FolderFile, LocalState, WorkspaceMeta};
 use zest_core::storage::{FsEvent, WorkspaceStore};
 
+#[path = "environment_persistence.rs"]
+mod environment_persistence;
+use environment_persistence::EnvironmentOperation;
+
 struct WriteCompletion {
     target: PersistTarget,
     gen: u64,
@@ -34,6 +38,8 @@ pub struct PersistenceState {
     pub watcher_events: Option<tokio::sync::mpsc::UnboundedSender<FsEvent>>,
     pub watcher_task: Option<Task<()>>,
     workspace_flush: Option<oneshot::Sender<Result<(), String>>>,
+    environment_operations: HashMap<String, EnvironmentOperation>,
+    pub(super) environment_operation_epoch: u64,
 }
 
 impl PersistenceState {
@@ -59,6 +65,8 @@ impl PersistenceState {
             watcher_events: None,
             watcher_task: None,
             workspace_flush: None,
+            environment_operations: HashMap::new(),
+            environment_operation_epoch: 0,
         }
     }
 
@@ -77,6 +85,7 @@ impl PersistenceState {
         self.unsaved_requests.clear();
         self.debounce_tasks.clear();
         self.coordinator.bump_workspace_generation();
+        self.environment_operations.clear();
         self.unsaved_version = self.unsaved_version.wrapping_add(1);
         self.local_state = LocalState::default();
         cx.notify();
@@ -226,6 +235,12 @@ impl PersistenceState {
         if self.coordinator.is_in_flight(target) {
             return;
         }
+        if let PersistTarget::Environment(name) = target {
+            if self.environment_operations.contains_key(name) {
+                self.start_environment_operation(name, cx);
+                return;
+            }
+        }
 
         let Some(pending) = self.coordinator.begin_in_flight(target) else {
             return;
@@ -276,6 +291,26 @@ impl PersistenceState {
             return;
         }
 
+        if let PersistTarget::Environment(name) = &completion.target {
+            if self.environment_operations.contains_key(name) {
+                match completion.result {
+                    Ok(()) => {
+                        self.coordinator
+                            .mark_success(&completion.target, completion.revision);
+                    }
+                    Err(error) => self.coordinator.mark_failure(
+                        &completion.target,
+                        completion.revision,
+                        completion.payload,
+                        error.to_string(),
+                        completion.debounce,
+                    ),
+                }
+                self.start_environment_operation(name, cx);
+                return;
+            }
+        }
+
         match completion.result {
             Ok(()) => {
                 let is_clean = self
@@ -315,7 +350,7 @@ impl PersistenceState {
         &mut self,
         cx: &mut Context<Self>,
     ) -> Option<oneshot::Receiver<Result<(), String>>> {
-        if !self.coordinator.has_any_dirty() {
+        if !self.coordinator.has_any_dirty() && self.environment_operations.is_empty() {
             return None;
         }
         let (sender, receiver) = oneshot::channel();
@@ -325,7 +360,9 @@ impl PersistenceState {
     }
 
     fn finish_workspace_flush(&mut self, result: Result<(), String>) {
-        if result.is_err() || !self.coordinator.has_any_dirty() {
+        if result.is_err()
+            || (!self.coordinator.has_any_dirty() && self.environment_operations.is_empty())
+        {
             if let Some(waiter) = self.workspace_flush.take() {
                 let _ = waiter.send(result);
             }
@@ -442,6 +479,9 @@ impl PersistenceState {
         env_state: Entity<EnvironmentState>,
         cx: &mut Context<Self>,
     ) {
+        if self.environment_operations.contains_key(env_name) {
+            return;
+        }
         self.cancel_environment(env_name, cx);
         let name = env_name.to_string();
         env_state.update(cx, |env, cx| {

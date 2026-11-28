@@ -161,6 +161,12 @@ impl WorkspaceState {
         });
     }
 
+    pub(crate) fn apply_workspace_meta(&mut self, meta: WorkspaceMeta, cx: &mut Context<Self>) {
+        self.workspace_meta = meta;
+        self.rebuild_active_workspace(workspace_folder_name(&self.workspace_path));
+        cx.notify();
+    }
+
     pub fn open_workspace(&mut self, path: PathBuf, cx: &mut Context<Self>) {
         let path = path.canonicalize().unwrap_or(path);
         let store: Arc<dyn WorkspaceStore> = Arc::new(FsWorkspaceStore::new(&path));

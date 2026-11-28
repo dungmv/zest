@@ -54,6 +54,7 @@ pub struct EnvironmentState {
     pub global_environment: Environment,
     pub active_environment_id: Option<String>,
     pub corrupt_secrets_warning: Option<String>,
+    pub(super) reserved_names: HashSet<String>,
     cached_effective_env: RwLock<Option<Arc<Environment>>>,
 }
 
@@ -78,6 +79,7 @@ impl EnvironmentState {
             global_environment: Environment::new(&workspace_name, "Globals"),
             active_environment_id: None,
             corrupt_secrets_warning: None,
+            reserved_names: HashSet::new(),
             cached_effective_env: RwLock::new(None),
         }
     }
@@ -96,7 +98,8 @@ impl EnvironmentState {
         }
     }
 
-    pub fn reload_environments(&mut self) {
+    #[cfg(test)]
+    fn reload_environments(&mut self) {
         self.apply_snapshot(EnvironmentSnapshot::load(
             self.store.as_ref(),
             &self.workspace_name,
@@ -121,32 +124,25 @@ impl EnvironmentState {
             .cloned()
             .collect();
 
-        let kept_envs: Vec<Environment> = self
-            .environments
-            .iter()
-            .filter(|e| dirty.contains(&e.name))
-            .cloned()
-            .collect();
-        let kept_globals = dirty
-            .contains("globals")
-            .then(|| self.global_environment.clone());
-
-        self.apply_snapshot(snapshot);
-
-        for env in kept_envs {
-            if let Some(slot) = self.environments.iter_mut().find(|e| e.name == env.name) {
-                *slot = env;
-            } else {
-                if !conflicts.contains(&env.name) {
-                    conflicts.push(env.name.clone());
-                }
-                self.environments.push(env);
-                self.environments.sort_by_key(|a| a.name.to_lowercase());
-            }
+        let should_reload = |name: &str| changed.contains(name) && !dirty.contains(name);
+        self.environments.retain(|env| !should_reload(&env.name));
+        self.environments.extend(
+            snapshot
+                .environments
+                .into_iter()
+                .filter(|env| should_reload(&env.name)),
+        );
+        self.environments.sort_by_key(|env| env.name.to_lowercase());
+        if should_reload("globals") {
+            self.global_environment = snapshot.globals;
         }
-
-        if let Some(g) = kept_globals {
-            self.global_environment = g;
+        self.corrupt_secrets_warning = snapshot.corrupt_secrets_warning;
+        if !self
+            .active_environment_id
+            .as_ref()
+            .is_some_and(|id| self.environments.iter().any(|env| &env.id == id))
+        {
+            self.set_active_environment(self.environments.first().map(|env| env.id.clone()), cx);
         }
 
         self.invalidate_cache();
@@ -484,17 +480,33 @@ impl EnvironmentState {
     }
 
     pub fn create_environment(&mut self, name: Option<String>, cx: &mut Context<Self>) -> String {
-        let env_name = name.unwrap_or_else(|| format!("env-{}", self.environments.len() + 1));
+        let env_name = name.unwrap_or_else(|| {
+            (self.environments.len() + 1..)
+                .map(|index| format!("env-{index}"))
+                .find(|name| !self.environment_name_in_use(name))
+                .expect("there is an unused default environment name")
+        });
+        if self.environment_name_in_use(&env_name) {
+            return env_name;
+        }
         let env_file = EnvironmentFile::default();
-        let _ = self.store.save_environment(&env_name, &env_file);
-        self.reload_environments();
-        cx.emit(EnvironmentEvent::EnvironmentsReloaded);
+        if let Err(error) = self.store.save_environment(&env_name, &env_file) {
+            crate::notify::error("Could Not Create Environment", error.to_string(), cx);
+            return env_name;
+        }
+        self.reload_environment_from_disk(&env_name, cx);
         if self.active_environment_id.is_none() {
             self.set_active_environment(Some(env_name.clone()), cx);
-        } else {
-            cx.notify();
         }
         env_name
+    }
+
+    fn environment_name_in_use(&self, name: &str) -> bool {
+        self.reserved_names.contains(&name.to_ascii_lowercase())
+            || self
+                .environments
+                .iter()
+                .any(|env| env.name.eq_ignore_ascii_case(name))
     }
 
     pub fn duplicate_environment(
@@ -508,56 +520,88 @@ impl EnvironmentState {
             .find(|e| e.id == env_id || e.name == env_id)?
             .clone();
         let new_name = format!("{}-copy", existing.name);
+        if self.environment_name_in_use(&new_name) {
+            crate::notify::error(
+                "Could Not Duplicate Environment",
+                "The copy already exists",
+                cx,
+            );
+            return None;
+        }
         let (env_file, secrets) = EnvironmentFile::from_environment(&existing);
-        let _ = self.store.save_environment(&new_name, &env_file);
-        let _ = self.store.save_secrets(&new_name, &secrets);
-        self.reload_environments();
-        cx.emit(EnvironmentEvent::EnvironmentsReloaded);
-        cx.notify();
+        if let Err(error) = self
+            .store
+            .save_environment(&new_name, &env_file)
+            .and_then(|()| self.store.save_secrets(&new_name, &secrets))
+        {
+            crate::notify::error("Could Not Duplicate Environment", error.to_string(), cx);
+            return None;
+        }
+        self.reload_environment_from_disk(&new_name, cx);
         Some(new_name)
     }
 
     pub fn rename_environment(&mut self, env_id: &str, new_name: String, cx: &mut Context<Self>) {
         let trimmed = new_name.trim();
-        if trimmed.is_empty() || env_id == "globals" {
+        if env_id == "globals" || trimmed == env_id {
             return;
         }
-        // Duplicate names would collide with the sibling env file on disk;
-        // the store also refuses the rename as a last line of defense.
-        if trimmed != env_id
-            && self
-                .environments
-                .iter()
-                .any(|e| e.id != env_id && (e.name == trimmed || e.id == trimmed))
+        if trimmed.is_empty()
+            || trimmed.eq_ignore_ascii_case("globals")
+            || trimmed.starts_with('.')
+            || trimmed.contains(['/', '\\', ':'])
         {
+            crate::notify::error(
+                "Could Not Rename Environment",
+                "Invalid environment name",
+                cx,
+            );
             return;
         }
-        let was_active = self.active_environment_id.as_deref() == Some(env_id);
-        let _ = self.store.rename_environment(env_id, trimmed);
-        if was_active {
-            self.active_environment_id = Some(trimmed.to_string());
-        }
-        self.reload_environments();
-        cx.emit(EnvironmentEvent::EnvironmentsReloaded);
-        if was_active {
-            cx.emit(EnvironmentEvent::ActiveEnvironmentChanged(
-                self.active_environment_id.clone(),
-            ));
-        }
-        cx.notify();
+        cx.emit(EnvironmentEvent::RenameRequested {
+            id: env_id.to_string(),
+            name: trimmed.to_string(),
+        });
     }
 
     pub fn delete_environment(&mut self, env_id: &str, cx: &mut Context<Self>) {
-        if env_id == "globals" {
-            return;
+        if env_id != "globals" {
+            cx.emit(EnvironmentEvent::DeleteRequested(env_id.to_string()));
         }
-        let _ = self.store.delete_environment(env_id);
-        self.reload_environments();
+    }
+
+    pub(super) fn finish_environment_operation(
+        &mut self,
+        id: &str,
+        new_name: Option<&str>,
+        cx: &mut Context<Self>,
+    ) -> Option<Environment> {
+        let index = self.environments.iter().position(|env| env.id == id)?;
+        let renamed = if let Some(name) = new_name {
+            let env = &mut self.environments[index];
+            env.id = name.to_string();
+            env.name = name.to_string();
+            let updated = env.clone();
+            self.environments.sort_by_key(|env| env.name.to_lowercase());
+            cx.emit(EnvironmentEvent::EnvironmentRenamed {
+                old_id: id.to_string(),
+                new_id: name.to_string(),
+            });
+            Some(updated)
+        } else {
+            self.environments.remove(index);
+            None
+        };
+        self.invalidate_cache();
         cx.emit(EnvironmentEvent::EnvironmentsReloaded);
-        if self.active_environment_id.as_deref() == Some(env_id) {
-            self.set_active_environment(self.environments.first().map(|e| e.id.clone()), cx);
+        if self.active_environment_id.as_deref() == Some(id) {
+            let next = new_name
+                .map(str::to_string)
+                .or_else(|| self.environments.first().map(|env| env.id.clone()));
+            self.set_active_environment(next, cx);
         }
         cx.notify();
+        renamed
     }
 }
 

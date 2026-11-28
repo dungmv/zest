@@ -6,12 +6,16 @@ use gpui_kit::{Context, Entity};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
-use zest_core::storage::{models::RequestFile, FsEvent, WorkspaceStore};
+use zest_core::storage::{
+    models::{RequestFile, WorkspaceMeta},
+    FsEvent, WorkspaceStore,
+};
 
 #[derive(Default)]
 struct WatchBatch {
     git_changed: bool,
     tree_changed: bool,
+    workspace_meta: Option<WorkspaceMeta>,
     changed_envs: HashSet<String>,
     changed_requests: HashSet<String>,
     deleted_requests: HashSet<String>,
@@ -28,10 +32,12 @@ struct RequestReload {
 impl WatchBatch {
     fn read(events: Vec<FsEvent>, store: &dyn WorkspaceStore, workspace_name: &str) -> Self {
         let mut batch = Self::default();
+        let mut workspace_meta_changed = false;
         for event in events {
             match event {
                 FsEvent::GitChanged => batch.git_changed = true,
                 FsEvent::TreeChanged => batch.tree_changed = true,
+                FsEvent::WorkspaceMetaChanged => workspace_meta_changed = true,
                 FsEvent::EnvironmentChanged(name) => {
                     batch.changed_envs.insert(name);
                 }
@@ -42,6 +48,11 @@ impl WatchBatch {
                     batch.deleted_requests.insert(id);
                 }
             }
+        }
+
+        if workspace_meta_changed {
+            batch.workspace_meta = store.load_workspace_meta().ok();
+            batch.git_changed = true;
         }
 
         // An atomic replace can deliver both removal and creation. Recognize
@@ -91,6 +102,20 @@ struct WatchTargets {
     git: Entity<GitState>,
 }
 
+struct WatchReadVersion {
+    revisions: HashMap<PersistTarget, u64>,
+    environment_operation_epoch: u64,
+}
+
+impl WatchReadVersion {
+    fn capture(state: &PersistenceState) -> Self {
+        Self {
+            revisions: state.coordinator.revisions(),
+            environment_operation_epoch: state.environment_operation_epoch,
+        }
+    }
+}
+
 impl PersistenceState {
     pub fn start_watcher(
         &mut self,
@@ -133,8 +158,7 @@ impl PersistenceState {
 
                 let snapshot = this.update(cx, |state, cx| {
                     let name = targets.environment.read(cx).workspace_name.clone();
-                    let revisions = state.coordinator.revisions();
-                    (name, revisions)
+                    (name, WatchReadVersion::capture(state))
                 });
                 let Ok((name, revisions)) = snapshot else {
                     break;
@@ -188,7 +212,7 @@ impl PersistenceState {
     ) {
         let name = &environment.read(cx).workspace_name;
         let batch = WatchBatch::read(events, self.store.as_ref(), name);
-        let revisions = self.coordinator.revisions();
+        let revisions = WatchReadVersion::capture(self);
         self.apply_watch_batch(
             batch,
             &WatchTargets {
@@ -205,7 +229,7 @@ impl PersistenceState {
         &mut self,
         batch: WatchBatch,
         targets: &WatchTargets,
-        before: &HashMap<PersistTarget, u64>,
+        before: &WatchReadVersion,
         cx: &mut Context<Self>,
     ) {
         let mut dirty_requests = self.dirty_request_ids();
@@ -216,7 +240,7 @@ impl PersistenceState {
             dirty_targets
                 .iter()
                 .chain(revisions.iter().filter_map(|(target, revision)| {
-                    (before.get(target) != Some(revision)).then_some(target)
+                    (before.revisions.get(target) != Some(revision)).then_some(target)
                 }))
         {
             match target {
@@ -230,6 +254,22 @@ impl PersistenceState {
                     dirty_envs.insert("globals".to_string());
                 }
                 _ => {}
+            }
+        }
+        dirty_envs.extend(self.changing_environment_names().map(str::to_string));
+
+        let meta_target = PersistTarget::WorkspaceMeta;
+        if let Some(meta) = batch.workspace_meta {
+            if !dirty_targets.contains(&meta_target)
+                && revisions.get(&meta_target) == before.revisions.get(&meta_target)
+            {
+                let store = self.store.clone();
+                targets.collection.update(cx, |_, cx| {
+                    cx.emit(CollectionEvent::WorkspaceMetaReloaded {
+                        meta: Box::new(meta),
+                        store,
+                    });
+                });
             }
         }
 
@@ -310,19 +350,27 @@ impl PersistenceState {
         }
 
         if let Some(snapshot) = batch.environment {
-            let conflicts = targets.environment.update(cx, |env, cx| {
-                let conflicts =
-                    env.apply_disk_changes(snapshot, &batch.changed_envs, &dirty_envs, cx);
-                cx.notify();
-                conflicts
-            });
-            for name in conflicts {
-                self.env_conflicts.insert(
-                    name,
-                    "Environment file was modified externally while you have unsaved changes."
-                        .to_string(),
-                );
-                self_changed = true;
+            if before.environment_operation_epoch != self.environment_operation_epoch {
+                if let Some(events) = &self.watcher_events {
+                    for name in batch.changed_envs {
+                        let _ = events.send(FsEvent::EnvironmentChanged(name));
+                    }
+                }
+            } else {
+                let conflicts = targets.environment.update(cx, |env, cx| {
+                    let conflicts =
+                        env.apply_disk_changes(snapshot, &batch.changed_envs, &dirty_envs, cx);
+                    cx.notify();
+                    conflicts
+                });
+                for name in conflicts {
+                    self.env_conflicts.insert(
+                        name,
+                        "Environment file was modified externally while you have unsaved changes."
+                            .to_string(),
+                    );
+                    self_changed = true;
+                }
             }
         }
 

@@ -195,13 +195,16 @@ pub fn render_request_inner_pill(
                     state.select_single_request(&r_id, cx);
                     state.record_navigation(&r_id);
                 });
+                let already_active = ed_s.read(cx).active_request_id() == r_id_click;
                 ed_s.update(cx, |state, cx| {
                     state.set_active_request_id(&r_id_click, cx);
                 });
-                let ws_store = ws_click.read(cx).store.clone();
-                resp_click.update(cx, |state, cx| {
-                    state.load_for_request(&r_id, ws_store.as_ref(), cx);
-                });
+                if already_active {
+                    let ws_store = ws_click.read(cx).store.clone();
+                    resp_click.update(cx, |state, cx| {
+                        state.load_for_request(&r_id, ws_store, cx);
+                    });
+                }
             }
         })
         .context_menu({

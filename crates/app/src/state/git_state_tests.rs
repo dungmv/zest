@@ -17,6 +17,40 @@ struct CommitModalHost {
     collection: Entity<CollectionState>,
 }
 
+#[gpui_kit::test]
+fn git_refreshes_follow_the_current_repo_and_file_selection(cx: &mut TestAppContext) {
+    let first = tempfile::tempdir().unwrap();
+    let second = tempfile::tempdir().unwrap();
+    for (path, content) in [(first.path(), "old repo"), (second.path(), "new repo")] {
+        zest_core::git::git_init(path).unwrap();
+        std::fs::write(path.join("first.txt"), content).unwrap();
+    }
+    std::fs::write(second.path().join("second.txt"), "selected diff").unwrap();
+    let git = cx.new(|_| GitState::new(first.path().to_path_buf()));
+    git.update(cx, |git, cx| {
+        git.open_modal(GitActiveModal::Commit, cx);
+        git.select_file("first.txt".into(), false, cx);
+        git.set_repo_path(second.path().to_path_buf(), cx);
+        assert!(git.modal.selected_file.is_none());
+        assert!(git.modal.diff_content.is_none());
+        git.open_modal(GitActiveModal::Commit, cx);
+        git.select_file("first.txt".into(), false, cx);
+        git.select_file("second.txt".into(), false, cx);
+    });
+    cx.run_until_parked();
+    git.read_with(cx, |git, _| {
+        assert_eq!(git.repo_path, second.path());
+        assert_eq!(git.changes().len(), 2);
+        assert_eq!(git.modal.selected_file.as_ref().unwrap().0, "second.txt");
+        assert!(git
+            .modal
+            .diff_content
+            .as_deref()
+            .unwrap()
+            .contains("selected diff"));
+    });
+}
+
 impl Render for CommitModalHost {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         div().size_full().child(GitCommitModal::new(

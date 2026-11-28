@@ -92,6 +92,9 @@ fn activate_workspace(
     this.state.persistence.update(cx, |per, cx| {
         per.set_workspace(store.clone(), path.to_path_buf(), cx);
     });
+    this.state
+        .git
+        .update(cx, |git, cx| git.set_repo_path(path.to_path_buf(), cx));
     this.state.env.update(cx, |env, cx| {
         *env = crate::state::EnvironmentState::empty(store.clone(), folder_name.to_string());
         cx.emit(EnvironmentEvent::EnvironmentsReloaded);
@@ -125,7 +128,7 @@ pub fn handle_collection_event(
             folder_name,
             store,
             announce_opened,
-            workspace_path,
+            ..
         } => {
             if !Arc::ptr_eq(store, &this.state.workspace.read(cx).store) {
                 return;
@@ -162,9 +165,6 @@ pub fn handle_collection_event(
             });
 
             if *announce_opened {
-                this.state
-                    .git
-                    .update(cx, |git, cx| git.set_repo_path(workspace_path.clone(), cx));
                 let col = this.state.collection.read(cx);
                 let next = local_state
                     .active_request
@@ -177,6 +177,28 @@ pub fn handle_collection_event(
                     .session
                     .update(cx, |session, cx| session.set_active_request_id(&next, cx));
             }
+        }
+        CollectionEvent::WorkspaceMetaReloaded { meta, store } => {
+            let persistence = this.state.persistence.read(cx);
+            if !Arc::ptr_eq(store, &persistence.store)
+                || persistence
+                    .coordinator
+                    .is_dirty(&crate::state::PersistTarget::WorkspaceMeta)
+            {
+                return;
+            }
+            let name = this.state.workspace.update(cx, |workspace, cx| {
+                workspace.apply_workspace_meta(meta.as_ref().clone(), cx);
+                workspace.workspace_name().to_string()
+            });
+            this.state.env.update(cx, |env, cx| {
+                env.workspace_name = name.clone();
+                env.invalidate_cache();
+                cx.notify();
+            });
+            this.state.collection.update(cx, |collection, cx| {
+                collection.set_workspace_scope(name, meta.headers.clone(), meta.auth.clone(), cx);
+            });
         }
         CollectionEvent::IdsRemapped(pairs) => {
             if pairs.is_empty() {
@@ -447,7 +469,7 @@ pub fn handle_session_event(
 
             let col_store = this.state.collection.read(cx).store.clone();
             this.state.response.update(cx, |resp, cx| {
-                resp.load_for_request(req_id, col_store.as_ref(), cx);
+                resp.load_for_request(req_id, col_store, cx);
             });
         }
         SessionEvent::RequestModified {
@@ -541,6 +563,27 @@ pub fn handle_environment_event(
             });
         }
         EnvironmentEvent::EnvironmentsReloaded => {}
+        EnvironmentEvent::RenameRequested { id, name } => {
+            let environment = this.state.env.clone();
+            this.state.persistence.update(cx, |persistence, cx| {
+                persistence.queue_environment_operation(environment, id, Some(name.clone()), cx);
+            });
+            return;
+        }
+        EnvironmentEvent::DeleteRequested(id) => {
+            let environment = this.state.env.clone();
+            this.state.persistence.update(cx, |persistence, cx| {
+                persistence.queue_environment_operation(environment, id, None, cx);
+            });
+            return;
+        }
+        EnvironmentEvent::EnvironmentRenamed { old_id, new_id } => {
+            this.state.modal.update(cx, |modal, cx| {
+                if modal.env_modal.selected_id.as_ref() == Some(old_id) {
+                    modal.select_modal_environment(Some(new_id.clone()), cx);
+                }
+            });
+        }
     }
 
     this.composer_inputs

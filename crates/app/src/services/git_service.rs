@@ -90,12 +90,16 @@ impl GitService {
         });
 
         let git = self.git.clone();
+        let generation = git.read(cx).repo_generation();
         cx.spawn(async move |cx| {
             let res = cx
                 .background_executor()
                 .spawn(async move { command() })
                 .await;
             cx.update(|cx| {
+                if git.read(cx).repo_generation() != generation {
+                    return;
+                }
                 git.update(cx, |git, cx| {
                     git.loading = false;
                     git.is_syncing = false;
@@ -139,9 +143,13 @@ impl GitService {
         });
 
         let git = self.git.clone();
+        let generation = git.read(cx).repo_generation();
         cx.spawn(async move |cx| {
             let res = cx.background_executor().spawn(async move { op() }).await;
             cx.update(|cx| {
+                if git.read(cx).repo_generation() != generation {
+                    return;
+                }
                 git.update(cx, |git, cx| {
                     git.is_syncing = false;
                     git.sync_message = None;
@@ -230,6 +238,7 @@ impl GitService {
         });
 
         let git = self.git.clone();
+        let generation = git.read(cx).repo_generation();
         cx.spawn(async move |cx| {
             let p_task = p.clone();
             let res = cx
@@ -239,6 +248,9 @@ impl GitService {
                 })
                 .await;
             cx.update(|cx| {
+                if git.read(cx).repo_generation() != generation {
+                    return;
+                }
                 let success = res.is_ok();
                 git.update(cx, |git, cx| {
                     git.loading = false;
@@ -247,8 +259,7 @@ impl GitService {
                             git.error = None;
                             if let Some((sel, _)) = &git.modal.selected_file {
                                 if sel == &p {
-                                    git.modal.selected_file = None;
-                                    git.modal.diff_content = None;
+                                    git.clear_file_selection();
                                 }
                             }
                             git.refresh_status(cx);
@@ -301,6 +312,7 @@ impl GitService {
         });
 
         let git = self.git.clone();
+        let generation = git.read(cx).repo_generation();
         let msg = message.to_string();
         cx.spawn(async move |cx| {
             let ws_commit = ws_path.clone();
@@ -326,6 +338,9 @@ impl GitService {
             };
 
             cx.update(|cx| {
+                if git.read(cx).repo_generation() != generation {
+                    return;
+                }
                 git.update(cx, |git, cx| {
                     git.loading = false;
                     git.is_syncing = false;
@@ -333,8 +348,7 @@ impl GitService {
                     match res {
                         Ok(_) => {
                             git.error = None;
-                            git.modal.selected_file = None;
-                            git.modal.diff_content = None;
+                            git.clear_file_selection();
                             git.modal.selected_commit_files.clear();
                             git.modal.commit_and_push = false;
                             git.close_modal(cx);
@@ -370,6 +384,7 @@ impl GitService {
         });
 
         let git = self.git.clone();
+        let generation = git.read(cx).repo_generation();
         cx.spawn(async move |cx| {
             let b_task = b.clone();
             let res = cx
@@ -377,6 +392,9 @@ impl GitService {
                 .spawn(async move { zest_core::git::git_checkout(&ws_path, &b_task) })
                 .await;
             cx.update(|cx| {
+                if git.read(cx).repo_generation() != generation {
+                    return;
+                }
                 git.update(cx, |git, cx| {
                     git.loading = false;
                     git.is_syncing = false;

@@ -1,6 +1,62 @@
 use super::*;
 
 #[gpui_kit::test]
+fn workspace_meta_changes_are_emitted_only_when_clean(cx: &mut gpui_kit::TestAppContext) {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    use zest_core::storage::FsEvent;
+
+    let (dir, store) = setup_test_workspace("Original");
+    let path = dir.path().to_path_buf();
+    let collection = cx.new(|_| CollectionState::new_for_path(path.clone(), store.clone()));
+    let env = cx.new(|_| EnvironmentState::new(store.clone(), "Original".into(), None));
+    let git = cx.new(|_| GitState::new(path.clone()));
+    let persistence = cx.new(|_| PersistenceState::new(store.clone(), path));
+    let reloads = Rc::new(RefCell::new(Vec::new()));
+    let recorded = reloads.clone();
+    let _listener = cx.new(|cx| {
+        cx.subscribe(&collection, move |_, _, event: &CollectionEvent, _| {
+            if let CollectionEvent::WorkspaceMetaReloaded { meta, .. } = event {
+                recorded.borrow_mut().push(meta.name.clone());
+            }
+        })
+        .detach();
+    });
+
+    store
+        .save_workspace_meta(&WorkspaceMeta {
+            name: "External".into(),
+            ..Default::default()
+        })
+        .unwrap();
+    let dispatch = |cx: &mut gpui_kit::TestAppContext| {
+        persistence.update(cx, |state, cx| {
+            state.handle_fs_event(
+                FsEvent::WorkspaceMetaChanged,
+                collection.clone(),
+                env.clone(),
+                git.clone(),
+                cx,
+            );
+        });
+    };
+    dispatch(cx);
+    assert_eq!(&*reloads.borrow(), &["External"]);
+
+    persistence.update(cx, |state, cx| {
+        state.schedule_save_workspace_meta(
+            WorkspaceMeta {
+                name: "Unsaved".into(),
+                ..Default::default()
+            },
+            cx,
+        );
+    });
+    dispatch(cx);
+    assert_eq!(&*reloads.borrow(), &["External"]);
+}
+
+#[gpui_kit::test]
 fn test_fs_batch_recreated_request_not_dropped(cx: &mut gpui_kit::TestAppContext) {
     use zest_core::storage::FsEvent;
 

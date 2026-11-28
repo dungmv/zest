@@ -211,7 +211,7 @@ pub fn render_example_row(
                                 if is_this_ex_active {
                                     let store = ws.store.clone();
                                     resp_del.update(cx, |s, cx| {
-                                        s.load_for_request(&r_id_del, store.as_ref(), cx);
+                                        s.load_for_request(&r_id_del, store, cx);
                                     });
                                 }
                             });

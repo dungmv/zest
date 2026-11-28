@@ -1,4 +1,5 @@
 use super::*;
+use gpui_kit::AppContext as _;
 use zest_core::models::ConsoleLogSource;
 use zest_core::models::Protocol;
 
@@ -193,10 +194,10 @@ fn test_large_response_body_formatting() {
     assert!(!fmt_raw.lines.is_empty());
 }
 
-#[test]
-fn test_load_for_request_from_cache() {
+#[gpui_kit::test]
+fn test_load_for_request_from_cache(cx: &mut gpui_kit::TestAppContext) {
     let temp = tempfile::tempdir().unwrap();
-    let store = zest_core::storage::FsWorkspaceStore::new(temp.path());
+    let store = Arc::new(zest_core::storage::FsWorkspaceStore::new(temp.path()));
     store.init_workspace("Test WS").unwrap();
     let (_, rel_path) = store
         .create_request(
@@ -228,32 +229,39 @@ fn test_load_for_request_from_cache() {
     };
     store.save_response_cache(&rel_path, &loc_file).unwrap();
 
-    let mut state = ResponseState::new();
-    assert!(state.current_response.is_none());
-
-    state.load_for_request_internal(&rel_path, &store);
-    assert!(state.current_response.is_some());
-    let resp = state.current_response.as_ref().unwrap();
-    assert_eq!(resp.status_code, 200);
-    assert_eq!(resp.status_text, "OK");
-    assert_eq!(resp.duration_ms, 42);
-    assert_eq!(String::from_utf8_lossy(&resp.body), r#"{"token":"xyz"}"#);
-    assert!(state.formatted_body.is_some());
-
-    let mut cached = resp.as_ref().clone();
-    cached.console_logs.push(ConsoleLogEntry {
-        source: ConsoleLogSource::PostResponse,
-        level: ConsoleLogLevel::Log,
-        message: r#"{"authenticated":true}"#.into(),
-        timestamp: "10:00:00".into(),
+    let state = cx.new(|_| ResponseState::new());
+    state.update(cx, |state, cx| {
+        state.load_for_request(&rel_path, store.clone(), cx);
+        assert!(state.current_response.is_none());
     });
-    state.cache.insert(rel_path.clone(), Arc::new(cached));
-    state.load_for_request_internal(&rel_path, &store);
-    assert_eq!(state.console_logs.len(), 1);
-    assert_eq!(state.console_list.item_count(), 1);
+    cx.run_until_parked();
+    state.update(cx, |state, cx| {
+        let resp = state.current_response.as_ref().unwrap();
+        assert_eq!(resp.status_code, 200);
+        assert_eq!(resp.status_text, "OK");
+        assert_eq!(resp.duration_ms, 42);
+        assert_eq!(String::from_utf8_lossy(&resp.body), r#"{"token":"xyz"}"#);
+        assert!(state.formatted_body.is_some());
 
-    state.load_for_request_internal("missing", &store);
-    assert_eq!(state.console_list.item_count(), 0);
+        let mut cached = resp.as_ref().clone();
+        cached.console_logs.push(ConsoleLogEntry {
+            source: ConsoleLogSource::PostResponse,
+            level: ConsoleLogLevel::Log,
+            message: r#"{"authenticated":true}"#.into(),
+            timestamp: "10:00:00".into(),
+        });
+        state.cache.insert(rel_path.clone(), Arc::new(cached));
+        state.load_for_request(&rel_path, store.clone(), cx);
+        assert_eq!(state.console_logs.len(), 1);
+        assert_eq!(state.console_list.item_count(), 1);
+
+        state.cache.remove(&rel_path);
+        state.load_for_request(&rel_path, store.clone(), cx);
+        state.load_for_request("missing", store, cx);
+        assert_eq!(state.console_list.item_count(), 0);
+    });
+    cx.run_until_parked();
+    assert!(state.read_with(cx, |state, _| state.current_response.is_none()));
 }
 
 #[test]

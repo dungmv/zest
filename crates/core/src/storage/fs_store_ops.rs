@@ -478,31 +478,11 @@ impl WorkspaceStore for FsWorkspaceStore {
     }
 
     fn delete_environment(&self, name: &str) -> Result<()> {
-        let path = self.environments_dir().join(format!("{}.yaml", name));
-        let _ = self.writer.remove_file(&path);
-        let secret_path = self.secrets_dir().join(format!("{}.yaml", name));
-        let _ = self.writer.remove_file(&secret_path);
-        Ok(())
+        self.delete_environment_files(name)
     }
 
     fn rename_environment(&self, old_name: &str, new_name: &str) -> Result<()> {
-        let old_path = self.environments_dir().join(format!("{}.yaml", old_name));
-        let new_path = self.environments_dir().join(format!("{}.yaml", new_name));
-        // Never silently overwrite an existing environment: `fs::rename` would
-        // replace the sibling file on both Windows and Unix.
-        let new_sec = self.secrets_dir().join(format!("{}.yaml", new_name));
-        if new_path != old_path && (new_path.exists() || new_sec.exists()) {
-            anyhow::bail!("Environment '{}' already exists", new_name);
-        }
-        if old_path.exists() {
-            self.writer.rename_file(&old_path, &new_path)?;
-        }
-
-        let old_sec = self.secrets_dir().join(format!("{}.yaml", old_name));
-        if old_sec.exists() {
-            let _ = self.writer.rename_file(&old_sec, &new_sec);
-        }
-        Ok(())
+        self.rename_environment_files(old_name, new_name)
     }
 
     fn load_secrets(&self, env_name: &str) -> Result<HashMap<String, String>> {

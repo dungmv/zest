@@ -52,6 +52,7 @@ impl AppState {
         let git = cx.new(|_| GitState::new(ws_dir));
         git.update(cx, |g, cx| {
             g.refresh_status(cx);
+            g.refresh_branches(cx);
         });
 
         let sidebar = cx.new(|_| SidebarState::new());

@@ -12,6 +12,80 @@ fn setup_test_workspace(name: &str) -> (tempfile::TempDir, std::sync::Arc<FsWork
     (dir, store)
 }
 
+#[gpui_kit::test]
+fn environment_rename_preserves_pending_and_concurrent_edits(cx: &mut gpui_kit::TestAppContext) {
+    let (dir, store) = setup_test_workspace("EnvironmentRename");
+    let environment =
+        cx.new(|_| EnvironmentState::new(store.clone(), "EnvironmentRename".into(), None));
+    let persistence = cx.new(|_| PersistenceState::new(store.clone(), dir.path().to_path_buf()));
+    let edit = |value: &str, cx: &mut gpui_kit::TestAppContext| {
+        let snapshot = environment.update(cx, |env, _| {
+            let local = env
+                .environments
+                .iter_mut()
+                .find(|env| env.id == "local")
+                .unwrap();
+            local.variables = vec![zest_core::models::EnvironmentVariable {
+                key: "TOKEN".into(),
+                initial_value: value.into(),
+                current_value: value.into(),
+                secret: true,
+            }];
+            local.clone()
+        });
+        persistence.update(cx, |state, cx| {
+            state.schedule_save_environment("local".into(), snapshot, cx);
+        });
+    };
+    edit("pending", cx);
+    persistence.update(cx, |state, cx| {
+        state.queue_environment_operation(environment.clone(), "local", Some("renamed".into()), cx);
+    });
+    edit("latest", cx);
+    cx.run_until_parked();
+
+    assert!(!store.list_environments().unwrap().contains(&"local".into()));
+    assert_eq!(store.load_secrets("renamed").unwrap()["TOKEN"], "pending");
+    environment.read_with(cx, |env, _| {
+        let active = env.active_environment().unwrap();
+        assert_eq!(active.id, "renamed");
+        assert_eq!(active.variables[0].current_value, "latest");
+    });
+
+    cx.executor().advance_clock(Duration::from_millis(500));
+    cx.run_until_parked();
+    assert_eq!(store.load_secrets("renamed").unwrap()["TOKEN"], "latest");
+    assert!(store.load_secrets("local").unwrap().is_empty());
+}
+
+#[gpui_kit::test]
+fn environment_delete_waits_for_in_flight_save(cx: &mut gpui_kit::TestAppContext) {
+    let (dir, store) = setup_test_workspace("EnvironmentDelete");
+    let environment =
+        cx.new(|_| EnvironmentState::new(store.clone(), "EnvironmentDelete".into(), None));
+    let persistence = cx.new(|_| PersistenceState::new(store.clone(), dir.path().to_path_buf()));
+    let snapshot = environment.read_with(cx, |env, _| env.active_environment().unwrap().clone());
+    let target = PersistTarget::Environment("local".into());
+    persistence.update(cx, |state, cx| {
+        state.schedule_save_environment("local".into(), snapshot.clone(), cx);
+        state.flush_target_if_ready(&target, cx);
+        assert!(state.coordinator.is_in_flight(&target));
+        state.schedule_save_environment("local".into(), snapshot, cx);
+        state.queue_environment_operation(environment.clone(), "local", None, cx);
+    });
+    cx.run_until_parked();
+    cx.executor().advance_clock(Duration::from_millis(1000));
+    cx.run_until_parked();
+
+    assert!(!store.list_environments().unwrap().contains(&"local".into()));
+    assert!(!store.secrets_dir().join("local.yaml").exists());
+    assert!(environment.read_with(cx, |env, _| env.environments.is_empty()));
+    assert_eq!(
+        persistence.read_with(cx, |state, _| state.target_status(&target)),
+        TargetStatus::Clean
+    );
+}
+
 #[test]
 fn test_coordinator_independent_targets_do_not_interfere() {
     let mut coord = PersistenceCoordinator::new();

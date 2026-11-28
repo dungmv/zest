@@ -12,7 +12,8 @@ pub enum FsEvent {
     RequestChanged(String),     // rel_path of request e.g. "auth/login.yaml"
     RequestDeleted(String),     // rel_path of request
     EnvironmentChanged(String), // env name
-    TreeChanged,                // collections folder structure or workspace.yaml
+    TreeChanged,                // collections folder structure
+    WorkspaceMetaChanged,       // workspace.yaml
     GitChanged,                 // Git index, HEAD, refs, or repository status changed
 }
 
@@ -145,7 +146,7 @@ pub fn start_workspace_watcher(
                         }
 
                         if rel_str == "workspace.yaml" {
-                            pending_events.insert(FsEvent::TreeChanged);
+                            pending_events.insert(FsEvent::WorkspaceMetaChanged);
                         } else if rel_str.starts_with("environments/") && rel_str.ends_with(".yaml")
                         {
                             if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
@@ -238,7 +239,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_watcher_git_and_collections_events() {
+    async fn test_watcher_git_collections_and_workspace_meta_events() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         std::fs::create_dir_all(root.join(".git").join("refs").join("heads")).unwrap();
@@ -257,6 +258,7 @@ mod tests {
         std::fs::write(root.join(".git").join("index.lock"), "lock").unwrap();
         // 4. Modify a request externally
         std::fs::write(root.join("collections").join("req.yaml"), "name: Req\n").unwrap();
+        std::fs::write(root.join("workspace.yaml"), "name: Edited\n").unwrap();
 
         let mut received = HashSet::new();
         let deadline = std::time::Instant::now() + Duration::from_secs(3);
@@ -267,6 +269,7 @@ mod tests {
                 received.insert(event);
                 if received.contains(&FsEvent::GitChanged)
                     && received.contains(&FsEvent::RequestChanged("req.yaml".to_string()))
+                    && received.contains(&FsEvent::WorkspaceMetaChanged)
                 {
                     break;
                 }
@@ -281,6 +284,8 @@ mod tests {
             received.contains(&FsEvent::RequestChanged("req.yaml".to_string())),
             "Expected RequestChanged event"
         );
+        assert!(received.contains(&FsEvent::WorkspaceMetaChanged));
+        assert!(!received.contains(&FsEvent::TreeChanged));
     }
 
     #[tokio::test]

@@ -5,7 +5,7 @@ use crate::storage::models::{
 };
 use crate::storage::serialize::AtomicWriter;
 use crate::storage::slug::loc_path_for_yaml;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -51,6 +51,57 @@ impl FsWorkspaceStore {
 
     pub fn secrets_dir(&self) -> PathBuf {
         self.local_dir().join("secrets")
+    }
+
+    pub(super) fn delete_environment_files(&self, name: &str) -> Result<()> {
+        let path = self.environments_dir().join(format!("{}.yaml", name));
+        let secret_path = self.secrets_dir().join(format!("{}.yaml", name));
+        if !path.try_exists()? {
+            return Ok(self.writer.remove_file(&secret_path)?);
+        }
+
+        let staging_dir = self.local_dir().join("tmp");
+        std::fs::create_dir_all(&staging_dir)?;
+        let staged = staging_dir.join(format!("deleted-env-{}.tmp", uuid::Uuid::new_v4()));
+        self.writer.rename_file(&path, &staged)?;
+        if let Err(error) = self.writer.remove_file(&secret_path) {
+            self.writer.rename_file(&staged, &path).with_context(|| {
+                format!("Could not restore environment '{name}' after deletion failed: {error}")
+            })?;
+            return Err(error.into());
+        }
+        // Deletion is committed once the secret file is removed.
+        let _ = self.writer.remove_file(&staged);
+        Ok(())
+    }
+
+    pub(super) fn rename_environment_files(&self, old_name: &str, new_name: &str) -> Result<()> {
+        if old_name == new_name {
+            return Ok(());
+        }
+        let old_path = self.environments_dir().join(format!("{}.yaml", old_name));
+        let new_path = self.environments_dir().join(format!("{}.yaml", new_name));
+        // Never silently overwrite an existing environment: `fs::rename` would
+        // replace the sibling file on both Windows and Unix.
+        let new_sec = self.secrets_dir().join(format!("{}.yaml", new_name));
+        if new_path.try_exists()? || new_sec.try_exists()? {
+            anyhow::bail!("Environment '{}' already exists", new_name);
+        }
+
+        let old_sec = self.secrets_dir().join(format!("{}.yaml", old_name));
+        let moved_secrets = old_sec.try_exists()?;
+        if moved_secrets {
+            self.writer.rename_file(&old_sec, &new_sec)?;
+        }
+        if let Err(error) = self.writer.rename_file(&old_path, &new_path) {
+            if moved_secrets {
+                self.writer.rename_file(&new_sec, &old_sec).with_context(|| {
+                    format!("Could not restore secrets for '{old_name}' after rename failed: {error}")
+                })?;
+            }
+            return Err(error.into());
+        }
+        Ok(())
     }
 
     pub(super) fn scan_folder(

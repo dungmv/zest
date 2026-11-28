@@ -1,5 +1,5 @@
 use super::ResponseEvent;
-use gpui_kit::Context;
+use gpui_kit::{Context, Task};
 use std::sync::Arc;
 use zest_core::cache::ResponseCache;
 use zest_core::grpc::GrpcCallSummary;
@@ -90,6 +90,7 @@ pub struct ResponseState {
     pub scroll_handle: gpui_kit::UniformListScrollHandle,
     pub wrap_lines: bool,
     pub realtime: RealtimeResponseState,
+    sidecar_load: Option<Task<()>>,
 }
 
 impl ResponseState {
@@ -112,6 +113,7 @@ impl ResponseState {
             scroll_handle: gpui_kit::UniformListScrollHandle::new(),
             wrap_lines: false,
             realtime: RealtimeResponseState::new(),
+            sidecar_load: None,
         }
     }
 
@@ -128,17 +130,9 @@ impl ResponseState {
         cx.notify();
     }
 
-    pub fn load_for_request_internal(&mut self, req_id: &str, store: &dyn WorkspaceStore) {
+    fn apply_loaded_response(&mut self, response: Option<Arc<HttpResponseRecord>>) {
         self.active_example_name = None;
-        if let Some(cached) = self.cache.get(&req_id.to_string()).cloned() {
-            self.current_response = Some(cached);
-        } else if let Ok(Some(loc)) = store.load_response_cache(req_id) {
-            let record = Arc::new(loc.to_record(req_id));
-            self.cache.insert(req_id.to_string(), record.clone());
-            self.current_response = Some(record);
-        } else {
-            self.current_response = None;
-        }
+        self.current_response = response;
         if let Some(response) = self.current_response.clone() {
             self.load_console_output(&response);
         } else {
@@ -155,10 +149,42 @@ impl ResponseState {
     pub fn load_for_request(
         &mut self,
         req_id: &str,
-        store: &dyn WorkspaceStore,
+        store: Arc<dyn WorkspaceStore>,
         cx: &mut Context<Self>,
     ) {
-        self.load_for_request_internal(req_id, store);
+        self.sidecar_load = None;
+        let id = req_id.to_string();
+        let cached = self.cache.get(&id).cloned();
+        let read_sidecar = cached.is_none() && !matches!(req_id, "" | "scratch");
+        self.apply_loaded_response(cached);
+        self.notify_loaded_response(cx);
+        if read_sidecar {
+            self.sidecar_load = Some(cx.spawn(async move |this, cx| {
+                let id_for_read = id.clone();
+                let record = cx
+                    .background_executor()
+                    .spawn(async move {
+                        store
+                            .load_response_cache(&id_for_read)
+                            .ok()
+                            .flatten()
+                            .map(|loc| Arc::new(loc.to_record(&id_for_read)))
+                    })
+                    .await;
+                if let Some(record) = record {
+                    let _ = this.update(cx, |state, cx| {
+                        state.cache.insert(id, record.clone());
+                        if state.active_example_name.is_none() {
+                            state.apply_loaded_response(Some(record));
+                            state.notify_loaded_response(cx);
+                        }
+                    });
+                }
+            }));
+        }
+    }
+
+    fn notify_loaded_response(&self, cx: &mut Context<Self>) {
         cx.emit(ResponseEvent::ContentChanged {
             sync_sent_preview: true,
         });
@@ -166,6 +192,7 @@ impl ResponseState {
     }
 
     pub fn start_sending_internal(&mut self, req_id: Option<&str>) {
+        self.sidecar_load = None;
         if let Some(id) = req_id {
             self.cache.remove(&id.to_string());
         }
@@ -204,6 +231,7 @@ impl ResponseState {
         response: Arc<HttpResponseRecord>,
         cx: &mut Context<Self>,
     ) {
+        self.sidecar_load = None;
         self.active_example_name = None;
         self.load_console_output(&response);
 
@@ -265,18 +293,9 @@ impl ResponseState {
     }
 
     pub fn restore_live_response(&mut self, req_id: &str, cx: &mut Context<Self>) {
-        self.active_example_name = None;
-        if let Some(resp) = self.cache.get(&req_id.to_string()).cloned() {
-            self.current_response = Some(resp);
-        }
-        self.ui.jsonpath_query.clear();
-        self.scroll_handle = gpui_kit::UniformListScrollHandle::new();
-        self.refresh_formatted_body();
-        self.reconcile_view_mode_for_response();
-        cx.emit(ResponseEvent::ContentChanged {
-            sync_sent_preview: true,
-        });
-        cx.notify();
+        let response = self.cache.get(&req_id.to_string()).cloned();
+        self.apply_loaded_response(response);
+        self.notify_loaded_response(cx);
     }
 
     pub fn rename_example(&mut self, old_name: &str, new_name: &str, cx: &mut Context<Self>) {
@@ -374,6 +393,7 @@ impl ResponseState {
         response: Option<Arc<HttpResponseRecord>>,
         cx: &mut Context<Self>,
     ) {
+        self.sidecar_load = None;
         if let Some(r) = &response {
             self.load_console_output(r);
         }

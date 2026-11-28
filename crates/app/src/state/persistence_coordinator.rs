@@ -294,6 +294,10 @@ impl PersistenceCoordinator {
             .collect()
     }
 
+    pub(crate) fn revision(&self, target: &PersistTarget) -> Option<u64> {
+        self.entries.get(target).map(|entry| entry.current_revision)
+    }
+
     pub fn dirty_targets(&self) -> Vec<PersistTarget> {
         self.entries
             .iter()

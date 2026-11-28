@@ -84,6 +84,17 @@ pub struct GitModalUiState {
     pub commit_and_push: bool,
 }
 
+#[derive(Debug, Clone, Default)]
+struct GitQueries {
+    repo: u64,
+    status: u64,
+    diff: u64,
+    history: u64,
+    commit: u64,
+    branches: u64,
+    remotes: u64,
+}
+
 #[derive(Debug, Clone)]
 pub struct GitState {
     pub repo_path: PathBuf,
@@ -100,6 +111,7 @@ pub struct GitState {
     pub sync_message: Option<String>,
     pub status_version: usize,
     pub modal: GitModalUiState,
+    queries: GitQueries,
 }
 
 impl Default for GitState {
@@ -122,6 +134,7 @@ impl Default for GitState {
                 tab: GitTab::Changes,
                 ..Default::default()
             },
+            queries: GitQueries::default(),
         }
     }
 }
@@ -159,30 +172,21 @@ impl GitState {
     }
 
     pub fn set_repo_path(&mut self, path: PathBuf, cx: &mut Context<Self>) {
-        self.repo_path = path;
-        let fast = zest_core::git::detect_git_repo_fast(&self.repo_path);
-        match fast {
-            Some((_root, branch_opt)) => {
-                let branch_name = branch_opt.unwrap_or_else(|| "main".to_string());
-                self.branch = Some(branch_name.clone());
-                self.status = Some(GitStatusResult {
-                    is_repo: true,
-                    branch: branch_name,
-                    ..Default::default()
-                });
-            }
-            None => {
-                self.branch = None;
-                self.status = Some(GitStatusResult {
-                    is_repo: false,
-                    ..Default::default()
-                });
-            }
-        }
-        self.changes = GitChanges::default();
-        self.modal.selected_commit_files.clear();
-        self.status_version = self.status_version.wrapping_add(1);
+        *self = Self {
+            repo_path: path,
+            status_version: self.status_version.wrapping_add(1),
+            queries: GitQueries {
+                repo: self.queries.repo.wrapping_add(1),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
         self.refresh_all(cx);
+        cx.notify();
+    }
+
+    pub(crate) fn repo_generation(&self) -> u64 {
+        self.queries.repo
     }
 
     pub fn open_modal(&mut self, modal: GitActiveModal, cx: &mut Context<Self>) {
@@ -211,6 +215,8 @@ impl GitState {
 
     pub fn close_modal(&mut self, cx: &mut Context<Self>) -> bool {
         if self.modal.is_open || self.modal.active.is_some() {
+            self.queries.diff = self.queries.diff.wrapping_add(1);
+            self.queries.commit = self.queries.commit.wrapping_add(1);
             self.modal.active = None;
             self.modal.is_open = false;
             self.error = None;
@@ -250,6 +256,8 @@ impl GitState {
     }
 
     pub fn refresh_remotes(&mut self, cx: &mut Context<Self>) {
+        self.queries.remotes = self.queries.remotes.wrapping_add(1);
+        let version = (self.queries.repo, self.queries.remotes);
         let ws_path = self.repo_path.clone();
         cx.spawn(async move |this, cx| {
             let remotes = cx
@@ -259,6 +267,9 @@ impl GitState {
             if let Some(remotes) = remotes {
                 if let Some(this) = this.upgrade() {
                     this.update(cx, |git, cx| {
+                        if version != (git.queries.repo, git.queries.remotes) {
+                            return;
+                        }
                         git.remotes = remotes;
                         cx.notify();
                     });
@@ -269,106 +280,69 @@ impl GitState {
     }
 
     pub fn refresh_status(&mut self, cx: &mut Context<Self>) {
+        self.queries.status = self.queries.status.wrapping_add(1);
+        let status_version = (self.queries.repo, self.queries.status);
+        let diff_version = self.queries.diff;
         let ws_path = self.repo_path.clone();
-        let show_modal = self.modal.is_open;
-        let selected_file = self.modal.selected_file.clone();
-
         cx.spawn(async move |this, cx| {
-            let ws_status = ws_path.clone();
-            let status_res = cx
+            let result = cx
                 .background_executor()
                 .spawn(async move {
-                    zest_core::git::git_status(&ws_status).map(|status| {
+                    zest_core::git::git_status(&ws_path).map(|status| {
                         let changes = GitChanges::from_status(&status);
                         (status, changes)
                     })
                 })
                 .await;
 
-            let (st, changes) = match status_res {
-                Ok(result) => result,
-                Err(e) => {
-                    if let Some(this_ent) = this.upgrade() {
-                        this_ent.update(cx, |git, cx| {
-                            git.error = Some(e.to_string());
-                            cx.notify();
-                        });
-                    }
+            let _ = this.update(cx, |git, cx| {
+                if status_version != (git.queries.repo, git.queries.status) {
                     return;
                 }
-            };
 
-            let diff_result = if show_modal {
-                // Keep the selected file if it still has pending changes; the diff
-                // mode follows its current category (working tree takes priority).
-                let picked_file = selected_file
-                    .and_then(|(path, _)| changes.get(&path))
-                    .or_else(|| changes.rows.first());
+                let (status, changes) = match result {
+                    Ok(result) => result,
+                    Err(error) => {
+                        git.error = Some(error.to_string());
+                        cx.notify();
+                        return;
+                    }
+                };
+                git.branch =
+                    (status.is_repo && !status.branch.is_empty()).then(|| status.branch.clone());
+                git.modal
+                    .selected_commit_files
+                    .retain(|path| changes.by_path.contains_key(path));
 
-                if let Some(file) = picked_file {
-                    let path = file.path.clone();
-                    let staged = !file.has_worktree_changes;
-                    let ws_diff = ws_path.clone();
-                    let p = path.clone();
-                    let diff_content = cx
-                        .background_executor()
-                        .spawn(async move {
-                            match zest_core::git::git_diff(&ws_diff, Some(&p), staged) {
-                                Ok(d) => Some(d),
-                                Err(e) => Some(format!("Error loading diff: {}", e)),
-                            }
-                        })
-                        .await;
-                    Some((Some((path, staged)), diff_content))
-                } else {
-                    Some((None, None))
+                if git.modal.is_open && diff_version == git.queries.diff {
+                    // Follow the selected file across staging changes and fall
+                    // back to the first changed file when it is no longer listed.
+                    let selected = git
+                        .modal
+                        .selected_file
+                        .as_ref()
+                        .and_then(|(path, _)| changes.get(path))
+                        .or_else(|| changes.rows.first());
+                    if let Some(file) = selected {
+                        git.select_file(file.path.clone(), !file.has_worktree_changes, cx);
+                    } else {
+                        git.clear_file_selection();
+                    }
                 }
-            } else {
-                None
-            };
 
-            let branches_res = if let Some(this_ent) = this.upgrade() {
-                let need_branches = this_ent.read_with(cx, |this, _| this.branches.is_empty());
-                if need_branches {
-                    let ws_b = ws_path.clone();
-                    cx.background_executor()
-                        .spawn(async move { zest_core::git::git_branches(&ws_b).ok() })
-                        .await
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-
-            if let Some(this_ent) = this.upgrade() {
-                this_ent.update(cx, |git, cx| {
-                    if st.is_repo && !st.branch.is_empty() {
-                        git.branch = Some(st.branch.clone());
-                    }
-                    git.modal
-                        .selected_commit_files
-                        .retain(|path| changes.by_path.contains_key(path));
-
-                    if let Some((file_sel, diff_content)) = diff_result {
-                        git.modal.selected_file = file_sel;
-                        git.modal.diff_content = diff_content;
-                    }
-
-                    if let Some(branches) = branches_res {
-                        git.branches = branches;
-                    }
-                    git.status = Some(st);
-                    git.changes = changes;
-                    git.status_version = git.status_version.wrapping_add(1);
-                    cx.notify();
-                });
-            }
+                git.status = Some(status);
+                git.changes = changes;
+                git.status_version = git.status_version.wrapping_add(1);
+                cx.notify();
+            });
         })
         .detach();
     }
 
-    pub fn load_diff(&mut self, file_path: &str, staged: bool, cx: &mut Context<Self>) {
+    fn load_diff(&mut self, file_path: &str, staged: bool, cx: &mut Context<Self>) {
+        self.queries.diff = self.queries.diff.wrapping_add(1);
+        let version = (self.queries.repo, self.queries.diff);
+        cx.notify();
         let ws_path = self.repo_path.clone();
         let path = file_path.to_string();
         cx.spawn(async move |this, cx| {
@@ -378,6 +352,9 @@ impl GitState {
                 .await;
             if let Some(this) = this.upgrade() {
                 this.update(cx, |git, cx| {
+                    if version != (git.queries.repo, git.queries.diff) {
+                        return;
+                    }
                     match res {
                         Ok(d) => git.modal.diff_content = Some(d),
                         Err(e) => {
@@ -392,6 +369,9 @@ impl GitState {
     }
 
     pub fn refresh_history(&mut self, cx: &mut Context<Self>) {
+        self.queries.history = self.queries.history.wrapping_add(1);
+        let version = (self.queries.repo, self.queries.history);
+        let commit_version = self.queries.commit;
         let ws_path = self.repo_path.clone();
         let needs_first = self.modal.selected_commit.is_none();
         cx.spawn(async move |this, cx| {
@@ -417,7 +397,12 @@ impl GitState {
 
                 if let Some(this) = this.upgrade() {
                     this.update(cx, |git, cx| {
-                        if let Some(detail) = first_detail {
+                        if version != (git.queries.repo, git.queries.history) {
+                            return;
+                        }
+                        if let Some(detail) =
+                            first_detail.filter(|_| commit_version == git.queries.commit)
+                        {
                             git.modal.selected_commit = Some(detail);
                         }
                         git.history = commits;
@@ -430,6 +415,8 @@ impl GitState {
     }
 
     pub fn refresh_branches(&mut self, cx: &mut Context<Self>) {
+        self.queries.branches = self.queries.branches.wrapping_add(1);
+        let version = (self.queries.repo, self.queries.branches);
         let ws_path = self.repo_path.clone();
         cx.spawn(async move |this, cx| {
             let branches = cx
@@ -439,6 +426,9 @@ impl GitState {
             if let Some(branches) = branches {
                 if let Some(this) = this.upgrade() {
                     this.update(cx, |git, cx| {
+                        if version != (git.queries.repo, git.queries.branches) {
+                            return;
+                        }
                         git.branches = branches;
                         cx.notify();
                     });
@@ -449,11 +439,23 @@ impl GitState {
     }
 
     pub fn select_file(&mut self, path: String, staged: bool, cx: &mut Context<Self>) {
-        self.modal.selected_file = Some((path.clone(), staged));
+        let selected = (path.clone(), staged);
+        if self.modal.selected_file.as_ref() != Some(&selected) {
+            self.modal.diff_content = None;
+            self.modal.selected_file = Some(selected);
+        }
         self.load_diff(&path, staged, cx);
     }
 
+    pub(crate) fn clear_file_selection(&mut self) {
+        self.queries.diff = self.queries.diff.wrapping_add(1);
+        self.modal.selected_file = None;
+        self.modal.diff_content = None;
+    }
+
     pub fn select_commit(&mut self, hash: &str, cx: &mut Context<Self>) {
+        self.queries.commit = self.queries.commit.wrapping_add(1);
+        let version = (self.queries.repo, self.queries.commit);
         self.modal.expanded_history_files.clear();
         let ws_path = self.repo_path.clone();
         let h = hash.to_string();
@@ -465,6 +467,9 @@ impl GitState {
             if let Some(detail) = detail {
                 if let Some(this) = this.upgrade() {
                     this.update(cx, |git, cx| {
+                        if version != (git.queries.repo, git.queries.commit) {
+                            return;
+                        }
                         git.modal.selected_commit = Some(detail);
                         cx.notify();
                     });
