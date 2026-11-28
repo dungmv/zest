@@ -482,7 +482,7 @@ fn render_request_label(
                 .justify_center()
                 .cursor_pointer()
                 .hover(|s| s.text_color(t.sidebar_foreground))
-                .text_color(t.sidebar_icon)
+                .text_color(t.icon_muted)
                 .child(
                     Icon::new(if is_req_collapsed {
                         IconName::ChevronRight

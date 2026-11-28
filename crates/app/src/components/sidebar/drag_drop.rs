@@ -84,7 +84,7 @@ impl Render for DragFolderItem {
             .child(
                 Icon::new(IconName::Folder)
                     .size(px(14.))
-                    .text_color(t.sidebar_icon),
+                    .text_color(t.icon_muted),
             )
             .child(
                 div()
@@ -134,7 +134,7 @@ impl Render for DragMultiItem {
             .child(
                 Icon::new(IconName::Folder)
                     .size(px(14.))
-                    .text_color(t.sidebar_icon),
+                    .text_color(t.icon_muted),
             )
             .child(
                 div()

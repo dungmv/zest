@@ -129,16 +129,16 @@ pub(super) fn render_body_toolbar(ri: &ResponseInspector, props: BodyToolbarProp
                 .when(props.jsonpath_active, |this| {
                     let rs_f = rs.clone();
                     let jp_in = props.jsonpath_input.clone();
-                    let filter_icon = if props.show_jsonpath_bar {
-                        Icon::new(IconName::Funnel).text_color(t.primary)
+                    let filter_color = if props.show_jsonpath_bar {
+                        t.accent_text
                     } else {
-                        Icon::new(IconName::Funnel)
+                        t.icon_muted
                     };
                     this.child(
                         Button::new("btn-toggle-jsonpath")
                             .ghost()
                             .xsmall()
-                            .icon(filter_icon)
+                            .icon(Icon::new(IconName::Funnel).text_color(filter_color))
                             .tooltip("Filter with JSONPath")
                             .on_click(move |_, window, cx: &mut App| {
                                 let now_open =
@@ -166,7 +166,7 @@ pub(super) fn render_body_toolbar(ri: &ResponseInspector, props: BodyToolbarProp
                         Button::new("btn-save-example")
                             .ghost()
                             .xsmall()
-                            .icon(IconName::Save)
+                            .icon(Icon::new(IconName::Save).text_color(t.icon_muted))
                             .tooltip("Save as Example")
                             .on_click(move |_, _, cx: &mut App| {
                                 ws_s.update(cx, |ws, cx| {
@@ -204,17 +204,17 @@ pub(super) fn render_body_toolbar(ri: &ResponseInspector, props: BodyToolbarProp
                 .when(!props.is_preview_mode, |this| {
                     let rs_w = rs.clone();
                     let r_ed = resp_ed.clone();
-                    let wrap_icon = if props.wrap_lines {
-                        Icon::new(IconName::TextWrap).text_color(t.primary)
+                    let wrap_color = if props.wrap_lines {
+                        t.accent_text
                     } else {
-                        Icon::new(IconName::TextWrap)
+                        t.icon_muted
                     };
 
                     this.child(
                         Button::new("btn-toggle-wrap")
                             .ghost()
                             .xsmall()
-                            .icon(wrap_icon)
+                            .icon(Icon::new(IconName::TextWrap).text_color(wrap_color))
                             .tooltip("Toggle line wrap")
                             .on_click(move |_, window, cx: &mut App| {
                                 rs_w.update(cx, |state, cx| {
@@ -234,7 +234,7 @@ pub(super) fn render_body_toolbar(ri: &ResponseInspector, props: BodyToolbarProp
                         Button::new("btn-copy-response")
                             .ghost()
                             .xsmall()
-                            .icon(IconName::Copy)
+                            .icon(Icon::new(IconName::Copy).text_color(t.icon_muted))
                             .tooltip("Copy Response")
                             .on_click(move |_, _, cx: &mut App| {
                                 let copy_text = rs_c
@@ -256,7 +256,7 @@ pub(super) fn render_body_toolbar(ri: &ResponseInspector, props: BodyToolbarProp
                     Button::new("btn-save-response")
                         .ghost()
                         .xsmall()
-                        .icon(IconName::Download)
+                        .icon(Icon::new(IconName::Download).text_color(t.icon_muted))
                         .tooltip("Save to File")
                         .on_click(move |_, _, cx: &mut App| {
                             // Zero-copy Arc clone: never duplicate a 100MB Vec<u8> on the UI thread.

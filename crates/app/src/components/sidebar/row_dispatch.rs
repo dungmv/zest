@@ -125,7 +125,7 @@ pub(super) fn render_flat_sidebar_row(
                                         .flex()
                                         .items_center()
                                         .justify_center()
-                                        .text_color(t.sidebar_icon)
+                                        .text_color(t.icon_muted)
                                         .child(
                                             Icon::new(if is_collapsed {
                                                 IconName::ChevronRight

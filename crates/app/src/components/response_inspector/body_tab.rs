@@ -228,10 +228,9 @@ fn render_waiting_state() -> AnyElement {
         .justify_center()
         .gap(px(10.))
         .child(
-            div()
-                .text_3xl()
-                .text_color(t.text_muted)
-                .child(Icon::new(IconName::Globe).size(px(14.))),
+            Icon::new(IconName::Globe)
+                .size(px(14.))
+                .text_color(t.icon_muted),
         )
         .child(
             div()
@@ -334,7 +333,7 @@ fn render_jsonpath_bar(
                 .child(
                     Icon::new(IconName::Funnel)
                         .size(px(13.))
-                        .text_color(t.text_muted),
+                        .text_color(t.icon_muted),
                 )
                 .child(
                     div().flex_1().min_w_0().child(
@@ -386,6 +385,7 @@ fn render_body_content(
             .flex_1()
             .size_full()
             .overflow_hidden()
+            .bg(t.bg_body_editor)
             .p(px(8.))
             .child(
                 uniform_list("response-lines-virtual", lines.len(), {
@@ -407,7 +407,7 @@ fn render_body_content(
                                             .justify_end()
                                             .text_xs()
                                             .font_family(".SystemMonoFont")
-                                            .text_color(t.text_muted)
+                                            .text_color(t.text_secondary)
                                             .child(format!("{}", line_num)),
                                     )
                                     .child(
@@ -437,11 +437,16 @@ fn render_body_content(
             );
     }
 
-    div().flex_1().size_full().overflow_hidden().child(
-        Editor::new(&ri.response_editor)
-            .readonly(true)
-            .appearance(false)
-            .bordered(false)
-            .h(gpui_kit::relative(1.)),
-    )
+    div()
+        .flex_1()
+        .size_full()
+        .overflow_hidden()
+        .bg(t.bg_body_editor)
+        .child(
+            Editor::new(&ri.response_editor)
+                .readonly(true)
+                .appearance(false)
+                .bordered(false)
+                .h(gpui_kit::relative(1.)),
+        )
 }

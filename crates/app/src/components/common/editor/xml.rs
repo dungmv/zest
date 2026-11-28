@@ -161,7 +161,7 @@ impl InputHighlighter for XmlHighlighter {
                     raw_tokens.push((
                         start + name_start..start + i,
                         HighlightStyle {
-                            color: Some(t.primary),
+                            color: Some(t.accent_text),
                             font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
                             ..Default::default()
                         },
@@ -548,7 +548,7 @@ mod tests {
         let t = theme();
         let has_tag_highlight = styles
             .iter()
-            .any(|(r, s)| &xml_text[r.clone()] == "root" && s.color == Some(t.primary));
+            .any(|(r, s)| &xml_text[r.clone()] == "root" && s.color == Some(t.accent_text));
         let has_attr_value_highlight = styles
             .iter()
             .any(|(r, s)| &xml_text[r.clone()] == "\"101\"" && s.color == Some(t.json_string));

@@ -81,7 +81,7 @@ pub(super) fn render_cookies_tab(
                                         .child(
                                             div()
                                                 .font_weight(gpui_kit::FontWeight::BOLD)
-                                                .text_color(t.primary)
+                                                .text_color(t.accent_text)
                                                 .child(cookie.name.clone()),
                                         )
                                         .child(

@@ -52,7 +52,7 @@ pub fn render_timing_popover(
                     .child(
                         div()
                             .font_weight(gpui_kit::FontWeight::BOLD)
-                            .text_color(t.primary)
+                            .text_color(t.accent_text)
                             .child(format!("Total: {} ms", timing.total_ms)),
                     ),
             )
@@ -149,7 +149,7 @@ pub fn render_timing_popover(
                         .py(px(2.))
                         .rounded(px(3.))
                         .bg(t.primary.opacity(0.15))
-                        .text_color(t.primary)
+                        .text_color(t.accent_text)
                         .child("⚡ Connection Reused (HTTP Keep-Alive)"),
                 )
             })

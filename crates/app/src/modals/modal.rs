@@ -193,7 +193,7 @@ impl RenderOnce for Modal {
                         .items_center()
                         .gap(px(8.))
                         .when_some(self.icon, |this, icon| {
-                            this.child(Icon::new(icon).size(px(18.)))
+                            this.child(Icon::new(icon).size(px(18.)).text_color(t.icon_muted))
                         })
                         .child(
                             DialogHeader::new()
@@ -221,7 +221,7 @@ impl RenderOnce for Modal {
                     let close_btn_id = SharedString::from(format!("{}-close-btn", self.id));
                     let mut btn = Button::new(close_btn_id)
                         .with_variant(ButtonVariant::Ghost)
-                        .icon(IconName::Close);
+                        .icon(Icon::new(IconName::Close).text_color(t.icon_muted));
                     if let Some(on_close) = close_cb_button {
                         let cb = on_close.clone();
                         btn = btn.on_click(move |_, window, cx| {

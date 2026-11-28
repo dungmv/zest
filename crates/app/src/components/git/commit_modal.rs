@@ -375,7 +375,7 @@ fn render_changes_view(
                                         file.status == GitFileStatus::Untracked
                                     });
                                     let (tag_text, tag_color) = if *staged {
-                                        ("staged", t.primary)
+                                        ("staged", t.accent_text)
                                     } else if is_untracked {
                                         ("untracked", t.git_untracked)
                                     } else {
@@ -484,7 +484,11 @@ impl RenderOnce for GitCommitModal {
                     .flex()
                     .items_center()
                     .gap(px(10.))
-                    .child(Icon::new(IconName::GitCommitHorizontal).size(px(18.)))
+                    .child(
+                        Icon::new(IconName::GitCommitHorizontal)
+                            .size(px(18.))
+                            .text_color(t.icon_muted),
+                    )
                     .child(
                         DialogHeader::new().child(
                             DialogTitle::new()
@@ -520,7 +524,7 @@ impl RenderOnce for GitCommitModal {
                 Button::new("btn-git-commit-close")
                     .ghost()
                     .xsmall()
-                    .icon(IconName::Close)
+                    .icon(Icon::new(IconName::Close).text_color(t.icon_muted))
                     .on_click({
                         let git_s = git_clone.clone();
                         move |_, _, cx| {

@@ -133,9 +133,9 @@ impl RenderOnce for SettingsModal {
                                                 .min_w_0()
                                                 .child(Icon::new(icon).size(px(14.)).text_color(
                                                     if is_active {
-                                                        t.primary
+                                                        t.accent_text
                                                     } else {
-                                                        t.text_secondary
+                                                        t.icon_muted
                                                     },
                                                 ))
                                                 .child(

@@ -363,7 +363,7 @@ pub fn render_diff_content(
                             } else if line.starts_with('-') {
                                 (Some(red_bg), red_text)
                             } else if line.starts_with("@@") {
-                                (None, t.primary)
+                                (None, t.accent_text)
                             } else {
                                 (None, gray_text)
                             };

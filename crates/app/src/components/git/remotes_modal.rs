@@ -90,7 +90,7 @@ pub fn render_remotes_view(
                                         .text_xs()
                                         .font_weight(gpui_kit::FontWeight::BOLD)
                                         .font_family(".SystemMonoFont")
-                                        .text_color(t.primary)
+                                        .text_color(t.accent_text)
                                         .child(r.name.clone()),
                                 )
                                 .child(

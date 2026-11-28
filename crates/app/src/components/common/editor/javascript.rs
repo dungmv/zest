@@ -292,7 +292,7 @@ impl InputHighlighter for JavaScriptHighlighter {
                         raw_tokens.push((
                             start + id_start..start + i,
                             HighlightStyle {
-                                color: Some(t.primary),
+                                color: Some(t.accent_text),
                                 ..Default::default()
                             },
                         ));

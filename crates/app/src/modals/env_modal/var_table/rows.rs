@@ -75,7 +75,7 @@ pub(super) fn render_var_table(
                             .child(
                                 div()
                                     .text_xs()
-                                    .text_color(t.primary)
+                                    .text_color(t.accent_text)
                                     .child("Click '+ Add Variable' above to add a new variable."),
                             ),
                     )

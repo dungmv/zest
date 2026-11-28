@@ -151,7 +151,7 @@ pub fn render_history_view(
                                                         .border_color(t.border)
                                                         .text_xs()
                                                         .font_family(".SystemMonoFont")
-                                                        .text_color(t.primary)
+                                                        .text_color(t.accent_text)
                                                         .flex_shrink_0()
                                                         .child(item.short_hash),
                                                 ),
@@ -422,7 +422,11 @@ impl RenderOnce for GitHistoryModal {
                     .flex()
                     .items_center()
                     .gap(px(10.))
-                    .child(Icon::new(IconName::Clock).size(px(18.)))
+                    .child(
+                        Icon::new(IconName::Clock)
+                            .size(px(18.))
+                            .text_color(t.icon_muted),
+                    )
                     .child(
                         DialogHeader::new().child(
                             DialogTitle::new()
@@ -452,7 +456,7 @@ impl RenderOnce for GitHistoryModal {
                 Button::new("btn-git-history-close")
                     .ghost()
                     .xsmall()
-                    .icon(IconName::Close)
+                    .icon(Icon::new(IconName::Close).text_color(t.icon_muted))
                     .on_click({
                         let git_s = git_clone.clone();
                         move |_, _, cx| {

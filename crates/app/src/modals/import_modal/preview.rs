@@ -146,7 +146,7 @@ pub(super) fn render_preview_card(res: &ImportResult, t: &AppTheme) -> impl Into
                         .gap(px(6.))
                         .child(render_badge(
                             &format!("{} requests", res.requests.len()),
-                            t.primary,
+                            t.accent_text,
                         ))
                         .child(render_badge(
                             &format!("{} folders", res.folders.len()),

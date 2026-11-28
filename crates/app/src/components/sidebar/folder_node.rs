@@ -376,7 +376,7 @@ fn render_folder_label(
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_color(t.sidebar_icon)
+                .text_color(t.icon_muted)
                 .child(
                     Icon::new(if is_collapsed {
                         IconName::ChevronRight
@@ -393,7 +393,7 @@ fn render_folder_label(
                 IconName::FolderOpen
             })
             .size(px(14.))
-            .text_color(t.sidebar_icon),
+            .text_color(t.icon_muted),
         )
         .child(
             if let (true, Some(inp)) = (is_renaming_folder, ctx.renaming.folder_input) {

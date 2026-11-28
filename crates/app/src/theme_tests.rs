@@ -64,22 +64,22 @@ fn test_semantic_palette_tokens_dark_and_light() {
     assert_eq!(light.timing_dns, hex_to_hsla(0x0891b2));
 }
 
+fn luminance(color: Hsla) -> f32 {
+    let Rgba { r, g, b, .. } = Rgba::from(color);
+    let linear = |channel: f32| {
+        if channel <= 0.04045 {
+            channel / 12.92
+        } else {
+            ((channel + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
+}
+
 #[test]
 fn dark_sidebar_colors_stay_readable_across_row_states() {
-    fn luminance(color: Hsla) -> f32 {
-        let Rgba { r, g, b, .. } = Rgba::from(color);
-        let linear = |channel: f32| {
-            if channel <= 0.04045 {
-                channel / 12.92
-            } else {
-                ((channel + 0.055) / 1.055).powf(2.4)
-            }
-        };
-        0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
-    }
-
     let dark = AppTheme::dark();
-    let icon = luminance(dark.sidebar_icon);
+    let icon = luminance(dark.icon_muted);
     let label = luminance(dark.sidebar_foreground);
     let active_label = luminance(dark.text_primary);
     assert!(icon < label && label < active_label);
@@ -93,5 +93,71 @@ fn dark_sidebar_colors_stay_readable_across_row_states() {
         let background = luminance(background);
         assert!((text + 0.05) / (background + 0.05) >= 4.5);
         assert!((icon + 0.05) / (background + 0.05) >= 3.0);
+    }
+}
+
+#[test]
+fn dark_editor_and_dialog_colors_keep_readable_contrast() {
+    let dark = AppTheme::dark();
+    let contrast = |foreground, background| {
+        let foreground = luminance(foreground) + 0.05;
+        let background = luminance(background) + 0.05;
+        foreground.max(background) / foreground.min(background)
+    };
+
+    for background in [
+        dark.bg_editor,
+        dark.bg_body_editor,
+        dark.bg_response,
+        dark.bg_card,
+        dark.bg_selected,
+    ] {
+        for foreground in [
+            dark.text_primary,
+            dark.text_secondary,
+            dark.text_muted,
+            dark.accent_text,
+        ] {
+            assert!(contrast(foreground, background) >= 4.5);
+        }
+        assert!(contrast(dark.icon_muted, background) >= 3.0);
+    }
+
+    for foreground in [
+        dark.text_primary,
+        dark.json_key,
+        dark.json_string,
+        dark.json_number,
+        dark.json_boolean,
+        dark.json_null,
+        dark.json_punctuation,
+    ] {
+        assert!(contrast(foreground, dark.bg_body_editor) >= 9.0);
+    }
+    assert!(contrast(dark.text_secondary, dark.bg_card) >= 7.0);
+
+    for foreground in [
+        dark.status_2xx,
+        dark.status_3xx,
+        dark.status_4xx,
+        dark.status_5xx,
+    ] {
+        let badge = dark.bg_response.blend(foreground.alpha(0.15));
+        assert!(contrast(foreground, badge) >= 4.5);
+    }
+
+    for (foreground, backgrounds) in [
+        (
+            dark.primary_foreground,
+            [dark.primary, dark.primary_hover, dark.primary_active],
+        ),
+        (
+            dark.danger_foreground,
+            [dark.danger, dark.danger_hover, dark.danger_active],
+        ),
+    ] {
+        for background in backgrounds {
+            assert!(contrast(foreground, background) >= 4.5);
+        }
     }
 }

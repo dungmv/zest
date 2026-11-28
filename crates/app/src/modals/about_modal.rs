@@ -118,7 +118,7 @@ impl RenderOnce for AboutModal {
                                         div()
                                             .text_xs()
                                             .font_weight(FontWeight::SEMIBOLD)
-                                            .text_color(t.primary)
+                                            .text_color(t.accent_text)
                                             .child(format!("v{version}")),
                                     )
                                     .child({
@@ -357,13 +357,13 @@ pub fn render_update_section(
                             .child(
                                 Icon::new(IconName::ArrowDown)
                                     .size(px(14.))
-                                    .text_color(t.primary),
+                                    .text_color(t.accent_text),
                             )
                             .child(
                                 div()
                                     .text_xs()
                                     .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(t.primary)
+                                    .text_color(t.accent_text)
                                     .child(format!("New version available: {tag}")),
                             ),
                     )

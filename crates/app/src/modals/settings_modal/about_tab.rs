@@ -99,7 +99,7 @@ pub fn render_about_tab(
                                             div()
                                                 .text_xs()
                                                 .font_weight(FontWeight::SEMIBOLD)
-                                                .text_color(t.primary)
+                                                .text_color(t.accent_text)
                                                 .child(format!("Version {version}")),
                                         ),
                                 )

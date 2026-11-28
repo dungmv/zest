@@ -8,6 +8,7 @@ impl AppTheme {
             bg_titlebar: hex_to_hsla(0x181920),
             bg_sidebar: hex_to_hsla(0x16171e),
             bg_editor: hex_to_hsla(0x1a1b23),
+            bg_body_editor: hex_to_hsla(0x10131b),
             bg_response: hex_to_hsla(0x1a1b23),
             bg_panel: hex_to_hsla(0x1e1f29),
             bg_card: hex_to_hsla(0x22232e),
@@ -23,29 +24,30 @@ impl AppTheme {
 
             // Typography
             text_primary: hex_to_hsla(0xcdd3df),
-            text_secondary: hex_to_hsla(0x94a3b8),
-            text_muted: hex_to_hsla(0x8791a3),
+            text_secondary: hex_to_hsla(0xa7b2c4),
+            text_muted: hex_to_hsla(0x98a2b4),
             text_disabled: hex_to_hsla(0x475569),
             sidebar_foreground: hex_to_hsla(0xb2bac9),
-            sidebar_icon: hex_to_hsla(0x8b97aa),
+            icon_muted: hex_to_hsla(0x8b97aa),
+            accent_text: hex_to_hsla(0x86aaf2),
 
-            // Professional vibrant blue
-            primary: hex_to_hsla(0x3b82f6),
-            primary_hover: hex_to_hsla(0x2563eb),
-            primary_active: hex_to_hsla(0x1d4ed8),
-            primary_foreground: hex_to_hsla(0xffffff),
+            // Blue action fill with a readable, soft foreground
+            primary: hex_to_hsla(0x2b67d5),
+            primary_hover: hex_to_hsla(0x255dc4),
+            primary_active: hex_to_hsla(0x214eaa),
+            primary_foreground: hex_to_hsla(0xf3f5fa),
 
             // Secondary action
             secondary: hex_to_hsla(0x262836),
             secondary_hover: hex_to_hsla(0x313445),
             secondary_active: hex_to_hsla(0x3d4054),
-            secondary_foreground: hex_to_hsla(0xcdd3df),
+            secondary_foreground: hex_to_hsla(0xb2bac9),
 
             // Danger action
-            danger: hex_to_hsla(0xef4444),
-            danger_hover: hex_to_hsla(0xdc2626),
-            danger_active: hex_to_hsla(0xb91c1c),
-            danger_foreground: hex_to_hsla(0xffffff),
+            danger: hex_to_hsla(0xbd3644),
+            danger_hover: hex_to_hsla(0xad2d3b),
+            danger_active: hex_to_hsla(0x982534),
+            danger_foreground: hex_to_hsla(0xf3f5fa),
 
             // Warning action
             warning: hex_to_hsla(0xf59e0b),
@@ -83,11 +85,11 @@ impl AppTheme {
             timing_download: hex_to_hsla(0x22c55e),
 
             // Console logs
-            log_info: hex_to_hsla(0x3b82f6),
-            log_warn: hex_to_hsla(0xf59e0b),
-            log_error: hex_to_hsla(0xef4444),
-            log_pre_request: hex_to_hsla(0x06b6d4),
-            log_post_response: hex_to_hsla(0xa855f7),
+            log_info: hex_to_hsla(0x86aaf2),
+            log_warn: hex_to_hsla(0xdeb36e),
+            log_error: hex_to_hsla(0xed7880),
+            log_pre_request: hex_to_hsla(0x76b9cd),
+            log_post_response: hex_to_hsla(0xb59adc),
 
             // Autocomplete variable tags
             tag_variable: hex_to_hsla(0x38bdf8),
@@ -95,32 +97,32 @@ impl AppTheme {
 
             // Method colors
             method_get: hex_to_hsla(0x10b981),
-            method_post: hex_to_hsla(0x3b82f6),
+            method_post: hex_to_hsla(0x79a5ef),
             method_put: hex_to_hsla(0xf59e0b),
-            method_delete: hex_to_hsla(0xef4444),
-            method_patch: hex_to_hsla(0x8b5cf6),
+            method_delete: hex_to_hsla(0xed7880),
+            method_patch: hex_to_hsla(0xb59adc),
             method_head: hex_to_hsla(0x06b6d4),
-            method_options: hex_to_hsla(0x64748b),
+            method_options: hex_to_hsla(0x98a2b4),
             method_websocket: hex_to_hsla(0xf97316),
             method_grpc: hex_to_hsla(0xec4899),
 
             // Status colors
             status_2xx: hex_to_hsla(0x10b981),
-            status_3xx: hex_to_hsla(0x3b82f6),
+            status_3xx: hex_to_hsla(0x86aaf2),
             status_4xx: hex_to_hsla(0xf59e0b),
-            status_5xx: hex_to_hsla(0xef4444),
+            status_5xx: hex_to_hsla(0xed7880),
 
             // Interpolation variable highlight
             var_resolved: hex_to_hsla(0x38bdf8),
-            var_unresolved: hex_to_hsla(0xef4444),
+            var_unresolved: hex_to_hsla(0xed7880),
 
             // JSON Syntax Highlighting
-            json_key: hex_to_hsla(0x38bdf8),         // Sky blue
-            json_string: hex_to_hsla(0x34d399),      // Emerald green
-            json_number: hex_to_hsla(0xfbbf24),      // Amber / Gold
-            json_boolean: hex_to_hsla(0xc084fc),     // Purple / Violet
-            json_null: hex_to_hsla(0xf87171),        // Soft coral red
-            json_punctuation: hex_to_hsla(0x94a3b8), // Slate / Muted gray
+            json_key: hex_to_hsla(0x9acef4),
+            json_string: hex_to_hsla(0x99d9bc),
+            json_number: hex_to_hsla(0xf2c47f),
+            json_boolean: hex_to_hsla(0xcfb2f3),
+            json_null: hex_to_hsla(0xffa5aa),
+            json_punctuation: hex_to_hsla(0xbbc7db),
 
             transparent: gpui_kit::transparent_black(),
         }
@@ -133,6 +135,7 @@ impl AppTheme {
             bg_titlebar: hex_to_hsla(0xf1f5f9),
             bg_sidebar: hex_to_hsla(0xf8fafc),
             bg_editor: hex_to_hsla(0xffffff),
+            bg_body_editor: hex_to_hsla(0xffffff),
             bg_response: hex_to_hsla(0xffffff),
             bg_panel: hex_to_hsla(0xf1f5f9),
             bg_card: hex_to_hsla(0xffffff),
@@ -152,7 +155,8 @@ impl AppTheme {
             text_muted: hex_to_hsla(0x64748b),
             text_disabled: hex_to_hsla(0x94a3b8),
             sidebar_foreground: hex_to_hsla(0x1e293b),
-            sidebar_icon: hex_to_hsla(0x64748b),
+            icon_muted: hex_to_hsla(0x64748b),
+            accent_text: hex_to_hsla(0x2563eb),
 
             // Professional vibrant blue
             primary: hex_to_hsla(0x2563eb),

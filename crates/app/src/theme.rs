@@ -61,6 +61,7 @@ pub struct AppTheme {
     pub bg_titlebar: Hsla,
     pub bg_sidebar: Hsla,
     pub bg_editor: Hsla,
+    pub bg_body_editor: Hsla,
     pub bg_response: Hsla,
     pub bg_panel: Hsla,
     pub bg_card: Hsla,
@@ -80,7 +81,8 @@ pub struct AppTheme {
     pub text_muted: Hsla,
     pub text_disabled: Hsla,
     pub sidebar_foreground: Hsla,
-    pub sidebar_icon: Hsla,
+    pub icon_muted: Hsla,
+    pub accent_text: Hsla,
 
     // Action variants (Button & interactive)
     pub primary: Hsla,
@@ -316,13 +318,18 @@ pub fn sync_component_theme(mode: ThemeMode, cx: &mut App) {
         c.button = t.bg_card;
         c.button_hover = t.bg_hover;
         c.button_active = t.bg_active;
-        c.button_foreground = t.text_primary;
+        c.button_foreground = t.secondary_foreground;
 
         // Accent & Muted
         c.accent = t.bg_hover;
         c.accent_foreground = t.text_primary;
         c.muted = t.bg_input;
         c.muted_foreground = t.text_muted;
+        if mode == ThemeMode::Dark {
+            c.link = t.accent_text;
+            c.link_hover = t.text_primary;
+            c.link_active = t.text_primary;
+        }
 
         // Sidebar
         c.sidebar = t.bg_sidebar;
@@ -352,10 +359,16 @@ pub fn sync_component_theme(mode: ThemeMode, cx: &mut App) {
         c.table_active = t.bg_selected;
         c.table_row_border = t.border_subtle;
 
-        // Editor diagnostics: opaque, high-contrast token backgrounds so
-        // hover tooltips stay readable over any content. StatusColors has
-        // private fields — its serde JSON form is the configuration path.
         let mut highlight = (*c.highlight_theme).clone();
+        if mode == ThemeMode::Dark {
+            highlight.style.editor_foreground = Some(t.text_primary);
+            highlight.style.editor_line_number = Some(t.text_secondary);
+            highlight.style.editor_active_line_number = Some(t.text_primary);
+            highlight.style.editor_gutter_background = Some(t.bg_card);
+        }
+
+        // Editor diagnostics use opaque backgrounds so tooltips stay readable.
+        // StatusColors exposes its configuration through serde.
         let status_token = |bg: gpui_kit::Hsla, accent: gpui_kit::Hsla, alpha: f32| -> String {
             let blended = bg.blend(accent.alpha(alpha));
             let rgba = gpui_kit::Rgba::from(blended);
@@ -374,8 +387,8 @@ pub fn sync_component_theme(mode: ThemeMode, cx: &mut App) {
             "{{\"error.background\": \"{error_bg}\", \"warning.background\": \"{warning_bg}\", \"info.background\": \"{info_bg}\", \"success.background\": \"{success_bg}\"}}"
         )) {
             highlight.style.status = status;
-            c.highlight_theme = std::sync::Arc::new(highlight);
         }
+        c.highlight_theme = std::sync::Arc::new(highlight);
 
         c.notification.placement = gpui_kit::Anchor::BottomRight;
         c.notification.max_items = 5;

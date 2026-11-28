@@ -234,7 +234,7 @@ pub fn render_cookies_tab(
                                                 .text_xs()
                                                 .font_family(".SystemMonoFont")
                                                 .font_weight(gpui_kit::FontWeight::BOLD)
-                                                .text_color(t.primary)
+                                                .text_color(t.accent_text)
                                                 .child(cookie.name.clone()),
                                         )
                                         .when(!cookie.domain.is_empty(), |this| {

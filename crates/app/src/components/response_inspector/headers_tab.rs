@@ -75,7 +75,7 @@ pub(super) fn render_headers_tab(
                             .flex_shrink_0()
                             .truncate()
                             .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                            .text_color(t.primary)
+                            .text_color(t.accent_text)
                             .tooltip(move |window, cx| {
                                 gpui_kit::component::tooltip::Tooltip::new(key_tip.clone())
                                     .build(window, cx)

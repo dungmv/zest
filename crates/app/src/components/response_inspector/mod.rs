@@ -130,7 +130,7 @@ impl RenderOnce for ResponseInspector {
                                         })
                                         .text_xs()
                                         .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                                        .text_color(t.primary)
+                                        .text_color(t.accent_text)
                                         .child(Spinner::new().with_size(px(12.)).color(t.primary))
                                         .child(progress_text),
                                 )

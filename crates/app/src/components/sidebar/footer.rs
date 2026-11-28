@@ -73,7 +73,7 @@ pub fn render_sidebar_footer(
                                 .child(
                                     Icon::new(IconName::GitBranch)
                                         .size(px(12.))
-                                        .text_color(t.primary),
+                                        .text_color(t.accent_text),
                                 )
                                 .child(
                                     div()
@@ -107,7 +107,7 @@ pub fn render_sidebar_footer(
                                             .flex()
                                             .items_center()
                                             .gap(px(1.))
-                                            .text_color(t.primary)
+                                            .text_color(t.accent_text)
                                             .child(Icon::new(IconName::ArrowDown).size(px(10.)))
                                             .child(
                                                 div()
