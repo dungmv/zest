@@ -62,9 +62,8 @@ pub(super) fn render_flat_sidebar_row(
 ) -> AnyElement {
     let t = theme();
     match row {
-        FlatSidebarRow::PinnedHeader { is_collapsed } => {
+        FlatSidebarRow::PinnedHeader { is_expanded } => {
             let sb_toggle = ctx.entities.sidebar.clone();
-            let is_collapsed = *is_collapsed;
             let ws_drop = ctx.entities.ws.clone();
             let sb_drop = ctx.entities.sidebar.clone();
 
@@ -92,7 +91,7 @@ pub(super) fn render_flat_sidebar_row(
                         .hover(|s| s.bg(t.bg_hover))
                         .on_click(move |_, _, cx| {
                             sb_toggle.update(cx, |state, cx| {
-                                state.toggle_pinned_collapsed(cx);
+                                state.toggle_pinned_expansion(cx);
                             });
                         })
                         .drag_over::<DragRequestItem>(|style, _, _, _| {
@@ -127,10 +126,10 @@ pub(super) fn render_flat_sidebar_row(
                                         .justify_center()
                                         .text_color(t.icon_muted)
                                         .child(
-                                            Icon::new(if is_collapsed {
-                                                IconName::ChevronRight
-                                            } else {
+                                            Icon::new(if *is_expanded {
                                                 IconName::ChevronDown
+                                            } else {
+                                                IconName::ChevronRight
                                             })
                                             .size(px(11.)),
                                         ),
@@ -161,7 +160,7 @@ pub(super) fn render_flat_sidebar_row(
             };
             let ws_p_drop = ctx.entities.ws.clone();
             let target_idx = *pin_index;
-            let pill = render_request_inner_pill(req, true, *git_status, "pin-req-item", ctx);
+            let pill = render_request_inner_pill(req, None, *git_status, "pin-req-item", ctx);
 
             div()
                 .id(format!("pinned-row-{}-{}", target_idx, p_id))
@@ -195,16 +194,16 @@ pub(super) fn render_flat_sidebar_row(
             folder_id,
             name,
             depth,
-            is_collapsed,
+            is_expanded,
             git_status,
-        } => render_folder_row(folder_id, name, *depth, *is_collapsed, *git_status, ctx),
+        } => render_folder_row(folder_id, name, *depth, *is_expanded, *git_status, ctx),
 
         FlatSidebarRow::Request {
             req,
             depth,
-            is_collapsed,
+            is_expanded,
             git_status,
-        } => render_request_row(req, *depth, *is_collapsed, *git_status, ctx),
+        } => render_request_row(req, *depth, *is_expanded, *git_status, ctx),
 
         FlatSidebarRow::Example {
             parent_id,

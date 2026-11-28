@@ -22,7 +22,7 @@ pub fn render_folder_row(
     folder_id: &str,
     folder_name: &str,
     depth: usize,
-    is_collapsed: bool,
+    is_expanded: bool,
     folder_git_status: SidebarGitStatus,
     ctx: &SidebarRenderContext,
 ) -> AnyElement {
@@ -174,7 +174,7 @@ pub fn render_folder_row(
                 } else {
                     sb_f_click.update(cx, |state, cx| {
                         state.clear_selection(cx);
-                        state.toggle_folder_collapsed(&f_id_click, cx);
+                        state.toggle_folder_expansion(&f_id_click, cx);
                     });
                 }
             }
@@ -193,7 +193,7 @@ pub fn render_folder_row(
         .child(render_folder_label(
             folder_id,
             &f_name_str,
-            is_collapsed,
+            is_expanded,
             is_renaming_folder,
             folder_name_color,
             ctx,
@@ -356,7 +356,7 @@ fn build_folder_context_menu(
 fn render_folder_label(
     folder_id: &str,
     folder_name: &str,
-    is_collapsed: bool,
+    is_expanded: bool,
     is_renaming_folder: bool,
     folder_name_color: Hsla,
     ctx: &SidebarRenderContext,
@@ -378,19 +378,19 @@ fn render_folder_label(
                 .justify_center()
                 .text_color(t.icon_muted)
                 .child(
-                    Icon::new(if is_collapsed {
-                        IconName::ChevronRight
-                    } else {
+                    Icon::new(if is_expanded {
                         IconName::ChevronDown
+                    } else {
+                        IconName::ChevronRight
                     })
                     .size(px(11.)),
                 ),
         )
         .child(
-            Icon::new(if is_collapsed {
-                IconName::FolderClosed
-            } else {
+            Icon::new(if is_expanded {
                 IconName::FolderOpen
+            } else {
+                IconName::FolderClosed
             })
             .size(px(14.))
             .text_color(t.icon_muted),

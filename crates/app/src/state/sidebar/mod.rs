@@ -4,8 +4,7 @@ mod navigation;
 mod renaming;
 mod selection;
 
-use super::CollectionState;
-use gpui_kit::{px, Context, Entity, Pixels, UniformListScrollHandle};
+use gpui_kit::{px, Context, Pixels, UniformListScrollHandle};
 use navigation::SidebarNavigation;
 use renaming::SidebarRenaming;
 use selection::SidebarSelection;
@@ -15,9 +14,9 @@ pub struct SidebarState {
     filter_query: String,
     pub sidebar_collapsed: bool,
     pub sidebar_width: Pixels,
-    collapsed_folders: HashSet<String>,
-    collapsed_requests: HashSet<String>,
-    pinned_collapsed: bool,
+    expanded_folders: HashSet<String>,
+    expanded_requests: HashSet<String>,
+    pinned_expanded: bool,
     pub renaming: SidebarRenaming,
     navigation: SidebarNavigation,
     ui_version: usize,
@@ -31,9 +30,9 @@ impl Default for SidebarState {
             filter_query: String::new(),
             sidebar_collapsed: false,
             sidebar_width: px(260.),
-            collapsed_folders: HashSet::new(),
-            collapsed_requests: HashSet::new(),
-            pinned_collapsed: false,
+            expanded_folders: HashSet::new(),
+            expanded_requests: HashSet::new(),
+            pinned_expanded: true,
             renaming: SidebarRenaming::default(),
             navigation: SidebarNavigation::default(),
             ui_version: 0,
@@ -68,43 +67,31 @@ impl SidebarState {
         }
     }
 
-    pub fn collapse_workspace_folders(
-        &mut self,
-        collection: &Entity<CollectionState>,
-        cx: &mut Context<Self>,
-    ) {
-        self.collapsed_folders = collection
-            .read(cx)
-            .folders
-            .iter()
-            .map(|folder| folder.id.clone())
-            .collect();
+    pub fn reset_workspace_expansion(&mut self, cx: &mut Context<Self>) {
+        self.expanded_folders.clear();
+        self.expanded_requests.clear();
         self.ui_version = self.ui_version.wrapping_add(1);
         cx.notify();
     }
 
-    pub fn toggle_folder_collapsed(&mut self, folder_id: &str, cx: &mut Context<Self>) {
-        if self.collapsed_folders.contains(folder_id) {
-            self.collapsed_folders.remove(folder_id);
-        } else {
-            self.collapsed_folders.insert(folder_id.to_string());
+    pub fn toggle_folder_expansion(&mut self, folder_id: &str, cx: &mut Context<Self>) {
+        if !self.expanded_folders.remove(folder_id) {
+            self.expanded_folders.insert(folder_id.to_string());
         }
         self.ui_version = self.ui_version.wrapping_add(1);
         cx.notify();
     }
 
-    pub fn toggle_request_collapsed(&mut self, req_id: &str, cx: &mut Context<Self>) {
-        if self.collapsed_requests.contains(req_id) {
-            self.collapsed_requests.remove(req_id);
-        } else {
-            self.collapsed_requests.insert(req_id.to_string());
+    pub fn toggle_request_expansion(&mut self, req_id: &str, cx: &mut Context<Self>) {
+        if !self.expanded_requests.remove(req_id) {
+            self.expanded_requests.insert(req_id.to_string());
         }
         self.ui_version = self.ui_version.wrapping_add(1);
         cx.notify();
     }
 
-    pub fn toggle_pinned_collapsed(&mut self, cx: &mut Context<Self>) {
-        self.pinned_collapsed = !self.pinned_collapsed;
+    pub fn toggle_pinned_expansion(&mut self, cx: &mut Context<Self>) {
+        self.pinned_expanded = !self.pinned_expanded;
         self.ui_version = self.ui_version.wrapping_add(1);
         cx.notify();
     }
@@ -112,29 +99,29 @@ impl SidebarState {
     pub(crate) fn filter_query(&self) -> &str {
         &self.filter_query
     }
-    pub(crate) fn collapsed_folders(&self) -> &HashSet<String> {
-        &self.collapsed_folders
+    pub(crate) fn expanded_folders(&self) -> &HashSet<String> {
+        &self.expanded_folders
     }
-    pub(crate) fn collapsed_requests(&self) -> &HashSet<String> {
-        &self.collapsed_requests
+    pub(crate) fn expanded_requests(&self) -> &HashSet<String> {
+        &self.expanded_requests
     }
-    pub(crate) fn is_pinned_collapsed(&self) -> bool {
-        self.pinned_collapsed
+    pub(crate) fn is_pinned_expanded(&self) -> bool {
+        self.pinned_expanded
     }
     pub(crate) fn view_revision(&self) -> usize {
         self.ui_version
     }
 
     pub(crate) fn expand_folder(&mut self, id: &str, cx: &mut Context<Self>) {
-        if self.collapsed_folders.remove(id) {
+        if self.expanded_folders.insert(id.to_string()) {
             self.ui_version = self.ui_version.wrapping_add(1);
             cx.notify();
         }
     }
 
     pub(crate) fn expand_pins(&mut self, cx: &mut Context<Self>) {
-        if self.pinned_collapsed {
-            self.pinned_collapsed = false;
+        if !self.pinned_expanded {
+            self.pinned_expanded = true;
             self.ui_version = self.ui_version.wrapping_add(1);
             cx.notify();
         }

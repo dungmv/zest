@@ -142,9 +142,8 @@ pub fn handle_collection_event(
                 return;
             }
             if *announce_opened || !this.initial_restore_done {
-                let collection = this.state.collection.clone();
                 this.state.sidebar.update(cx, |sidebar, cx| {
-                    sidebar.collapse_workspace_folders(&collection, cx);
+                    sidebar.reset_workspace_expansion(cx);
                 });
             }
             this.state.workspace.update(cx, |ws, cx| {

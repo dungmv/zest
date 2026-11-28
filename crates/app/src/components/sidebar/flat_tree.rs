@@ -10,7 +10,7 @@ use zest_core::models::{Folder, RequestItem};
 #[derive(Clone, Debug)]
 pub enum FlatSidebarRow {
     PinnedHeader {
-        is_collapsed: bool,
+        is_expanded: bool,
     },
     PinnedRequest {
         req: Arc<SidebarReqItem>,
@@ -21,13 +21,13 @@ pub enum FlatSidebarRow {
         folder_id: String,
         name: String,
         depth: usize,
-        is_collapsed: bool,
+        is_expanded: bool,
         git_status: SidebarGitStatus,
     },
     Request {
         req: Arc<SidebarReqItem>,
         depth: usize,
-        is_collapsed: bool,
+        is_expanded: bool,
         git_status: SidebarGitStatus,
     },
     Example {
@@ -66,9 +66,9 @@ pub struct FlatTreeInput<'a> {
     pub arc_requests: &'a [Arc<SidebarReqItem>],
     pub pins: &'a [String],
     pub query_lower: &'a str,
-    pub collapsed_folders: &'a HashSet<String>,
-    pub collapsed_requests: &'a HashSet<String>,
-    pub pinned_collapsed: bool,
+    pub expanded_folders: &'a HashSet<String>,
+    pub expanded_requests: &'a HashSet<String>,
+    pub pinned_expanded: bool,
     pub git_status: Option<&'a GitStatusResult>,
     pub unsaved_requests: &'a HashSet<String>,
 }
@@ -125,7 +125,7 @@ struct FlatTreeCtx<'a> {
     req_matches: Vec<bool>,
     folder_matches: Vec<bool>,
     folder_statuses: Vec<SidebarGitStatus>,
-    collapsed_folders: &'a HashSet<String>,
+    expanded_folders: &'a HashSet<String>,
     has_query: bool,
 }
 
@@ -182,16 +182,16 @@ impl FlatTreeCtx<'_> {
         visited[f_idx] = true;
 
         let f = &self.folders[f_idx];
-        let is_collapsed = self.collapsed_folders.contains(&f.id) && !self.has_query;
+        let is_expanded = self.has_query || self.expanded_folders.contains(&f.id);
         rows.push(FlatSidebarRow::Folder {
             folder_id: f.id.clone(),
             name: f.name.clone(),
             depth,
-            is_collapsed,
+            is_expanded,
             git_status: self.folder_statuses[f_idx],
         });
 
-        if !is_collapsed {
+        if is_expanded {
             if let Some(children) = self.child_folder_indices.get(f.id.as_str()) {
                 for &child_idx in children {
                     self.emit_folder(child_idx, depth + 1, emit_request, rows, visited);
@@ -218,9 +218,9 @@ pub fn flatten_sidebar_tree(input: FlatTreeInput<'_>) -> Vec<FlatSidebarRow> {
         arc_requests,
         pins,
         query_lower,
-        collapsed_folders,
-        collapsed_requests,
-        pinned_collapsed,
+        expanded_folders,
+        expanded_requests,
+        pinned_expanded,
         git_status,
         unsaved_requests,
     } = input;
@@ -250,9 +250,9 @@ pub fn flatten_sidebar_tree(input: FlatTreeInput<'_>) -> Vec<FlatSidebarRow> {
             .collect();
 
         if !pinned_indices.is_empty() {
-            let is_collapsed = pinned_collapsed && !has_query;
-            rows.push(FlatSidebarRow::PinnedHeader { is_collapsed });
-            if !is_collapsed {
+            let is_expanded = has_query || pinned_expanded;
+            rows.push(FlatSidebarRow::PinnedHeader { is_expanded });
+            if is_expanded {
                 for (pin_index, r_idx) in pinned_indices.into_iter().enumerate() {
                     rows.push(FlatSidebarRow::PinnedRequest {
                         req: arc_requests[r_idx].clone(),
@@ -308,7 +308,7 @@ pub fn flatten_sidebar_tree(input: FlatTreeInput<'_>) -> Vec<FlatSidebarRow> {
         req_matches,
         folder_matches: Vec::new(),
         folder_statuses,
-        collapsed_folders,
+        expanded_folders,
         has_query,
     };
 
@@ -327,15 +327,16 @@ pub fn flatten_sidebar_tree(input: FlatTreeInput<'_>) -> Vec<FlatSidebarRow> {
     // 4. Emit flattened rows via DFS
     let emit_request = |r_idx: usize, depth: usize, rows: &mut Vec<FlatSidebarRow>| {
         let req = &arc_requests[r_idx];
-        let is_req_collapsed = collapsed_requests.contains(&req.id) && !has_query;
+        let is_expanded =
+            !req.examples.is_empty() && (has_query || expanded_requests.contains(&req.id));
         rows.push(FlatSidebarRow::Request {
             req: req.clone(),
             depth,
-            is_collapsed: is_req_collapsed,
+            is_expanded,
             git_status: req_statuses[r_idx],
         });
 
-        if !req.examples.is_empty() && !is_req_collapsed {
+        if is_expanded {
             let total_ex = req.examples.len();
             for (idx, ex) in req.examples.iter().enumerate() {
                 rows.push(FlatSidebarRow::Example {
@@ -405,9 +406,9 @@ impl SidebarFlatCache {
             arc_requests: &self.req_items,
             pins: ws.pins(),
             query_lower: &query_lower,
-            collapsed_folders: sidebar.collapsed_folders(),
-            collapsed_requests: sidebar.collapsed_requests(),
-            pinned_collapsed: sidebar.is_pinned_collapsed(),
+            expanded_folders: sidebar.expanded_folders(),
+            expanded_requests: sidebar.expanded_requests(),
+            pinned_expanded: sidebar.is_pinned_expanded(),
             git_status: git.status(),
             unsaved_requests: per.unsaved_requests(),
         });

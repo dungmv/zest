@@ -34,21 +34,30 @@ fn make_req(
 }
 
 #[gpui_kit::test]
-fn workspace_open_collapses_root_and_nested_folders(cx: &mut gpui_kit::TestAppContext) {
+fn folders_and_request_examples_default_to_collapsed(cx: &mut gpui_kit::TestAppContext) {
     use crate::state::{CollectionState, GitState, PersistenceState, SidebarState};
     use gpui_kit::AppContext as _;
+    use zest_core::storage::models::RequestExampleFile;
     use zest_core::storage::FsWorkspaceStore;
 
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().to_path_buf();
     let store = Arc::new(FsWorkspaceStore::new(&path));
     let mut collection = CollectionState::new_for_path(path.clone(), store.clone());
+    let mut request = RequestItem::new("ws", "Health Check", HttpMethod::Get, "");
+    request.examples.push(RequestExampleFile {
+        name: "Default Sample".to_string(),
+        status: 200,
+        headers: Vec::new(),
+        body: None,
+    });
+    let request_id = request.id.clone();
     collection.replace_fixture_tree(
         vec![
             make_folder("auth", None, "Auth"),
             make_folder("auth/oauth", Some("auth"), "OAuth"),
         ],
-        Vec::new(),
+        vec![request],
     );
     let collection = cx.new(|_| collection);
     let mut cache = SidebarFlatCache::default();
@@ -57,40 +66,76 @@ fn workspace_open_collapses_root_and_nested_folders(cx: &mut gpui_kit::TestAppCo
     let git = GitState::new(path);
 
     sidebar.update(cx, |sidebar, cx| {
-        sidebar.collapse_workspace_folders(&collection, cx);
         let rows = cache.rows(sidebar, collection.read(cx), &persistence, &git);
         assert!(matches!(
             rows.as_slice(),
             [
                 FlatSidebarRow::Folder {
-                    is_collapsed: true,
+                    is_expanded: false,
+                    ..
+                },
+                FlatSidebarRow::Request {
+                    is_expanded: false,
                     ..
                 },
                 FlatSidebarRow::RootDropzone
             ]
         ));
 
-        sidebar.toggle_folder_collapsed("auth", cx);
+        sidebar.toggle_folder_expansion("auth", cx);
+        sidebar.toggle_request_expansion(&request_id, cx);
         let rows = cache.rows(sidebar, collection.read(cx), &persistence, &git);
         assert!(matches!(
             rows.as_slice(),
             [
                 FlatSidebarRow::Folder {
-                    is_collapsed: false,
+                    is_expanded: true,
                     ..
                 },
                 FlatSidebarRow::Folder {
-                    is_collapsed: true,
+                    is_expanded: false,
                     depth: 1,
                     ..
                 },
+                FlatSidebarRow::Request {
+                    is_expanded: true,
+                    ..
+                },
+                FlatSidebarRow::Example { depth: 1, .. },
                 FlatSidebarRow::RootDropzone
             ]
         ));
 
-        sidebar.collapse_workspace_folders(&collection, cx);
+        sidebar.reset_workspace_expansion(cx);
         let rows = cache.rows(sidebar, collection.read(cx), &persistence, &git);
-        assert_eq!(rows.len(), 2);
+        assert_eq!(rows.len(), 3);
+
+        sidebar.set_filter_query("a".to_string(), cx);
+        let rows = cache.rows(sidebar, collection.read(cx), &persistence, &git);
+        assert!(matches!(
+            rows.as_slice(),
+            [
+                FlatSidebarRow::Folder {
+                    is_expanded: true,
+                    ..
+                },
+                FlatSidebarRow::Folder {
+                    is_expanded: true,
+                    depth: 1,
+                    ..
+                },
+                FlatSidebarRow::Request {
+                    is_expanded: true,
+                    ..
+                },
+                FlatSidebarRow::Example { depth: 1, .. },
+                FlatSidebarRow::RootDropzone
+            ]
+        ));
+
+        sidebar.set_filter_query(String::new(), cx);
+        let rows = cache.rows(sidebar, collection.read(cx), &persistence, &git);
+        assert_eq!(rows.len(), 3);
     });
 }
 
@@ -114,8 +159,8 @@ fn test_flatten_sidebar_tree_hierarchy_and_collapse() {
     ];
     let arc_reqs: Vec<_> = raw_reqs.iter().cloned().map(Arc::new).collect();
     let pins = vec!["health.yaml".to_string()];
-    let collapsed_folders = HashSet::new();
-    let collapsed_requests = HashSet::new();
+    let mut expanded_folders = HashSet::from(["auth".to_string(), "auth/oauth".to_string()]);
+    let expanded_requests = HashSet::from(["auth/oauth/token.yaml".to_string()]);
     let unsaved = HashSet::from(["auth/oauth/token.yaml".to_string()]);
 
     let rows = flatten_sidebar_tree(FlatTreeInput {
@@ -124,9 +169,9 @@ fn test_flatten_sidebar_tree_hierarchy_and_collapse() {
         arc_requests: &arc_reqs,
         pins: &pins,
         query_lower: "",
-        collapsed_folders: &collapsed_folders,
-        collapsed_requests: &collapsed_requests,
-        pinned_collapsed: false,
+        expanded_folders: &expanded_folders,
+        expanded_requests: &expanded_requests,
+        pinned_expanded: true,
         git_status: None,
         unsaved_requests: &unsaved,
     });
@@ -137,9 +182,7 @@ fn test_flatten_sidebar_tree_hierarchy_and_collapse() {
     assert_eq!(rows.len(), 8);
     assert!(matches!(
         rows[0],
-        FlatSidebarRow::PinnedHeader {
-            is_collapsed: false
-        }
+        FlatSidebarRow::PinnedHeader { is_expanded: true }
     ));
     assert!(matches!(
         &rows[2],
@@ -170,26 +213,26 @@ fn test_flatten_sidebar_tree_hierarchy_and_collapse() {
     assert!(matches!(&rows[5], FlatSidebarRow::Example { depth: 3, .. }));
 
     // Collapse root "auth" folder: children should be hidden, but folder git_status remains Modified
-    let collapsed_folders = HashSet::from(["auth".to_string()]);
+    expanded_folders.remove("auth");
     let rows_collapsed = flatten_sidebar_tree(FlatTreeInput {
         folders: &folders,
         raw_requests: &raw_reqs,
         arc_requests: &arc_reqs,
         pins: &pins,
         query_lower: "",
-        collapsed_folders: &collapsed_folders,
-        collapsed_requests: &collapsed_requests,
-        pinned_collapsed: false,
+        expanded_folders: &expanded_folders,
+        expanded_requests: &expanded_requests,
+        pinned_expanded: true,
         git_status: None,
         unsaved_requests: &unsaved,
     });
-    // Expected: PinnedHeader, PinnedRequest, Folder(auth, collapsed=true), Request(health), RootDropzone -> 5 rows
+    // Expected: PinnedHeader, PinnedRequest, closed Auth, Request(health), RootDropzone -> 5 rows
     assert_eq!(rows_collapsed.len(), 5);
     assert!(matches!(
         &rows_collapsed[2],
         FlatSidebarRow::Folder {
             folder_id,
-            is_collapsed: true,
+            is_expanded: false,
             git_status: SidebarGitStatus::Modified,
             ..
         } if folder_id == "auth"
@@ -202,17 +245,17 @@ fn test_flatten_sidebar_tree_hierarchy_and_collapse() {
         arc_requests: &arc_reqs,
         pins: &pins,
         query_lower: "",
-        collapsed_folders: &collapsed_folders,
-        collapsed_requests: &collapsed_requests,
-        pinned_collapsed: true,
+        expanded_folders: &expanded_folders,
+        expanded_requests: &expanded_requests,
+        pinned_expanded: false,
         git_status: None,
         unsaved_requests: &unsaved,
     });
-    // Expected: PinnedHeader (collapsed=true), Folder(auth, collapsed=true), Request(health), RootDropzone -> 4 rows
+    // Expected: closed PinnedHeader, closed Auth, Request(health), RootDropzone -> 4 rows
     assert_eq!(rows_pinned_collapsed.len(), 4);
     assert!(matches!(
         rows_pinned_collapsed[0],
-        FlatSidebarRow::PinnedHeader { is_collapsed: true }
+        FlatSidebarRow::PinnedHeader { is_expanded: false }
     ));
 }
 
@@ -255,6 +298,8 @@ fn test_flatten_sidebar_large_collection_performance() {
         });
     }
     let arc_reqs: Vec<_> = raw_reqs.iter().cloned().map(Arc::new).collect();
+    let expanded_folders = folders.iter().map(|folder| folder.id.clone()).collect();
+    let expanded_requests = raw_reqs.iter().map(|request| request.id.clone()).collect();
     let git_status = GitStatusResult {
         is_repo: true,
         untracked_files: untracked,
@@ -268,9 +313,9 @@ fn test_flatten_sidebar_large_collection_performance() {
         arc_requests: &arc_reqs,
         pins: &[],
         query_lower: "",
-        collapsed_folders: &HashSet::new(),
-        collapsed_requests: &HashSet::new(),
-        pinned_collapsed: false,
+        expanded_folders: &expanded_folders,
+        expanded_requests: &expanded_requests,
+        pinned_expanded: true,
         git_status: Some(&git_status),
         unsaved_requests: &HashSet::new(),
     });

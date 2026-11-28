@@ -40,7 +40,7 @@ pub struct SidebarReqItem {
 
 pub fn render_request_inner_pill(
     req: &SidebarReqItem,
-    is_req_collapsed: bool,
+    examples_expanded: Option<bool>,
     req_git_status: SidebarGitStatus,
     id_prefix: &str,
     ctx: &SidebarRenderContext,
@@ -55,7 +55,6 @@ pub fn render_request_inner_pill(
             && is_req_active
             && !is_viewing_example);
     let is_renaming = ctx.renaming.req_id == Some(req.id.as_str()) && id_prefix == "req-item";
-    let has_examples = !req.examples.is_empty() && id_prefix == "req-item";
 
     let r_id_click = req.id.clone();
     let r_id_right = req.id.clone();
@@ -238,8 +237,7 @@ pub fn render_request_inner_pill(
         .child(render_request_label(
             req,
             id_prefix,
-            has_examples,
-            is_req_collapsed,
+            examples_expanded,
             is_renaming,
             req_name_color,
             ctx,
@@ -455,8 +453,7 @@ fn discard_request_changes(
 fn render_request_label(
     req: &SidebarReqItem,
     id_prefix: &str,
-    has_examples: bool,
-    is_req_collapsed: bool,
+    examples_expanded: Option<bool>,
     is_renaming: bool,
     req_name_color: Hsla,
     ctx: &SidebarRenderContext,
@@ -469,7 +466,7 @@ fn render_request_label(
         .items_center()
         .gap(px(6.))
         .overflow_hidden()
-        .child(if has_examples {
+        .child(if let Some(is_expanded) = examples_expanded {
             let sb_toggle = ctx.entities.sidebar.clone();
             let r_id = req.id.clone();
             div()
@@ -484,17 +481,17 @@ fn render_request_label(
                 .hover(|s| s.text_color(t.sidebar_foreground))
                 .text_color(t.icon_muted)
                 .child(
-                    Icon::new(if is_req_collapsed {
-                        IconName::ChevronRight
-                    } else {
+                    Icon::new(if is_expanded {
                         IconName::ChevronDown
+                    } else {
+                        IconName::ChevronRight
                     })
                     .size(px(11.)),
                 )
                 .on_click(move |_, _, cx| {
                     cx.stop_propagation();
                     sb_toggle.update(cx, |sb, cx| {
-                        sb.toggle_request_collapsed(&r_id, cx);
+                        sb.toggle_request_expansion(&r_id, cx);
                     });
                 })
                 .into_any_element()
@@ -560,11 +557,12 @@ fn render_request_label(
 pub fn render_request_row(
     req: &SidebarReqItem,
     depth: usize,
-    is_req_collapsed: bool,
+    is_expanded: bool,
     req_git_status: SidebarGitStatus,
     ctx: &SidebarRenderContext,
 ) -> AnyElement {
-    let pill = render_request_inner_pill(req, is_req_collapsed, req_git_status, "req-item", ctx);
+    let examples_expanded = (!req.examples.is_empty()).then_some(is_expanded);
+    let pill = render_request_inner_pill(req, examples_expanded, req_git_status, "req-item", ctx);
     div()
         .w_full()
         .h(px(SIDEBAR_ROW_HEIGHT))
