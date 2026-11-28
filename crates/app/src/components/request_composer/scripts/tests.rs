@@ -1,5 +1,6 @@
 use super::*;
 use crate::components::common::editor::JavaScriptHighlighter;
+use crate::editor_scheme::editor_scheme;
 use gpui_kit::component::input::{
     EditorState as CodeEditorState, HighlightStyleResolver, InputHighlighter, Rope,
 };
@@ -20,9 +21,13 @@ fn test_js_highlighter_tokenizes_keywords_and_literals() {
     let range = 0..code.len();
     let styles = highlighter.styles(&range, &DummyResolver);
 
-    assert!(!styles.is_empty(), "Styles should not be empty");
-    let styled_colored = styles.iter().any(|(_, s)| s.color.is_some());
-    assert!(styled_colored, "There should be colored tokens");
+    let scheme = editor_scheme();
+    assert!(styles.iter().any(|(range, style)| {
+        &code[range.clone()] == "const" && style.color == Some(scheme.keyword)
+    }));
+    assert!(styles.iter().any(|(range, style)| {
+        &code[range.clone()] == "true" && style.color == Some(scheme.null)
+    }));
 }
 
 #[test]

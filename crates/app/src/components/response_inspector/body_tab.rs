@@ -386,7 +386,6 @@ fn render_body_content(
             .flex_1()
             .size_full()
             .overflow_hidden()
-            .bg(scheme.background)
             .p(px(8.))
             .child(
                 uniform_list("response-lines-virtual", lines.len(), {
@@ -438,17 +437,12 @@ fn render_body_content(
             );
     }
 
-    div()
-        .flex_1()
-        .size_full()
-        .overflow_hidden()
-        .bg(scheme.background)
-        .child(
-            Editor::new(&ri.response_editor)
-                .text_color(scheme.foreground)
-                .readonly(true)
-                .appearance(false)
-                .bordered(false)
-                .h(gpui_kit::relative(1.)),
-        )
+    div().flex_1().size_full().overflow_hidden().child(
+        Editor::new(&ri.response_editor)
+            .text_color(scheme.foreground)
+            .readonly(true)
+            .appearance(false)
+            .bordered(false)
+            .h(gpui_kit::relative(1.)),
+    )
 }

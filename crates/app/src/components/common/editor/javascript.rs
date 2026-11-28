@@ -259,7 +259,7 @@ impl InputHighlighter for JavaScriptHighlighter {
                     raw_tokens.push((
                         start + id_start..start + i,
                         HighlightStyle {
-                            color: Some(scheme.boolean),
+                            color: Some(scheme.keyword),
                             font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
                             ..Default::default()
                         },

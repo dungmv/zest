@@ -75,7 +75,7 @@ pub fn highlight_json_line(
             highlights.push((
                 i..i + 4,
                 gpui_kit::HighlightStyle {
-                    color: Some(scheme.boolean),
+                    color: Some(scheme.keyword),
                     font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
                     ..Default::default()
                 },
@@ -87,7 +87,7 @@ pub fn highlight_json_line(
             highlights.push((
                 i..i + 5,
                 gpui_kit::HighlightStyle {
-                    color: Some(scheme.boolean),
+                    color: Some(scheme.keyword),
                     font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
                     ..Default::default()
                 },

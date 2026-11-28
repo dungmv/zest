@@ -220,7 +220,6 @@ impl BodyEditor {
                 .into_any_element(),
             Some(BodyView::Json) => div()
                 .size_full()
-                .bg(scheme.background)
                 .child(
                     Editor::new(&self.json_editor)
                         .text_color(scheme.foreground)
@@ -251,7 +250,6 @@ impl BodyEditor {
             ),
             Some(BodyView::Raw { is_xml: true }) => div()
                 .size_full()
-                .bg(scheme.background)
                 .child(
                     Editor::new(&self.xml_editor)
                         .text_color(scheme.foreground)
@@ -262,7 +260,6 @@ impl BodyEditor {
                 .into_any_element(),
             Some(BodyView::Raw { is_xml: false }) => div()
                 .size_full()
-                .bg(scheme.background)
                 .child(
                     Textarea::new(&self.raw_textarea)
                         .text_color(scheme.foreground)

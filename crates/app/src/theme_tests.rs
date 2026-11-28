@@ -106,20 +106,29 @@ fn contrast(foreground: Hsla, background: Hsla) -> f32 {
 }
 
 #[test]
-fn dark_editor_scheme_keeps_readable_contrast() {
+fn editor_scheme_keeps_readable_contrast_on_panel_backgrounds() {
+    let dark = AppTheme::dark();
     let scheme = scheme_for(ThemeMode::Dark);
-    for foreground in [
-        scheme.foreground,
-        scheme.key,
-        scheme.string,
-        scheme.number,
-        scheme.boolean,
-        scheme.null,
-        scheme.punctuation,
-    ] {
-        assert!(contrast(foreground, scheme.background) >= 9.0);
+    for background in [dark.bg_editor, dark.bg_response] {
+        for foreground in [
+            scheme.foreground,
+            scheme.key,
+            scheme.string,
+            scheme.number,
+            scheme.null,
+            scheme.punctuation,
+        ] {
+            assert!(contrast(foreground, background) >= 9.0);
+        }
+        assert!(contrast(scheme.keyword, background) >= 11.0);
     }
     assert!(contrast(scheme.line_number, scheme.gutter_background) >= 7.0);
+
+    let light = AppTheme::light();
+    let scheme = scheme_for(ThemeMode::Light);
+    for background in [light.bg_editor, light.bg_response] {
+        assert!(contrast(scheme.keyword, background) >= 8.0);
+    }
 }
 
 #[test]

@@ -173,7 +173,7 @@ impl InputHighlighter for JsonHighlighter {
                 raw_tokens.push((
                     start + i..start + i + 4,
                     HighlightStyle {
-                        color: Some(scheme.boolean),
+                        color: Some(scheme.keyword),
                         font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
                         ..Default::default()
                     },
@@ -186,7 +186,7 @@ impl InputHighlighter for JsonHighlighter {
                 raw_tokens.push((
                     start + i..start + i + 5,
                     HighlightStyle {
-                        color: Some(scheme.boolean),
+                        color: Some(scheme.keyword),
                         font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
                         ..Default::default()
                     },
@@ -343,10 +343,10 @@ mod tests {
 
         let bool_highlight = styles
             .iter()
-            .find(|(r, s)| &json_text[r.clone()] == "true" && s.color == Some(scheme.boolean));
+            .find(|(r, s)| &json_text[r.clone()] == "true" && s.color == Some(scheme.keyword));
         assert!(
             bool_highlight.is_some(),
-            "Boolean should have json_boolean color"
+            "Boolean should have the keyword color"
         );
 
         let null_highlight = styles

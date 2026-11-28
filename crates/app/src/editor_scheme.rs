@@ -5,7 +5,6 @@ use gpui_kit::{Hsla, Rgba};
 use std::sync::{Arc, LazyLock};
 
 pub(crate) struct EditorColorScheme {
-    pub background: Hsla,
     pub foreground: Hsla,
     pub line_number: Hsla,
     pub gutter_background: Hsla,
@@ -14,7 +13,7 @@ pub(crate) struct EditorColorScheme {
     pub key: Hsla,
     pub string: Hsla,
     pub number: Hsla,
-    pub boolean: Hsla,
+    pub keyword: Hsla,
     pub null: Hsla,
     pub punctuation: Hsla,
     pub diagnostic_error: Hsla,
@@ -24,7 +23,6 @@ pub(crate) struct EditorColorScheme {
 }
 
 static DARK: LazyLock<EditorColorScheme> = LazyLock::new(|| EditorColorScheme {
-    background: hex_to_hsla(0x10131b),
     foreground: hex_to_hsla(0xcdd3df),
     line_number: hex_to_hsla(0xa7b2c4),
     gutter_background: hex_to_hsla(0x22232e),
@@ -33,7 +31,7 @@ static DARK: LazyLock<EditorColorScheme> = LazyLock::new(|| EditorColorScheme {
     key: hex_to_hsla(0x9acef4),
     string: hex_to_hsla(0x99d9bc),
     number: hex_to_hsla(0xf2c47f),
-    boolean: hex_to_hsla(0xcfb2f3),
+    keyword: hex_to_hsla(0xffc4ee),
     null: hex_to_hsla(0xffa5aa),
     punctuation: hex_to_hsla(0xbbc7db),
     diagnostic_error: hex_to_hsla(0xed7880),
@@ -43,7 +41,6 @@ static DARK: LazyLock<EditorColorScheme> = LazyLock::new(|| EditorColorScheme {
 });
 
 static LIGHT: LazyLock<EditorColorScheme> = LazyLock::new(|| EditorColorScheme {
-    background: hex_to_hsla(0xffffff),
     foreground: hex_to_hsla(0x1e293b),
     line_number: hex_to_hsla(0x475569),
     gutter_background: hex_to_hsla(0xffffff),
@@ -52,7 +49,7 @@ static LIGHT: LazyLock<EditorColorScheme> = LazyLock::new(|| EditorColorScheme {
     key: hex_to_hsla(0x0284c7),
     string: hex_to_hsla(0x059669),
     number: hex_to_hsla(0xd97706),
-    boolean: hex_to_hsla(0x7c3aed),
+    keyword: hex_to_hsla(0x86198f),
     null: hex_to_hsla(0xe11d48),
     punctuation: hex_to_hsla(0x64748b),
     diagnostic_error: hex_to_hsla(0xdc2626),
