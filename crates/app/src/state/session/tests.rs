@@ -29,3 +29,11 @@ fn cancel_signals_the_send_without_finishing_it(cx: &mut gpui_kit::TestAppContex
         assert_eq!(session.send_progress(), None);
     });
 }
+
+#[test]
+fn formats_byte_sizes_across_units() {
+    assert_eq!(format_byte_size(0), "0 B");
+    assert_eq!(format_byte_size(512), "512 B");
+    assert_eq!(format_byte_size(1536), "1.5 KB");
+    assert_eq!(format_byte_size(2 * 1024 * 1024), "2.0 MB");
+}

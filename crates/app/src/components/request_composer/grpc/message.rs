@@ -15,7 +15,7 @@ use gpui_kit::{
 };
 use zest_core::models::GrpcPayload;
 
-pub(super) struct GrpcMessageTabContext<'a> {
+pub(in crate::components::request_composer) struct GrpcMessageTabContext<'a> {
     pub workspace_state: &'a Entity<CollectionState>,
     pub editor_state: &'a Entity<RequestSessionState>,
     pub message_editor: &'a Entity<CodeEditorState>,
@@ -26,7 +26,7 @@ pub(super) struct GrpcMessageTabContext<'a> {
 /// gRPC Message tab, styled after the HTTP Body tab: a toolbar with the
 /// Service/Method picker on the left and a JSON formatter on the right,
 /// above the JSON message editor.
-pub(super) fn render_grpc_message_tab(
+pub(in crate::components::request_composer) fn render_grpc_message_tab(
     payload: &GrpcPayload,
     ctx: GrpcMessageTabContext,
     window: &mut Window,
@@ -172,7 +172,7 @@ pub(super) fn render_grpc_message_tab(
                         let hovered = *hovered;
                         hover_cell.set(hovered);
                         let text = editor_hover.read(cx).value().to_string();
-                        super::refresh_grpc_validation(
+                        super::super::refresh_grpc_validation(
                             &editor_hover,
                             &marks_hover,
                             hovered,

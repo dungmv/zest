@@ -14,13 +14,13 @@ use zest_core::graphql::{completions_at, CompletionKind};
 use crate::env::{unclosed_env_span, EnvCompletionProvider};
 use crate::state::{EnvironmentState, RequestSessionState};
 
-pub(super) struct GraphQLQueryCompletionProvider {
+pub(in crate::components::request_composer) struct GraphQLQueryCompletionProvider {
     env: EnvCompletionProvider,
     session_state: Entity<RequestSessionState>,
 }
 
 impl GraphQLQueryCompletionProvider {
-    pub(super) fn new(
+    pub(in crate::components::request_composer) fn new(
         env_state: Entity<EnvironmentState>,
         session_state: Entity<RequestSessionState>,
     ) -> Self {

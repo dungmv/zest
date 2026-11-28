@@ -1,4 +1,4 @@
-use crate::components::script_editor::{ScriptCompletionProvider, ScriptEditorKind};
+use super::scripts::{ScriptCompletionProvider, ScriptEditorKind};
 use crate::env::{attach_env_lsp, EnvCompletionProvider, EnvEditorDecorations};
 use crate::state::{
     CollectionState, ComposerSyncScope, EnvironmentState, ModalState, RequestSessionState,
@@ -118,13 +118,12 @@ impl ComposerInputs {
         let grpc_message_editor = cx.new(|cx| {
             let mut state = CodeEditorState::new(window, cx);
             state.set_highlighter_factory(highlighter_factory.clone(), cx);
-            state.lsp_mut().completion_provider = Some(Rc::new(
-                super::grpc_completion::ProtoJsonCompletionProvider::new(
+            state.lsp_mut().completion_provider =
+                Some(Rc::new(super::grpc::ProtoJsonCompletionProvider::new(
                     env_state.clone(),
                     session_state.clone(),
                     workspace_state.clone(),
-                ),
-            ));
+                )));
             attach_env_lsp(&mut state, env_state.clone(), modal_state.clone());
             state.language("json").line_number(true).folding(true)
         });
@@ -143,7 +142,7 @@ impl ComposerInputs {
             let mut state = CodeEditorState::new(window, cx);
             state.set_highlighter_factory(highlighter_factory.clone(), cx);
             state.lsp_mut().completion_provider = Some(Rc::new(
-                super::graphql_completion::GraphQLQueryCompletionProvider::new(
+                super::graphql::GraphQLQueryCompletionProvider::new(
                     env_state_for_graphql.clone(),
                     session_state.clone(),
                 ),

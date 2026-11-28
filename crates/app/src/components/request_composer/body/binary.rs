@@ -8,17 +8,6 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled,
 };
 
-/// Formats a byte count into a human-readable size string (pure, no disk I/O).
-pub fn format_byte_size(bytes: u64) -> String {
-    if bytes < 1024 {
-        format!("{} B", bytes)
-    } else if bytes < 1024 * 1024 {
-        format!("{:.1} KB", bytes as f64 / 1024.0)
-    } else {
-        format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
-    }
-}
-
 pub fn render_binary_editor(
     req_id_str: &str,
     file_path: &str,
@@ -215,17 +204,4 @@ pub fn render_binary_editor(
                 ),
         )
         .into_any_element()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::format_byte_size;
-
-    #[test]
-    fn formats_byte_sizes_across_units() {
-        assert_eq!(format_byte_size(0), "0 B");
-        assert_eq!(format_byte_size(512), "512 B");
-        assert_eq!(format_byte_size(1536), "1.5 KB");
-        assert_eq!(format_byte_size(2 * 1024 * 1024), "2.0 MB");
-    }
 }

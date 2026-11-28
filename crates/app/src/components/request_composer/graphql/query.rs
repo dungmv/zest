@@ -16,7 +16,7 @@ use gpui_kit::{
 use std::rc::Rc;
 
 /// AppView-facing entry: reads the active request and wires the callbacks.
-pub(super) fn render_query_tab(
+pub(in crate::components::request_composer) fn render_query_tab(
     av: &AppView,
     window: &mut Window,
     cx: &mut Context<AppView>,
@@ -44,7 +44,7 @@ pub(super) fn render_query_tab(
         .into_any_element()
 }
 
-pub(super) struct GraphQLQueryTabContext<'a> {
+struct GraphQLQueryTabContext<'a> {
     pub editor_state: &'a Entity<RequestSessionState>,
     pub query_editor: &'a Entity<CodeEditorState>,
     pub variables_editor: &'a Entity<CodeEditorState>,
@@ -58,7 +58,7 @@ pub(super) struct GraphQLQueryTabContext<'a> {
 /// GraphQL Query tab, styled after the gRPC Message tab: a toolbar with the
 /// optional operation name and schema actions, above the dual-pane
 /// Query (top) / Variables (bottom) editors.
-pub(super) fn render_graphql_query_tab(
+fn render_graphql_query_tab(
     ctx: GraphQLQueryTabContext,
     window: &mut Window,
     cx: &mut App,
@@ -175,7 +175,7 @@ pub(super) fn render_graphql_query_tab(
                                 let hovered = *hovered;
                                 hover_cell.set(hovered);
                                 let text = editor_hover.read(cx).value().to_string();
-                                super::refresh_graphql_variables_validation(
+                                super::super::refresh_graphql_variables_validation(
                                     &editor_hover,
                                     &marks_hover,
                                     hovered,

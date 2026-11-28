@@ -1,8 +1,8 @@
+use super::BodyEditor;
 use crate::app::AppView;
-use crate::components::*;
 use gpui_kit::{div, AnyElement, IntoElement, ParentElement, Styled};
 
-pub(super) fn render_body_tab(av: &AppView) -> AnyElement {
+pub(in crate::components::request_composer) fn render_body_tab(av: &AppView) -> AnyElement {
     div()
         .size_full()
         .child(

@@ -1,4 +1,4 @@
-use crate::components::body_editor::multipart::file_picker::render_file_picker;
+use super::file_picker::render_file_picker;
 use crate::components::env_input::render_env_input;
 use crate::state::{EnvironmentState, ModalState};
 use crate::theme::theme;

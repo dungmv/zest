@@ -3,7 +3,7 @@ use super::workspace_event_handler::{
     handle_workspace_event,
 };
 use super::AppView;
-use crate::components::request_composer::composer_inputs::ComposerInputs;
+use crate::components::request_composer::ComposerInputs;
 use crate::env::{attach_missing_var_tokens, RetokenizeGuard};
 use crate::state::{
     CollectionEvent, CollectionState, EnvironmentEvent, EnvironmentState, GitState, ModalEvent,

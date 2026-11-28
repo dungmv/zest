@@ -1,13 +1,13 @@
+use super::RequestTabKind;
 use crate::app::AppView;
-use crate::components::*;
-use crate::state::*;
+use crate::components::tabs_with_badge::render_tab_badge;
 use crate::theme::theme;
 use gpui_kit::component::tab::{Tab, TabBar};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{px, Context, Styled};
 use zest_core::models::Protocol;
 
-pub(super) fn render_tab_strip(
+pub(in crate::components::request_composer) fn render_tab_strip(
     av: &AppView,
     active_tab_kind: RequestTabKind,
     cx: &mut Context<AppView>,

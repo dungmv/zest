@@ -1,8 +1,7 @@
 use crate::app::AppView;
 use crate::components::common::mask_secret;
-use crate::components::kv_table::KvReadonlyRow;
-use crate::components::*;
-use crate::state::*;
+use crate::components::kv_table::{KvReadonlyRow, KvTable};
+use crate::state::{edit_active_request, CollectionState};
 use gpui_kit::{div, AnyElement, Context, IntoElement, ParentElement, Styled};
 use zest_core::models::RequestItem;
 
@@ -12,10 +11,7 @@ use zest_core::models::RequestItem;
 ///   showing them as inherited values would be misleading.
 /// - a preview of the header contributed by inherited auth (e.g. Bearer ->
 ///   `Authorization: Bearer ***`), when the request auth is `Inherit`.
-pub(crate) fn inherited_readonly_rows(
-    ws: &CollectionState,
-    req: &RequestItem,
-) -> Vec<KvReadonlyRow> {
+fn inherited_readonly_rows(ws: &CollectionState, req: &RequestItem) -> Vec<KvReadonlyRow> {
     let mut rows: Vec<KvReadonlyRow> = ws
         .inherited_headers_for_request(req)
         .into_iter()
@@ -50,7 +46,10 @@ pub(crate) fn inherited_readonly_rows(
     rows
 }
 
-pub(super) fn render_headers_tab(av: &AppView, cx: &mut Context<AppView>) -> AnyElement {
+pub(in crate::components::request_composer) fn render_headers_tab(
+    av: &AppView,
+    cx: &mut Context<AppView>,
+) -> AnyElement {
     let req_id_str = av.state.session.read(cx).active_request_id().to_string();
     let ws_read = av.state.collection.read(cx);
     let active_r = ws_read.find_request(&req_id_str);

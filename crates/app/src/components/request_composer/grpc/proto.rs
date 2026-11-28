@@ -1,3 +1,4 @@
+use crate::app::AppView;
 use crate::state::{edit_active_request, CollectionState, RequestSessionState};
 use crate::theme::theme;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -5,11 +6,13 @@ use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::Sizable as _;
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{div, px, App, Entity, IntoElement, ParentElement, Styled, Window};
+use gpui_kit::{
+    div, px, AnyElement, App, Context, Entity, IntoElement, ParentElement, Styled, Window,
+};
 use zest_core::models::GrpcPayload;
 
 /// Inputs for the gRPC Proto tab.
-pub(super) struct GrpcProtoTabContext<'a> {
+struct GrpcProtoTabContext<'a> {
     pub workspace_state: &'a Entity<CollectionState>,
     pub editor_state: &'a Entity<RequestSessionState>,
     /// Invokes `Runner::fetch_grpc_schema` for the active request.
@@ -19,7 +22,7 @@ pub(super) struct GrpcProtoTabContext<'a> {
 
 /// Schema source tab for gRPC requests: reflection vs .proto file, plus the
 /// Service/Method picker fed by a resolved schema.
-pub(super) fn render_grpc_proto_tab(
+fn render_grpc_proto_tab(
     payload: &GrpcPayload,
     ctx: GrpcProtoTabContext,
     window: &mut Window,
@@ -170,4 +173,36 @@ pub(super) fn render_grpc_proto_tab(
                     ),
             )
         })
+}
+
+pub(in crate::components::request_composer) fn render_proto_tab(
+    av: &AppView,
+    window: &mut Window,
+    cx: &mut Context<AppView>,
+) -> AnyElement {
+    let req_id_str = av.state.session.read(cx).active_request_id().to_string();
+    div()
+        .size_full()
+        .child({
+            let ws_read = av.state.collection.read(cx);
+            let payload = ws_read
+                .find_request(&req_id_str)
+                .and_then(|r| r.grpc.clone())
+                .unwrap_or_default();
+            let view_fetch = cx.entity().clone();
+            render_grpc_proto_tab(
+                &payload,
+                GrpcProtoTabContext {
+                    workspace_state: &av.state.collection,
+                    editor_state: &av.state.session,
+                    on_fetch_schema: std::rc::Rc::new(move |cx| {
+                        view_fetch.update(cx, |view, cx| view.fetch_grpc_schema(cx));
+                    }),
+                    proto_path_input: &av.composer_inputs.grpc.proto_path_input,
+                },
+                window,
+                cx,
+            )
+        })
+        .into_any_element()
 }

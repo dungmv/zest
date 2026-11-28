@@ -4,12 +4,13 @@ pub mod modals;
 pub mod subscriptions;
 pub mod workspace_event_handler;
 
-pub use crate::components::request_composer::composer_inputs::*;
 pub use actions::*;
 pub use inspector_displays::*;
 pub use modals::*;
 pub use subscriptions::*;
 
+use crate::components::common::editor::{JavaScriptHighlighter, JsonHighlighter, XmlHighlighter};
+use crate::components::request_composer::ComposerInputs;
 use crate::components::*;
 use crate::modals::*;
 use crate::services::{Engines, Runner};
@@ -53,12 +54,8 @@ impl AppView {
         >;
 
         let highlighter_factory: HighlighterFactory = std::rc::Rc::new(|lang: &str| match lang {
-            "json" => Some(Box::new(
-                crate::components::body_editor::JsonHighlighter::new(),
-            )),
-            "xml" => Some(Box::new(
-                crate::components::body_editor::XmlHighlighter::new(),
-            )),
+            "json" => Some(Box::new(JsonHighlighter::new())),
+            "xml" => Some(Box::new(XmlHighlighter::new())),
             "javascript" | "js" => Some(Box::new(JavaScriptHighlighter::new())),
             _ => None,
         });

@@ -1,9 +1,9 @@
+use super::{ScriptEditor, ScriptEditorKind};
 use crate::app::AppView;
-use crate::components::script_editor::{ScriptEditor, ScriptEditorKind};
 use gpui_kit::component::input::EditorState as CodeEditorState;
 use gpui_kit::{div, AnyElement, App, Context, Entity, IntoElement, ParentElement, Styled, Window};
 
-pub(super) fn render_script_tab(
+pub(in crate::components::request_composer) fn render_script_tab(
     av: &AppView,
     editor: &Entity<CodeEditorState>,
     kind: ScriptEditorKind,

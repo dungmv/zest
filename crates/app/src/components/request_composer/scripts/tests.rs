@@ -1,4 +1,5 @@
 use super::*;
+use crate::components::common::editor::JavaScriptHighlighter;
 use gpui_kit::component::input::{
     EditorState as CodeEditorState, HighlightStyleResolver, InputHighlighter, Rope,
 };

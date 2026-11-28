@@ -1,6 +1,7 @@
 //! Small UI helpers shared by the protocol-specific composer tabs:
 //! the common message-toolbar shell and the JSON formatter action.
 
+pub(crate) mod editor;
 pub mod format_json;
 pub mod secret;
 pub mod toolbar;

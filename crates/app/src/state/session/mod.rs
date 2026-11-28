@@ -4,7 +4,7 @@ mod send;
 #[cfg(test)]
 mod tests;
 
-pub use crate::components::request_composer::tabs::RequestTabKind;
+pub use crate::components::request_composer::RequestTabKind;
 pub(crate) use send::SendId;
 
 use super::{ComposerSyncScope, SessionEvent};
@@ -75,9 +75,7 @@ impl RequestSessionState {
                 .background_executor()
                 .spawn(async move {
                     match std::fs::metadata(&path_for_bg) {
-                        Ok(meta) => {
-                            crate::components::body_editor::binary::format_byte_size(meta.len())
-                        }
+                        Ok(meta) => format_byte_size(meta.len()),
                         Err(_) => "File not found".to_string(),
                     }
                 })
@@ -188,5 +186,16 @@ impl RequestSessionState {
     pub fn set_script_error(&mut self, err: Option<String>, cx: &mut Context<Self>) {
         self.script_error = err;
         cx.notify();
+    }
+}
+
+/// Formats a byte count into a human-readable size string (pure, no disk I/O).
+fn format_byte_size(bytes: u64) -> String {
+    if bytes < 1024 {
+        format!("{} B", bytes)
+    } else if bytes < 1024 * 1024 {
+        format!("{:.1} KB", bytes as f64 / 1024.0)
+    } else {
+        format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
     }
 }

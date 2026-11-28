@@ -337,7 +337,7 @@ pub(crate) fn build_cached_format(resp: &Arc<HttpResponseRecord>) -> CachedRespo
     let formatted_pretty = if let Some(parsed) = &parsed_json {
         serde_json::to_string_pretty(parsed).ok()
     } else if is_xml {
-        crate::components::body_editor::format_xml(&raw_str).ok()
+        crate::components::common::editor::format_xml(&raw_str).ok()
     } else {
         None
     };

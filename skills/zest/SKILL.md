@@ -60,6 +60,11 @@ Zest uses strict Rust deserialization with `#[serde(deny_unknown_fields)]`. **An
 
 ### 3.1 Field Order & Specification
 
+Use plain YAML strings when possible. Quote values that start with `{{`, such as
+`token: '{{auth_token}}'`, because YAML treats a leading `{` as the start of a
+flow mapping. A value like `Bearer {{auth_token}}` can stay unquoted. Quote
+numeric-looking values such as `'1'` when the field stores a string.
+
 Order your YAML fields as follows:
 1. `name` (string, required)
 2. `method` (string: `GET` | `POST` | `PUT` | `DELETE` | `PATCH` | `HEAD` | `OPTIONS`, default `GET`)
@@ -130,10 +135,10 @@ Order your YAML fields as follows:
 ### 3.3 KeyValuePair Object
 Headers, query parameters, and url-encoded forms use this structure:
 ```yaml
-name: "Content-Type"       # or 'key'
-value: "application/json"
+name: Content-Type         # or 'key'
+value: application/json
 enabled: true              # optional, defaults to true
-description: "Optional notes" # optional
+description: Optional notes # optional
 ```
 
 ### 3.4 Auth Types
@@ -152,21 +157,21 @@ Auth is a tagged object using `type`:
   ```yaml
   auth:
     type: bearer
-    token: "{{auth_token}}"
+    token: '{{auth_token}}'
   ```
 - **Basic Auth**:
   ```yaml
   auth:
     type: basic
-    username: "{{api_user}}"
-    password: "{{api_password}}"
+    username: '{{api_user}}'
+    password: '{{api_password}}'
   ```
 - **API Key**:
   ```yaml
   auth:
     type: api_key
-    key: "X-API-Key"
-    value: "{{api_key}}"
+    key: X-API-Key
+    value: '{{api_key}}'
     add_to: header       # "header" or "query" (default: "header")
   ```
 
@@ -192,7 +197,7 @@ Body is a tagged object using `type`:
         value: password
         enabled: true
       - name: username
-        value: "{{username}}"
+        value: '{{username}}'
         enabled: true
   ```
 - **Multipart Form**:
@@ -201,27 +206,27 @@ Body is a tagged object using `type`:
     type: multipart
     items:
       - name: description
-        value: "Profile photo"
+        value: Profile photo
         enabled: true
         is_file: false
       - name: avatar
-        value: "avatar.png"
+        value: avatar.png
         enabled: true
         is_file: true
-        file_path: "/path/to/avatar.png"
+        file_path: /path/to/avatar.png
   ```
 - **Raw**:
   ```yaml
   body:
     type: raw
-    content: "raw payload"
-    content_type: "text/plain" # default: "text/plain"
+    content: raw payload
+    content_type: text/plain # default: "text/plain"
   ```
 - **Binary**:
   ```yaml
   body:
     type: binary
-    file_path: "/path/to/archive.zip"
+    file_path: /path/to/archive.zip
   ```
 
 ### 3.6 Request Settings
@@ -250,7 +255,7 @@ script:
 Examples must be placed at the bottom of the request file:
 ```yaml
 examples:
-  - name: "Successful Login"
+  - name: Successful Login
     status: 200
     headers:
       - name: Content-Type
@@ -267,10 +272,10 @@ The root `workspace.yaml` defines workspace-level metadata, shared headers, and 
 
 ```yaml
 version: 1
-name: "My API Workspace"
+name: My API Workspace
 headers:
-  - name: "X-Client"
-    value: "zest"
+  - name: X-Client
+    value: zest
     enabled: true
 auth:
   type: none
@@ -288,14 +293,14 @@ auth:
 Every directory inside `collections/` can contain a `_folder.yaml` defining folder-level properties:
 
 ```yaml
-name: "Users & Accounts"
+name: Users & Accounts
 order:
   - get-profile
   - update-profile
   - change-password
 headers:
-  - name: "X-App-Version"
-    value: "2.0.0"
+  - name: X-App-Version
+    value: 2.0.0
     enabled: true
 auth:
   type: inherit
@@ -316,7 +321,7 @@ Variables can be interpolated in URLs, headers, params, and bodies using `{{vari
 # environments/development.yaml
 variables:
   - name: base_url
-    value: "https://dev-api.example.com"
+    value: https://dev-api.example.com
     secret: false
     enabled: true
   - name: api_key
@@ -335,16 +340,16 @@ File: `collections/users/list-users.yaml`
 ```yaml
 name: List Users
 method: GET
-url: "{{base_url}}/api/v1/users"
+url: '{{base_url}}/api/v1/users'
 params:
   - name: page
-    value: "1"
+    value: '1'
     enabled: true
   - name: limit
-    value: "20"
+    value: '20'
     enabled: true
   - name: search
-    value: "john"
+    value: john
     enabled: false
 headers:
   - name: Accept
@@ -352,7 +357,7 @@ headers:
     enabled: true
 auth:
   type: bearer
-  token: "{{auth_token}}"
+  token: '{{auth_token}}'
 ```
 
 ### Example 2: POST Request with JSON Body, Script & Assertions
@@ -361,7 +366,7 @@ File: `collections/auth/login.yaml`
 ```yaml
 name: Login
 method: POST
-url: "{{base_url}}/api/v1/auth/login"
+url: '{{base_url}}/api/v1/auth/login'
 headers:
   - name: Content-Type
     value: application/json
@@ -386,7 +391,7 @@ script:
       z.setEnv("auth_token", res.body.token);
     }
 examples:
-  - name: "Success Response"
+  - name: Success Response
     status: 200
     headers:
       - name: Content-Type
@@ -401,12 +406,12 @@ File: `collections/realtime/echo-socket.yaml`
 ```yaml
 name: Echo Socket
 method: GET
-url: "wss://echo.websocket.events"
+url: wss://echo.websocket.events
 protocol: websocket
 ws_message_format: json
 headers:
   - name: Origin
-    value: "https://example.com"
+    value: https://example.com
     enabled: true
 auth:
   type: inherit
@@ -418,7 +423,7 @@ File: `collections/grpc/say-hello.yaml`
 ```yaml
 name: Say Hello
 method: POST
-url: "grpc://localhost:50051"
+url: grpc://localhost:50051
 protocol: grpc
 grpc:
   use_reflection: true
@@ -427,13 +432,13 @@ grpc:
   message_json: '{"name": "Zest"}'
 headers:
   - name: x-request-id
-    value: "{{$guid}}"
+    value: '{{$guid}}'
     enabled: true
 auth:
   type: inherit
 ```
 
-*(If using a local `.proto` file instead of Server Reflection, set `use_reflection: false` and `proto_path: "./protos/helloworld.proto"`.)*
+*(If using a local `.proto` file instead of Server Reflection, set `use_reflection: false` and `proto_path: ./protos/helloworld.proto`.)*
 
 ### Example 5: GraphQL Query with Variables
 File: `collections/graphql/get-country.yaml`
@@ -441,7 +446,7 @@ File: `collections/graphql/get-country.yaml`
 ```yaml
 name: Get Country
 method: POST
-url: "https://countries.trevorblades.com/graphql"
+url: https://countries.trevorblades.com/graphql
 protocol: graphql
 graphql:
   query: |
@@ -464,7 +469,7 @@ File: `collections/streaming/chat-completions-stream.yaml`
 ```yaml
 name: Chat Completions Stream
 method: POST
-url: "{{base_url}}/v1/chat/completions"
+url: '{{base_url}}/v1/chat/completions'
 protocol: sse
 headers:
   - name: Content-Type
@@ -475,7 +480,7 @@ headers:
     enabled: true
 auth:
   type: bearer
-  token: "{{api_key}}"
+  token: '{{api_key}}'
 body:
   type: json
   content: |

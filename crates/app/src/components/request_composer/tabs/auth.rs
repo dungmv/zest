@@ -1,14 +1,15 @@
 use std::sync::Arc;
 
+use crate::app::AppView;
 use crate::components::auth_form::{
     render_auth_form, AuthFormContext, AuthFormIds, AuthFormInputs, AuthFormOptions,
 };
 use crate::state::{CollectionState, EnvironmentState, ModalState, RequestSessionState};
 use gpui_kit::component::input::InputState;
-use gpui_kit::{App, Div, Entity, Window};
+use gpui_kit::{AnyElement, App, Context, Div, Entity, IntoElement, Window};
 use zest_core::models::Auth;
 
-pub(super) struct AuthTabInputs<'a> {
+struct AuthTabInputs<'a> {
     pub bearer_token_input: &'a Entity<InputState>,
     pub basic_user_input: &'a Entity<InputState>,
     pub basic_pass_input: &'a Entity<InputState>,
@@ -16,7 +17,7 @@ pub(super) struct AuthTabInputs<'a> {
     pub apikey_val_input: &'a Entity<InputState>,
 }
 
-pub(super) struct AuthTabContext<'a> {
+struct AuthTabContext<'a> {
     pub workspace_state: &'a Entity<CollectionState>,
     pub env_state: &'a Entity<EnvironmentState>,
     pub modal_state: &'a Entity<ModalState>,
@@ -33,7 +34,42 @@ const REQUEST_AUTH_IDS: AuthFormIds = AuthFormIds {
     apikey_location_dropdown: "btn-auth-apikey-location-dropdown",
 };
 
-pub(super) fn render_auth_tab(
+pub(in crate::components::request_composer) fn render_auth_tab(
+    av: &AppView,
+    window: &mut Window,
+    cx: &mut Context<AppView>,
+) -> AnyElement {
+    let req_id = av.state.session.read(cx).active_request_id();
+    let active_request = av.state.collection.read(cx).find_request(req_id);
+    let (auth, folder_id) = active_request
+        .map(|request| (&request.auth, request.folder_id.as_deref()))
+        .unwrap_or((&Auth::Inherit, None));
+    let auth = auth.clone();
+    let folder_id = folder_id.map(str::to_owned);
+    let inputs = &av.composer_inputs.auth;
+    render_request_auth_form(
+        &auth,
+        folder_id.as_deref(),
+        AuthTabContext {
+            workspace_state: &av.state.collection,
+            env_state: &av.state.env,
+            modal_state: &av.state.modal,
+            editor_state: &av.state.session,
+        },
+        AuthTabInputs {
+            bearer_token_input: &inputs.bearer_token_input,
+            basic_user_input: &inputs.basic_user_input,
+            basic_pass_input: &inputs.basic_pass_input,
+            apikey_key_input: &inputs.apikey_key_input,
+            apikey_val_input: &inputs.apikey_val_input,
+        },
+        window,
+        cx,
+    )
+    .into_any_element()
+}
+
+fn render_request_auth_form(
     auth: &Auth,
     folder_id: Option<&str>,
     ctx: AuthTabContext,

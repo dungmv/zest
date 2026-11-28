@@ -1,3 +1,4 @@
+use super::{clamp_char_boundary_left, clamp_char_boundary_right};
 use crate::theme::theme;
 use gpui_kit::component::input::{
     EditorState as CodeEditorState, FoldRange, HighlightStyleResolver, InputEdit, InputHighlighter,
@@ -5,26 +6,6 @@ use gpui_kit::component::input::{
 };
 use gpui_kit::{Context, HighlightStyle, SharedString, Window};
 use std::ops::Range;
-
-fn clamp_char_boundary_left(s: &str, mut idx: usize) -> usize {
-    if idx >= s.len() {
-        return s.len();
-    }
-    while idx > 0 && !s.is_char_boundary(idx) {
-        idx -= 1;
-    }
-    idx
-}
-
-fn clamp_char_boundary_right(s: &str, mut idx: usize) -> usize {
-    if idx >= s.len() {
-        return s.len();
-    }
-    while idx < s.len() && !s.is_char_boundary(idx) {
-        idx += 1;
-    }
-    idx
-}
 
 pub struct JavaScriptHighlighter {
     pub text: Rope,

@@ -1,9 +1,12 @@
 use crate::app::AppView;
-use crate::components::*;
-use crate::state::*;
+use crate::components::kv_table::KvTable;
+use crate::state::edit_active_request;
 use gpui_kit::{div, AnyElement, Context, IntoElement, ParentElement, Styled};
 
-pub(super) fn render_params_tab(av: &AppView, cx: &mut Context<AppView>) -> AnyElement {
+pub(in crate::components::request_composer) fn render_params_tab(
+    av: &AppView,
+    cx: &mut Context<AppView>,
+) -> AnyElement {
     let req_id_str = av.state.session.read(cx).active_request_id().to_string();
     let ws_read = av.state.collection.read(cx);
     let params = ws_read

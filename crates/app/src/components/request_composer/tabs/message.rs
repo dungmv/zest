@@ -1,8 +1,10 @@
+use super::super::grpc;
+use super::websocket::{render_ws_message_tab, WsMessageTabContext};
 use crate::app::AppView;
 use gpui_kit::{div, AnyElement, Context, IntoElement, ParentElement, Styled, Window};
 use zest_core::models::Protocol;
 
-pub(super) fn render_message_tab(
+pub(in crate::components::request_composer) fn render_message_tab(
     av: &AppView,
     window: &mut Window,
     cx: &mut Context<AppView>,
@@ -18,9 +20,9 @@ pub(super) fn render_message_tab(
             let msg_format = active_req.map(|r| r.ws_message_format).unwrap_or_default();
             div()
                 .size_full()
-                .child(super::ws_message_tab::render_ws_message_tab(
+                .child(render_ws_message_tab(
                     msg_format,
-                    super::ws_message_tab::WsMessageTabContext {
+                    WsMessageTabContext {
                         workspace_state: &av.state.collection,
                         editor_state: &av.state.session,
                         message_textarea: &av.composer_inputs.ws_message_textarea,
@@ -43,9 +45,9 @@ pub(super) fn render_message_tab(
             .size_full()
             .child({
                 let payload = active_req.and_then(|r| r.grpc.clone()).unwrap_or_default();
-                super::grpc_message_tab::render_grpc_message_tab(
+                grpc::render_grpc_message_tab(
                     &payload,
-                    super::grpc_message_tab::GrpcMessageTabContext {
+                    grpc::GrpcMessageTabContext {
                         workspace_state: &av.state.collection,
                         editor_state: &av.state.session,
                         message_editor: &av.composer_inputs.grpc.message_editor,

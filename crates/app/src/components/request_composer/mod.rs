@@ -1,33 +1,26 @@
-mod auth_tab;
 mod banners;
-mod body_tab;
-pub(crate) mod composer_inputs;
+mod body;
+mod composer_inputs;
 mod editor_diagnostics;
-mod graphql_completion;
-mod graphql_query_tab;
-mod grpc_completion;
-mod grpc_message_tab;
-mod grpc_proto_tab;
-mod headers_tab;
-mod message_tab;
-mod params_tab;
-mod proto_tab;
-mod scripts_tab;
-mod tab_strip;
-pub(crate) mod tabs;
-mod ws_message_tab;
+mod graphql;
+mod grpc;
+mod request_bar;
+mod scripts;
+mod tabs;
+
+pub(crate) use composer_inputs::ComposerInputs;
+pub use tabs::RequestTabKind;
 
 pub(crate) use editor_diagnostics::{
     refresh_graphql_variables_validation, refresh_grpc_validation,
 };
 
 use crate::app::AppView;
-use crate::components::*;
-use crate::state::*;
 use crate::theme::theme;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{div, AnyElement, Context, IntoElement, ParentElement, Styled, Window};
-use zest_core::models::Auth;
+use request_bar::{RequestBar, RequestBarActions};
+use scripts::ScriptEditorKind;
 
 impl AppView {
     pub(crate) fn render_request_composer(
@@ -97,63 +90,27 @@ impl AppView {
             })
             // Request Tabs with TabBar — the strip depends on the request's
             // transport protocol (HTTP: Body..scripts, WS/gRPC: Message..)
-            .child(tab_strip::render_tab_strip(self, active_tab_kind, cx))
+            .child(tabs::render_tab_strip(self, active_tab_kind, cx))
             // Request Tab Content
             .child(
                 div()
                     .flex_1()
                     .overflow_hidden()
                     .child(match active_tab_kind {
-                        RequestTabKind::Body => body_tab::render_body_tab(self),
-                        RequestTabKind::Message => {
-                            message_tab::render_message_tab(self, window, cx)
-                        }
-                        RequestTabKind::Query => {
-                            graphql_query_tab::render_query_tab(self, window, cx)
-                        }
-                        RequestTabKind::Proto => proto_tab::render_proto_tab(self, window, cx),
-                        RequestTabKind::Params => params_tab::render_params_tab(self, cx),
-                        RequestTabKind::Headers => headers_tab::render_headers_tab(self, cx),
-                        RequestTabKind::Auth => {
-                            let (auth, folder_id) = {
-                                let ws_read = self.state.collection.read(cx);
-                                let active_r = ws_read.find_request(&req_id_str);
-                                (
-                                    active_r.map(|r| r.auth.clone()).unwrap_or(Auth::Inherit),
-                                    active_r.and_then(|r| r.folder_id.clone()),
-                                )
-                            };
-                            auth_tab::render_auth_tab(
-                                &auth,
-                                folder_id.as_deref(),
-                                auth_tab::AuthTabContext {
-                                    workspace_state: &self.state.collection,
-                                    env_state: &self.state.env,
-                                    modal_state: &self.state.modal,
-                                    editor_state: &self.state.session,
-                                },
-                                auth_tab::AuthTabInputs {
-                                    bearer_token_input: &self
-                                        .composer_inputs
-                                        .auth
-                                        .bearer_token_input,
-                                    basic_user_input: &self.composer_inputs.auth.basic_user_input,
-                                    basic_pass_input: &self.composer_inputs.auth.basic_pass_input,
-                                    apikey_key_input: &self.composer_inputs.auth.apikey_key_input,
-                                    apikey_val_input: &self.composer_inputs.auth.apikey_val_input,
-                                },
-                                window,
-                                cx,
-                            )
-                            .into_any_element()
-                        }
-                        RequestTabKind::PreRequestScript => scripts_tab::render_script_tab(
+                        RequestTabKind::Body => body::render_body_tab(self),
+                        RequestTabKind::Message => tabs::render_message_tab(self, window, cx),
+                        RequestTabKind::Query => graphql::render_query_tab(self, window, cx),
+                        RequestTabKind::Proto => grpc::render_proto_tab(self, window, cx),
+                        RequestTabKind::Params => tabs::render_params_tab(self, cx),
+                        RequestTabKind::Headers => tabs::render_headers_tab(self, cx),
+                        RequestTabKind::Auth => tabs::render_auth_tab(self, window, cx),
+                        RequestTabKind::PreRequestScript => scripts::render_script_tab(
                             self,
                             &self.composer_inputs.pre_script_editor,
                             ScriptEditorKind::PreRequest,
                             cx,
                         ),
-                        RequestTabKind::Tests => scripts_tab::render_script_tab(
+                        RequestTabKind::Tests => scripts::render_script_tab(
                             self,
                             &self.composer_inputs.test_script_editor,
                             ScriptEditorKind::Tests,
