@@ -27,17 +27,17 @@ pub fn render_folder_row(
     ctx: &SidebarRenderContext,
 ) -> AnyElement {
     let t = theme();
-    let folder_color = match folder_git_status {
-        SidebarGitStatus::New => t.git_added,
-        SidebarGitStatus::Modified => t.git_modified,
-        SidebarGitStatus::Clean => t.text_primary,
-    };
-
     let f_id = folder_id.to_string();
     let is_renaming_folder = ctx.renaming.folder_id == Some(folder_id);
     let f_name_str = folder_name.to_string();
     let is_folder_selected = ctx.selection.selected_folders.contains(folder_id);
     let is_in_multi_set = is_folder_selected && ctx.selection.is_multi_select;
+    let folder_name_color = match folder_git_status {
+        SidebarGitStatus::New => t.git_added,
+        SidebarGitStatus::Modified => t.git_modified,
+        SidebarGitStatus::Clean if is_folder_selected => t.text_primary,
+        SidebarGitStatus::Clean => t.sidebar_foreground,
+    };
 
     let drag_folder_payload = DragFolderItem {
         id: f_id.clone(),
@@ -80,7 +80,7 @@ pub fn render_folder_row(
         .text_color(t.text_secondary)
         .text_xs()
         .cursor_pointer()
-        .hover(|s| s.bg(t.bg_hover))
+        .when(!is_folder_selected, |row| row.hover(|s| s.bg(t.bg_hover)))
         .when(!is_renaming_folder, move |this| {
             let this = if let Some(multi_payload) = multi_drag_payload {
                 this.on_drag(multi_payload, |item, _, _, cx| cx.new(|_| item.clone()))
@@ -195,7 +195,7 @@ pub fn render_folder_row(
             &f_name_str,
             is_collapsed,
             is_renaming_folder,
-            folder_color,
+            folder_name_color,
             ctx,
         ));
 
@@ -358,7 +358,7 @@ fn render_folder_label(
     folder_name: &str,
     is_collapsed: bool,
     is_renaming_folder: bool,
-    folder_color: Hsla,
+    folder_name_color: Hsla,
     ctx: &SidebarRenderContext,
 ) -> gpui_kit::Div {
     let t = theme();
@@ -376,7 +376,7 @@ fn render_folder_label(
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_color(t.text_muted)
+                .text_color(t.sidebar_icon)
                 .child(
                     Icon::new(if is_collapsed {
                         IconName::ChevronRight
@@ -393,7 +393,7 @@ fn render_folder_label(
                 IconName::FolderOpen
             })
             .size(px(14.))
-            .text_color(folder_color),
+            .text_color(t.sidebar_icon),
         )
         .child(
             if let (true, Some(inp)) = (is_renaming_folder, ctx.renaming.folder_input) {
@@ -434,7 +434,7 @@ fn render_folder_label(
                     .text_xs()
                     .font_family(".SystemMonoFont")
                     .font_weight(gpui_kit::FontWeight::NORMAL)
-                    .text_color(folder_color)
+                    .text_color(folder_name_color)
                     .truncate()
                     .child(folder_name.to_string())
                     .into_any_element()

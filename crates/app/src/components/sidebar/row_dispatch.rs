@@ -125,7 +125,7 @@ pub(super) fn render_flat_sidebar_row(
                                         .flex()
                                         .items_center()
                                         .justify_center()
-                                        .text_color(t.text_muted)
+                                        .text_color(t.sidebar_icon)
                                         .child(
                                             Icon::new(if is_collapsed {
                                                 IconName::ChevronRight
@@ -140,7 +140,7 @@ pub(super) fn render_flat_sidebar_row(
                                         .text_xs()
                                         .font_family(".SystemMonoFont")
                                         .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                                        .text_color(t.text_secondary)
+                                        .text_color(t.sidebar_foreground)
                                         .truncate()
                                         .child("Pinned"),
                                 ),

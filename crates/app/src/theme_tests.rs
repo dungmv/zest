@@ -12,7 +12,7 @@ fn test_theme_mode_switching() {
     assert_eq!(current_theme_mode(), ThemeMode::Dark);
     assert_eq!(current_theme_preference(), ThemePreference::Dark);
     assert_eq!(theme().bg_app, DARK_THEME.bg_app);
-    assert_eq!(theme().text_primary, hex_to_hsla(0xe2e8f0));
+    assert_eq!(theme().text_primary, hex_to_hsla(0xcdd3df));
 
     set_theme(ThemePreference::System, ThemeMode::Dark);
     assert_eq!(current_theme_preference(), ThemePreference::System);
@@ -62,4 +62,36 @@ fn test_semantic_palette_tokens_dark_and_light() {
     // Ensure timing waterfall tokens are configured
     assert_eq!(dark.timing_dns, hex_to_hsla(0x06b6d4));
     assert_eq!(light.timing_dns, hex_to_hsla(0x0891b2));
+}
+
+#[test]
+fn dark_sidebar_colors_stay_readable_across_row_states() {
+    fn luminance(color: Hsla) -> f32 {
+        let Rgba { r, g, b, .. } = Rgba::from(color);
+        let linear = |channel: f32| {
+            if channel <= 0.04045 {
+                channel / 12.92
+            } else {
+                ((channel + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
+    }
+
+    let dark = AppTheme::dark();
+    let icon = luminance(dark.sidebar_icon);
+    let label = luminance(dark.sidebar_foreground);
+    let active_label = luminance(dark.text_primary);
+    assert!(icon < label && label < active_label);
+
+    for (background, text) in [
+        (dark.bg_sidebar, label),
+        (dark.bg_hover, label),
+        (dark.bg_card, label),
+        (dark.bg_selected, active_label),
+    ] {
+        let background = luminance(background);
+        assert!((text + 0.05) / (background + 0.05) >= 4.5);
+        assert!((icon + 0.05) / (background + 0.05) >= 3.0);
+    }
 }

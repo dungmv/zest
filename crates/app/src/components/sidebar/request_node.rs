@@ -90,7 +90,8 @@ pub fn render_request_inner_pill(
     let req_name_color = match req_git_status {
         SidebarGitStatus::New => t.git_added,
         SidebarGitStatus::Modified => t.git_modified,
-        SidebarGitStatus::Clean => t.text_primary,
+        SidebarGitStatus::Clean if is_selected => t.text_primary,
+        SidebarGitStatus::Clean => t.sidebar_foreground,
     };
 
     div()
@@ -108,7 +109,7 @@ pub fn render_request_inner_pill(
         } else {
             t.transparent
         })
-        .hover(|s| s.bg(t.bg_hover))
+        .when(!is_selected, |row| row.hover(|s| s.bg(t.bg_hover)))
         .cursor_pointer()
         .flex()
         .items_center()
@@ -480,8 +481,8 @@ fn render_request_label(
                 .items_center()
                 .justify_center()
                 .cursor_pointer()
-                .hover(|s| s.text_color(t.text_primary))
-                .text_color(t.text_muted)
+                .hover(|s| s.text_color(t.sidebar_foreground))
+                .text_color(t.sidebar_icon)
                 .child(
                     Icon::new(if is_req_collapsed {
                         IconName::ChevronRight

@@ -12,20 +12,22 @@ impl AppTheme {
             bg_panel: hex_to_hsla(0x1e1f29),
             bg_card: hex_to_hsla(0x22232e),
             bg_input: hex_to_hsla(0x1e1f29),
-            bg_selected: hex_to_hsla(0x2b2d3c),
-            bg_hover: hex_to_hsla(0x262836),
-            bg_active: hex_to_hsla(0x313445),
+            bg_selected: hex_to_hsla(0x343849),
+            bg_hover: hex_to_hsla(0x242632),
+            bg_active: hex_to_hsla(0x393d50),
 
             // Fine, crisp borders
             border: hex_to_hsla(0x2a2b38),
             border_subtle: hex_to_hsla(0x22232f),
             border_focus: hex_to_hsla(0x3b82f6),
 
-            // Typography: crisp, soft off-white text comfortable on dark backgrounds (Slate 200)
-            text_primary: hex_to_hsla(0xe2e8f0),
+            // Typography
+            text_primary: hex_to_hsla(0xcdd3df),
             text_secondary: hex_to_hsla(0x94a3b8),
-            text_muted: hex_to_hsla(0x64748b),
+            text_muted: hex_to_hsla(0x8791a3),
             text_disabled: hex_to_hsla(0x475569),
+            sidebar_foreground: hex_to_hsla(0xb2bac9),
+            sidebar_icon: hex_to_hsla(0x8b97aa),
 
             // Professional vibrant blue
             primary: hex_to_hsla(0x3b82f6),
@@ -37,7 +39,7 @@ impl AppTheme {
             secondary: hex_to_hsla(0x262836),
             secondary_hover: hex_to_hsla(0x313445),
             secondary_active: hex_to_hsla(0x3d4054),
-            secondary_foreground: hex_to_hsla(0xe2e8f0),
+            secondary_foreground: hex_to_hsla(0xcdd3df),
 
             // Danger action
             danger: hex_to_hsla(0xef4444),
@@ -149,6 +151,8 @@ impl AppTheme {
             text_secondary: hex_to_hsla(0x475569),
             text_muted: hex_to_hsla(0x64748b),
             text_disabled: hex_to_hsla(0x94a3b8),
+            sidebar_foreground: hex_to_hsla(0x1e293b),
+            sidebar_icon: hex_to_hsla(0x64748b),
 
             // Professional vibrant blue
             primary: hex_to_hsla(0x2563eb),

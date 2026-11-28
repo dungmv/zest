@@ -79,6 +79,8 @@ pub struct AppTheme {
     pub text_secondary: Hsla,
     pub text_muted: Hsla,
     pub text_disabled: Hsla,
+    pub sidebar_foreground: Hsla,
+    pub sidebar_icon: Hsla,
 
     // Action variants (Button & interactive)
     pub primary: Hsla,
@@ -325,9 +327,9 @@ pub fn sync_component_theme(mode: ThemeMode, cx: &mut App) {
         // Sidebar
         c.sidebar = t.bg_sidebar;
         c.sidebar_border = t.border;
-        c.sidebar_foreground = t.text_primary;
+        c.sidebar_foreground = t.sidebar_foreground;
         c.sidebar_accent = t.bg_hover;
-        c.sidebar_accent_foreground = t.text_primary;
+        c.sidebar_accent_foreground = t.sidebar_foreground;
         c.sidebar_primary = t.primary;
         c.sidebar_primary_foreground = t.primary_foreground;
 

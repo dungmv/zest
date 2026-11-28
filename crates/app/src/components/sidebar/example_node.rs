@@ -6,6 +6,7 @@ use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::menu::ContextMenuExt as _;
 use gpui_kit::component::Sizable as _;
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, AnyElement, InteractiveElement as _, IntoElement, MouseButton, ParentElement,
     StatefulInteractiveElement as _, Styled,
@@ -51,7 +52,7 @@ pub fn render_example_row(
         } else {
             t.transparent
         })
-        .hover(|s| s.bg(t.bg_hover))
+        .when(!is_this_ex_active, |row| row.hover(|s| s.bg(t.bg_hover)))
         .cursor_pointer()
         .flex()
         .items_center()
