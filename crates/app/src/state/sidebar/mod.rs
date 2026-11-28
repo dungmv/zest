@@ -12,7 +12,7 @@ use std::collections::HashSet;
 
 pub struct SidebarState {
     filter_query: String,
-    pub sidebar_collapsed: bool,
+    pub sidebar_visible: bool,
     pub sidebar_width: Pixels,
     expanded_folders: HashSet<String>,
     expanded_requests: HashSet<String>,
@@ -28,7 +28,7 @@ impl Default for SidebarState {
     fn default() -> Self {
         Self {
             filter_query: String::new(),
-            sidebar_collapsed: false,
+            sidebar_visible: true,
             sidebar_width: px(260.),
             expanded_folders: HashSet::new(),
             expanded_requests: HashSet::new(),
@@ -56,7 +56,7 @@ impl SidebarState {
     }
 
     pub fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {
-        self.sidebar_collapsed = !self.sidebar_collapsed;
+        self.sidebar_visible = !self.sidebar_visible;
         cx.notify();
     }
 

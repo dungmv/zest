@@ -81,7 +81,7 @@ impl RenderOnce for AppTitleBar {
         let t = theme();
         let ws = self.workspace_state.read(cx);
         let env_read = self.env_state.read(cx);
-        let sidebar_collapsed = self.sidebar_state.read(cx).sidebar_collapsed;
+        let sidebar_visible = self.sidebar_state.read(cx).sidebar_visible;
 
         let ws_name = ws.workspace_name().to_owned();
 
@@ -163,13 +163,13 @@ impl RenderOnce for AppTitleBar {
                     .justify_center()
                     .rounded(px(4.))
                     .cursor_pointer()
-                    .bg(if !sidebar_collapsed {
+                    .bg(if sidebar_visible {
                         t.bg_hover
                     } else {
                         gpui_kit::transparent_black()
                     })
                     .hover(|s| s.bg(t.bg_hover))
-                    .text_color(if !sidebar_collapsed {
+                    .text_color(if sidebar_visible {
                         t.text_primary
                     } else {
                         t.text_secondary

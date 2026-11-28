@@ -220,7 +220,7 @@ impl Render for AppView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = theme();
 
-        let sidebar_collapsed = self.state.sidebar.read(cx).sidebar_collapsed;
+        let sidebar_visible = self.state.sidebar.read(cx).sidebar_visible;
         let sidebar_width = self.state.sidebar.read(cx).sidebar_width;
         let is_vertical_split = crate::settings::AppPreferences::read(cx).split_layout_vertical;
 
@@ -259,9 +259,7 @@ impl Render for AppView {
 
         let main_content = div().size_full().child(split_pane);
 
-        let workspace_content = if sidebar_collapsed {
-            main_content.into_any_element()
-        } else {
+        let workspace_content = if sidebar_visible {
             h_resizable("workspace-sidebar-split")
                 .child(
                     resizable_panel()
@@ -291,6 +289,8 @@ impl Render for AppView {
                     }
                 })
                 .into_any_element()
+        } else {
+            main_content.into_any_element()
         };
 
         let root = div()
