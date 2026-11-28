@@ -1,5 +1,5 @@
 use super::{clamp_char_boundary_left, clamp_char_boundary_right};
-use crate::theme::theme;
+use crate::editor_scheme::editor_scheme;
 use gpui_kit::component::input::{
     EditorState as CodeEditorState, FoldRange, HighlightStyleResolver, InputEdit, InputHighlighter,
     Rope,
@@ -138,7 +138,7 @@ impl InputHighlighter for JavaScriptHighlighter {
         let len = bytes.len();
         let mut i = 0;
         let mut raw_tokens = Vec::new();
-        let t = theme();
+        let scheme = editor_scheme();
 
         while i < len {
             let b = bytes[i];
@@ -153,7 +153,7 @@ impl InputHighlighter for JavaScriptHighlighter {
                 raw_tokens.push((
                     start + comment_start..start + i,
                     HighlightStyle {
-                        color: Some(t.text_muted),
+                        color: Some(scheme.comment),
                         font_style: Some(gpui_kit::FontStyle::Italic),
                         ..Default::default()
                     },
@@ -173,7 +173,7 @@ impl InputHighlighter for JavaScriptHighlighter {
                 raw_tokens.push((
                     start + comment_start..start + i,
                     HighlightStyle {
-                        color: Some(t.text_muted),
+                        color: Some(scheme.comment),
                         font_style: Some(gpui_kit::FontStyle::Italic),
                         ..Default::default()
                     },
@@ -206,7 +206,7 @@ impl InputHighlighter for JavaScriptHighlighter {
                 raw_tokens.push((
                     start + str_start..start + i,
                     HighlightStyle {
-                        color: Some(t.json_string),
+                        color: Some(scheme.string),
                         ..Default::default()
                     },
                 ));
@@ -239,7 +239,7 @@ impl InputHighlighter for JavaScriptHighlighter {
                 raw_tokens.push((
                     start + num_start..start + i,
                     HighlightStyle {
-                        color: Some(t.json_number),
+                        color: Some(scheme.number),
                         ..Default::default()
                     },
                 ));
@@ -259,7 +259,7 @@ impl InputHighlighter for JavaScriptHighlighter {
                     raw_tokens.push((
                         start + id_start..start + i,
                         HighlightStyle {
-                            color: Some(t.json_boolean),
+                            color: Some(scheme.boolean),
                             font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
                             ..Default::default()
                         },
@@ -268,7 +268,7 @@ impl InputHighlighter for JavaScriptHighlighter {
                     raw_tokens.push((
                         start + id_start..start + i,
                         HighlightStyle {
-                            color: Some(t.json_null),
+                            color: Some(scheme.null),
                             font_style: Some(gpui_kit::FontStyle::Italic),
                             ..Default::default()
                         },
@@ -277,7 +277,7 @@ impl InputHighlighter for JavaScriptHighlighter {
                     raw_tokens.push((
                         start + id_start..start + i,
                         HighlightStyle {
-                            color: Some(t.json_key),
+                            color: Some(scheme.key),
                             font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
                             ..Default::default()
                         },
@@ -292,7 +292,7 @@ impl InputHighlighter for JavaScriptHighlighter {
                         raw_tokens.push((
                             start + id_start..start + i,
                             HighlightStyle {
-                                color: Some(t.accent_text),
+                                color: Some(scheme.accent),
                                 ..Default::default()
                             },
                         ));
@@ -329,7 +329,7 @@ impl InputHighlighter for JavaScriptHighlighter {
                 raw_tokens.push((
                     start + i..start + i + 1,
                     HighlightStyle {
-                        color: Some(t.json_punctuation),
+                        color: Some(scheme.punctuation),
                         ..Default::default()
                     },
                 ));

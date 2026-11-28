@@ -30,7 +30,7 @@ pub fn variable_style(scope: &VariableScope) -> EnvVarStyle {
     let t = theme();
     let text = match scope {
         VariableScope::Active(_) => t.tag_variable,
-        VariableScope::Global => t.json_boolean,
+        VariableScope::Global => t.tag_global,
         VariableScope::Dynamic => t.tag_dynamic,
         VariableScope::Missing => t.var_unresolved,
     };

@@ -1,5 +1,6 @@
 use super::body_tab_toolbar::{render_body_toolbar, BodyToolbarProps};
 use super::{preview_image, ResponseInspector};
+use crate::editor_scheme::editor_scheme;
 use crate::state::ResponseViewMode;
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -372,7 +373,7 @@ fn render_body_content(
     preview_kind: Option<ResponsePreviewKind>,
     cx: &App,
 ) -> Div {
-    let t = theme();
+    let scheme = editor_scheme();
     if let (true, Some(ResponsePreviewKind::Image(fmt))) = (is_preview_mode, preview_kind) {
         return div().flex_1().size_full().overflow_hidden().child(
             preview_image::render_image_preview(&ri.response_state, c_resp, fmt, cx),
@@ -385,7 +386,7 @@ fn render_body_content(
             .flex_1()
             .size_full()
             .overflow_hidden()
-            .bg(t.bg_body_editor)
+            .bg(scheme.background)
             .p(px(8.))
             .child(
                 uniform_list("response-lines-virtual", lines.len(), {
@@ -407,7 +408,7 @@ fn render_body_content(
                                             .justify_end()
                                             .text_xs()
                                             .font_family(".SystemMonoFont")
-                                            .text_color(t.text_secondary)
+                                            .text_color(scheme.line_number)
                                             .child(format!("{}", line_num)),
                                     )
                                     .child(
@@ -415,13 +416,13 @@ fn render_body_content(
                                             .flex_1()
                                             .text_xs()
                                             .font_family(".SystemMonoFont")
-                                            .text_color(t.text_primary)
+                                            .text_color(scheme.foreground)
                                             .child(if line.is_empty() {
                                                 div().child(" ")
                                             } else if is_json {
                                                 div().child(
                                                     super::json_highlight::highlight_json_line(
-                                                        line, t,
+                                                        line, scheme,
                                                     ),
                                                 )
                                             } else {
@@ -441,9 +442,10 @@ fn render_body_content(
         .flex_1()
         .size_full()
         .overflow_hidden()
-        .bg(t.bg_body_editor)
+        .bg(scheme.background)
         .child(
             Editor::new(&ri.response_editor)
+                .text_color(scheme.foreground)
                 .readonly(true)
                 .appearance(false)
                 .bordered(false)

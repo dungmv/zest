@@ -12,8 +12,8 @@ use gpui_kit::{App, Entity};
 use zest_core::graphql::validate_variables;
 use zest_core::grpc::validate_message;
 
+use crate::editor_scheme::editor_scheme;
 use crate::state::{CollectionState, RequestSessionState};
-use crate::theme::theme;
 
 struct EditorDiagnostic {
     line: usize,
@@ -100,7 +100,7 @@ fn apply_editor_diagnostic(
     source: &'static str,
     cx: &mut App,
 ) {
-    let error_color = theme().status_5xx;
+    let error_color = editor_scheme().diagnostic_error;
     let gutter = match error {
         None => Vec::new(),
         Some(e) => {

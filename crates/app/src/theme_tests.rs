@@ -1,4 +1,5 @@
 use super::*;
+use crate::editor_scheme::{editor_scheme, scheme_for};
 
 #[test]
 fn test_theme_mode_switching() {
@@ -7,12 +8,14 @@ fn test_theme_mode_switching() {
     assert_eq!(current_theme_preference(), ThemePreference::Light);
     assert_eq!(theme().bg_app, LIGHT_THEME.bg_app);
     assert_eq!(theme().text_primary, hex_to_hsla(0x1e293b));
+    assert!(std::ptr::eq(editor_scheme(), scheme_for(ThemeMode::Light)));
 
     set_theme(ThemePreference::Dark, ThemeMode::Dark);
     assert_eq!(current_theme_mode(), ThemeMode::Dark);
     assert_eq!(current_theme_preference(), ThemePreference::Dark);
     assert_eq!(theme().bg_app, DARK_THEME.bg_app);
     assert_eq!(theme().text_primary, hex_to_hsla(0xcdd3df));
+    assert!(std::ptr::eq(editor_scheme(), scheme_for(ThemeMode::Dark)));
 
     set_theme(ThemePreference::System, ThemeMode::Dark);
     assert_eq!(current_theme_preference(), ThemePreference::System);
@@ -96,18 +99,34 @@ fn dark_sidebar_colors_stay_readable_across_row_states() {
     }
 }
 
-#[test]
-fn dark_editor_and_dialog_colors_keep_readable_contrast() {
-    let dark = AppTheme::dark();
-    let contrast = |foreground, background| {
-        let foreground = luminance(foreground) + 0.05;
-        let background = luminance(background) + 0.05;
-        foreground.max(background) / foreground.min(background)
-    };
+fn contrast(foreground: Hsla, background: Hsla) -> f32 {
+    let foreground = luminance(foreground) + 0.05;
+    let background = luminance(background) + 0.05;
+    foreground.max(background) / foreground.min(background)
+}
 
+#[test]
+fn dark_editor_scheme_keeps_readable_contrast() {
+    let scheme = scheme_for(ThemeMode::Dark);
+    for foreground in [
+        scheme.foreground,
+        scheme.key,
+        scheme.string,
+        scheme.number,
+        scheme.boolean,
+        scheme.null,
+        scheme.punctuation,
+    ] {
+        assert!(contrast(foreground, scheme.background) >= 9.0);
+    }
+    assert!(contrast(scheme.line_number, scheme.gutter_background) >= 7.0);
+}
+
+#[test]
+fn dark_ui_colors_keep_readable_contrast() {
+    let dark = AppTheme::dark();
     for background in [
         dark.bg_editor,
-        dark.bg_body_editor,
         dark.bg_response,
         dark.bg_card,
         dark.bg_selected,
@@ -122,19 +141,6 @@ fn dark_editor_and_dialog_colors_keep_readable_contrast() {
         }
         assert!(contrast(dark.icon_muted, background) >= 3.0);
     }
-
-    for foreground in [
-        dark.text_primary,
-        dark.json_key,
-        dark.json_string,
-        dark.json_number,
-        dark.json_boolean,
-        dark.json_null,
-        dark.json_punctuation,
-    ] {
-        assert!(contrast(foreground, dark.bg_body_editor) >= 9.0);
-    }
-    assert!(contrast(dark.text_secondary, dark.bg_card) >= 7.0);
 
     for foreground in [
         dark.status_2xx,

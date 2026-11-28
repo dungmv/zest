@@ -195,7 +195,7 @@ pub(super) fn render_multipart_row(
                 .justify_center()
                 .cursor_pointer()
                 .text_color(t.text_muted)
-                .hover(move |s| s.text_color(t.json_null).bg(t.json_null.opacity(0.12)))
+                .hover(move |s| s.text_color(t.danger_text).bg(t.danger_text.opacity(0.12)))
                 .tooltip(move |window, cx| {
                     gpui_kit::component::tooltip::Tooltip::new("Delete field").build(window, cx)
                 })

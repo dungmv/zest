@@ -1,5 +1,5 @@
 use super::{clamp_char_boundary_left, clamp_char_boundary_right};
-use crate::theme::theme;
+use crate::editor_scheme::editor_scheme;
 use gpui_kit::component::input::{
     EditorState as CodeEditorState, FoldRange, HighlightStyleResolver, InputEdit, InputHighlighter,
     Rope,
@@ -79,7 +79,7 @@ impl InputHighlighter for JsonHighlighter {
         let len = slice_bytes.len();
         let mut i = 0;
         let mut raw_tokens = Vec::new();
-        let t = theme();
+        let scheme = editor_scheme();
 
         let first_comment = self
             .comments
@@ -92,7 +92,7 @@ impl InputHighlighter for JsonHighlighter {
                     raw_tokens.push((
                         start + i..comment_end,
                         HighlightStyle {
-                            color: Some(t.text_muted),
+                            color: Some(scheme.comment),
                             ..Default::default()
                         },
                     ));
@@ -133,7 +133,7 @@ impl InputHighlighter for JsonHighlighter {
                     j += 1;
                 }
                 let is_key = j < len && slice_bytes[j] == b':';
-                let color = if is_key { t.json_key } else { t.json_string };
+                let color = if is_key { scheme.key } else { scheme.string };
                 raw_tokens.push((
                     start + tok_start..start + tok_end,
                     HighlightStyle {
@@ -145,7 +145,7 @@ impl InputHighlighter for JsonHighlighter {
                 raw_tokens.push((
                     start + i..start + i + 1,
                     HighlightStyle {
-                        color: Some(t.json_punctuation),
+                        color: Some(scheme.punctuation),
                         ..Default::default()
                     },
                 ));
@@ -162,7 +162,7 @@ impl InputHighlighter for JsonHighlighter {
                 raw_tokens.push((
                     start + num_start..start + i,
                     HighlightStyle {
-                        color: Some(t.json_number),
+                        color: Some(scheme.number),
                         ..Default::default()
                     },
                 ));
@@ -173,7 +173,7 @@ impl InputHighlighter for JsonHighlighter {
                 raw_tokens.push((
                     start + i..start + i + 4,
                     HighlightStyle {
-                        color: Some(t.json_boolean),
+                        color: Some(scheme.boolean),
                         font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
                         ..Default::default()
                     },
@@ -186,7 +186,7 @@ impl InputHighlighter for JsonHighlighter {
                 raw_tokens.push((
                     start + i..start + i + 5,
                     HighlightStyle {
-                        color: Some(t.json_boolean),
+                        color: Some(scheme.boolean),
                         font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
                         ..Default::default()
                     },
@@ -199,7 +199,7 @@ impl InputHighlighter for JsonHighlighter {
                 raw_tokens.push((
                     start + i..start + i + 4,
                     HighlightStyle {
-                        color: Some(t.json_null),
+                        color: Some(scheme.null),
                         font_style: Some(gpui_kit::FontStyle::Italic),
                         ..Default::default()
                     },
@@ -319,15 +319,15 @@ mod tests {
         assert_eq!(cursor, json_text.len());
 
         // Check that keys and values received colors
-        let t = theme();
+        let scheme = editor_scheme();
         let key_highlight = styles
             .iter()
-            .find(|(r, s)| &json_text[r.clone()] == "\"name\"" && s.color == Some(t.json_key));
+            .find(|(r, s)| &json_text[r.clone()] == "\"name\"" && s.color == Some(scheme.key));
         assert!(key_highlight.is_some(), "Key should have json_key color");
 
         let str_highlight = styles
             .iter()
-            .find(|(r, s)| &json_text[r.clone()] == "\"Alice\"" && s.color == Some(t.json_string));
+            .find(|(r, s)| &json_text[r.clone()] == "\"Alice\"" && s.color == Some(scheme.string));
         assert!(
             str_highlight.is_some(),
             "String should have json_string color"
@@ -335,7 +335,7 @@ mod tests {
 
         let num_highlight = styles
             .iter()
-            .find(|(r, s)| &json_text[r.clone()] == "30" && s.color == Some(t.json_number));
+            .find(|(r, s)| &json_text[r.clone()] == "30" && s.color == Some(scheme.number));
         assert!(
             num_highlight.is_some(),
             "Number should have json_number color"
@@ -343,7 +343,7 @@ mod tests {
 
         let bool_highlight = styles
             .iter()
-            .find(|(r, s)| &json_text[r.clone()] == "true" && s.color == Some(t.json_boolean));
+            .find(|(r, s)| &json_text[r.clone()] == "true" && s.color == Some(scheme.boolean));
         assert!(
             bool_highlight.is_some(),
             "Boolean should have json_boolean color"
@@ -351,7 +351,7 @@ mod tests {
 
         let null_highlight = styles
             .iter()
-            .find(|(r, s)| &json_text[r.clone()] == "null" && s.color == Some(t.json_null));
+            .find(|(r, s)| &json_text[r.clone()] == "null" && s.color == Some(scheme.null));
         assert!(null_highlight.is_some(), "Null should have json_null color");
     }
 

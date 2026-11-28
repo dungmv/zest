@@ -8,7 +8,6 @@ impl AppTheme {
             bg_titlebar: hex_to_hsla(0x181920),
             bg_sidebar: hex_to_hsla(0x16171e),
             bg_editor: hex_to_hsla(0x1a1b23),
-            bg_body_editor: hex_to_hsla(0x10131b),
             bg_response: hex_to_hsla(0x1a1b23),
             bg_panel: hex_to_hsla(0x1e1f29),
             bg_card: hex_to_hsla(0x22232e),
@@ -48,6 +47,7 @@ impl AppTheme {
             danger_hover: hex_to_hsla(0xad2d3b),
             danger_active: hex_to_hsla(0x982534),
             danger_foreground: hex_to_hsla(0xf3f5fa),
+            danger_text: hex_to_hsla(0xffa5aa),
 
             // Warning action
             warning: hex_to_hsla(0xf59e0b),
@@ -93,6 +93,7 @@ impl AppTheme {
 
             // Autocomplete variable tags
             tag_variable: hex_to_hsla(0x38bdf8),
+            tag_global: hex_to_hsla(0xcfb2f3),
             tag_dynamic: hex_to_hsla(0xf59e0b),
 
             // Method colors
@@ -116,14 +117,6 @@ impl AppTheme {
             var_resolved: hex_to_hsla(0x38bdf8),
             var_unresolved: hex_to_hsla(0xed7880),
 
-            // JSON Syntax Highlighting
-            json_key: hex_to_hsla(0x9acef4),
-            json_string: hex_to_hsla(0x99d9bc),
-            json_number: hex_to_hsla(0xf2c47f),
-            json_boolean: hex_to_hsla(0xcfb2f3),
-            json_null: hex_to_hsla(0xffa5aa),
-            json_punctuation: hex_to_hsla(0xbbc7db),
-
             transparent: gpui_kit::transparent_black(),
         }
     }
@@ -135,7 +128,6 @@ impl AppTheme {
             bg_titlebar: hex_to_hsla(0xf1f5f9),
             bg_sidebar: hex_to_hsla(0xf8fafc),
             bg_editor: hex_to_hsla(0xffffff),
-            bg_body_editor: hex_to_hsla(0xffffff),
             bg_response: hex_to_hsla(0xffffff),
             bg_panel: hex_to_hsla(0xf1f5f9),
             bg_card: hex_to_hsla(0xffffff),
@@ -175,6 +167,7 @@ impl AppTheme {
             danger_hover: hex_to_hsla(0xb91c1c),
             danger_active: hex_to_hsla(0x991b1b),
             danger_foreground: hex_to_hsla(0xffffff),
+            danger_text: hex_to_hsla(0xe11d48),
 
             // Warning action
             warning: hex_to_hsla(0xd97706),
@@ -220,6 +213,7 @@ impl AppTheme {
 
             // Autocomplete variable tags
             tag_variable: hex_to_hsla(0x0284c7),
+            tag_global: hex_to_hsla(0x7c3aed),
             tag_dynamic: hex_to_hsla(0xd97706),
 
             // Method colors for light mode (rich, solid contrast)
@@ -242,14 +236,6 @@ impl AppTheme {
             // Interpolation variable highlight
             var_resolved: hex_to_hsla(0x0284c7),
             var_unresolved: hex_to_hsla(0xdc2626),
-
-            // JSON Syntax Highlighting for light backgrounds
-            json_key: hex_to_hsla(0x0284c7),         // Rich Blue/Cyan
-            json_string: hex_to_hsla(0x059669),      // Deep Emerald
-            json_number: hex_to_hsla(0xd97706),      // Warm Amber
-            json_boolean: hex_to_hsla(0x7c3aed),     // Violet
-            json_null: hex_to_hsla(0xe11d48),        // Rose Red
-            json_punctuation: hex_to_hsla(0x64748b), // Slate gray
 
             transparent: gpui_kit::transparent_black(),
         }

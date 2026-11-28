@@ -12,6 +12,7 @@ use self::{
     multipart::{render_multipart_editor, MultipartContext},
 };
 use crate::components::common::{editor::format_xml, format_jsonc_editor, message_toolbar};
+use crate::editor_scheme::editor_scheme;
 use crate::state::{CollectionState, EnvironmentState, ModalState, RequestSessionState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
@@ -197,6 +198,7 @@ impl BodyEditor {
         cx: &mut App,
     ) -> gpui_kit::AnyElement {
         let t = theme();
+        let scheme = editor_scheme();
         match body_ref {
             None | Some(BodyView::None) => Empty::new()
                 .header(
@@ -218,9 +220,10 @@ impl BodyEditor {
                 .into_any_element(),
             Some(BodyView::Json) => div()
                 .size_full()
-                .bg(t.bg_body_editor)
+                .bg(scheme.background)
                 .child(
                     Editor::new(&self.json_editor)
+                        .text_color(scheme.foreground)
                         .appearance(false)
                         .bordered(false)
                         .h(gpui_kit::relative(1.)),
@@ -248,9 +251,10 @@ impl BodyEditor {
             ),
             Some(BodyView::Raw { is_xml: true }) => div()
                 .size_full()
-                .bg(t.bg_body_editor)
+                .bg(scheme.background)
                 .child(
                     Editor::new(&self.xml_editor)
+                        .text_color(scheme.foreground)
                         .appearance(false)
                         .bordered(false)
                         .h(gpui_kit::relative(1.)),
@@ -258,9 +262,10 @@ impl BodyEditor {
                 .into_any_element(),
             Some(BodyView::Raw { is_xml: false }) => div()
                 .size_full()
-                .bg(t.bg_body_editor)
+                .bg(scheme.background)
                 .child(
                     Textarea::new(&self.raw_textarea)
+                        .text_color(scheme.foreground)
                         .appearance(false)
                         .bordered(false)
                         .h(gpui_kit::relative(1.)),

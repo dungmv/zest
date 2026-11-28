@@ -475,7 +475,7 @@ impl RenderOnce for KvTable {
                                     .cursor_pointer()
                                     .text_color(t.text_muted)
                                     .hover(move |s| {
-                                        s.text_color(t.json_null).bg(t.json_null.opacity(0.12))
+                                        s.text_color(t.danger_text).bg(t.danger_text.opacity(0.12))
                                     })
                                     .tooltip(move |window, cx| {
                                         gpui_kit::component::tooltip::Tooltip::new("Delete row")

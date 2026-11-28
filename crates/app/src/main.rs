@@ -3,6 +3,7 @@
 
 mod app;
 mod components;
+mod editor_scheme;
 mod env;
 mod modals;
 mod notify;

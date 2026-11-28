@@ -1,7 +1,7 @@
 #[path = "theme_palette.rs"]
 mod palette;
 
-use gpui_kit::component::highlighter::StatusColors;
+use crate::editor_scheme::apply_editor_scheme;
 use gpui_kit::{App, Hsla, Rgba, WindowAppearance};
 use serde::{Deserialize, Serialize};
 use zest_core::models::{HttpMethod, Protocol};
@@ -61,7 +61,6 @@ pub struct AppTheme {
     pub bg_titlebar: Hsla,
     pub bg_sidebar: Hsla,
     pub bg_editor: Hsla,
-    pub bg_body_editor: Hsla,
     pub bg_response: Hsla,
     pub bg_panel: Hsla,
     pub bg_card: Hsla,
@@ -99,6 +98,7 @@ pub struct AppTheme {
     pub danger_hover: Hsla,
     pub danger_active: Hsla,
     pub danger_foreground: Hsla,
+    pub danger_text: Hsla,
 
     pub warning: Hsla,
     pub warning_hover: Hsla,
@@ -141,6 +141,7 @@ pub struct AppTheme {
 
     // Autocomplete variable tags
     pub tag_variable: Hsla,
+    pub tag_global: Hsla,
     pub tag_dynamic: Hsla,
 
     // Method badge colors
@@ -163,14 +164,6 @@ pub struct AppTheme {
     // Variable highlights
     pub var_resolved: Hsla,
     pub var_unresolved: Hsla,
-
-    // JSON Syntax Highlighting
-    pub json_key: Hsla,
-    pub json_string: Hsla,
-    pub json_number: Hsla,
-    pub json_boolean: Hsla,
-    pub json_null: Hsla,
-    pub json_punctuation: Hsla,
 
     // Transparent
     pub transparent: Hsla,
@@ -359,36 +352,7 @@ pub fn sync_component_theme(mode: ThemeMode, cx: &mut App) {
         c.table_active = t.bg_selected;
         c.table_row_border = t.border_subtle;
 
-        let mut highlight = (*c.highlight_theme).clone();
-        if mode == ThemeMode::Dark {
-            highlight.style.editor_foreground = Some(t.text_primary);
-            highlight.style.editor_line_number = Some(t.text_secondary);
-            highlight.style.editor_active_line_number = Some(t.text_primary);
-            highlight.style.editor_gutter_background = Some(t.bg_card);
-        }
-
-        // Editor diagnostics use opaque backgrounds so tooltips stay readable.
-        // StatusColors exposes its configuration through serde.
-        let status_token = |bg: gpui_kit::Hsla, accent: gpui_kit::Hsla, alpha: f32| -> String {
-            let blended = bg.blend(accent.alpha(alpha));
-            let rgba = gpui_kit::Rgba::from(blended);
-            format!(
-                "#{:02x}{:02x}{:02x}",
-                (rgba.r * 255.0).round() as u8,
-                (rgba.g * 255.0).round() as u8,
-                (rgba.b * 255.0).round() as u8
-            )
-        };
-        let error_bg = status_token(t.bg_app, t.status_5xx, 0.30);
-        let warning_bg = status_token(t.bg_app, t.warning, 0.22);
-        let info_bg = status_token(t.bg_app, t.info, 0.18);
-        let success_bg = status_token(t.bg_app, t.success, 0.18);
-        if let Ok(status) = serde_json::from_str::<StatusColors>(&format!(
-            "{{\"error.background\": \"{error_bg}\", \"warning.background\": \"{warning_bg}\", \"info.background\": \"{info_bg}\", \"success.background\": \"{success_bg}\"}}"
-        )) {
-            highlight.style.status = status;
-        }
-        c.highlight_theme = std::sync::Arc::new(highlight);
+        apply_editor_scheme(c, mode, t.bg_app);
 
         c.notification.placement = gpui_kit::Anchor::BottomRight;
         c.notification.max_items = 5;

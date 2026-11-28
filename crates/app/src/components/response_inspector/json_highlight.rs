@@ -1,4 +1,7 @@
-pub fn highlight_json_line(line: &str, t: &crate::theme::AppTheme) -> gpui_kit::StyledText {
+pub fn highlight_json_line(
+    line: &str,
+    scheme: &crate::editor_scheme::EditorColorScheme,
+) -> gpui_kit::StyledText {
     let mut highlights = Vec::new();
     let bytes = line.as_bytes();
     let len = bytes.len();
@@ -33,7 +36,7 @@ pub fn highlight_json_line(line: &str, t: &crate::theme::AppTheme) -> gpui_kit::
                 j += 1;
             }
             let is_key = j < len && bytes[j] == b':';
-            let color = if is_key { t.json_key } else { t.json_string };
+            let color = if is_key { scheme.key } else { scheme.string };
             highlights.push((
                 start..end,
                 gpui_kit::HighlightStyle {
@@ -45,7 +48,7 @@ pub fn highlight_json_line(line: &str, t: &crate::theme::AppTheme) -> gpui_kit::
             highlights.push((
                 i..i + 1,
                 gpui_kit::HighlightStyle {
-                    color: Some(t.json_punctuation),
+                    color: Some(scheme.punctuation),
                     ..Default::default()
                 },
             ));
@@ -62,7 +65,7 @@ pub fn highlight_json_line(line: &str, t: &crate::theme::AppTheme) -> gpui_kit::
             highlights.push((
                 start..i,
                 gpui_kit::HighlightStyle {
-                    color: Some(t.json_number),
+                    color: Some(scheme.number),
                     ..Default::default()
                 },
             ));
@@ -72,7 +75,7 @@ pub fn highlight_json_line(line: &str, t: &crate::theme::AppTheme) -> gpui_kit::
             highlights.push((
                 i..i + 4,
                 gpui_kit::HighlightStyle {
-                    color: Some(t.json_boolean),
+                    color: Some(scheme.boolean),
                     font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
                     ..Default::default()
                 },
@@ -84,7 +87,7 @@ pub fn highlight_json_line(line: &str, t: &crate::theme::AppTheme) -> gpui_kit::
             highlights.push((
                 i..i + 5,
                 gpui_kit::HighlightStyle {
-                    color: Some(t.json_boolean),
+                    color: Some(scheme.boolean),
                     font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
                     ..Default::default()
                 },
@@ -96,7 +99,7 @@ pub fn highlight_json_line(line: &str, t: &crate::theme::AppTheme) -> gpui_kit::
             highlights.push((
                 i..i + 4,
                 gpui_kit::HighlightStyle {
-                    color: Some(t.json_null),
+                    color: Some(scheme.null),
                     font_style: Some(gpui_kit::FontStyle::Italic),
                     ..Default::default()
                 },

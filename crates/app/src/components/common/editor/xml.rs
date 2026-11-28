@@ -1,5 +1,5 @@
 use super::{clamp_char_boundary_left, clamp_char_boundary_right};
-use crate::theme::theme;
+use crate::editor_scheme::editor_scheme;
 use gpui_kit::component::input::{
     EditorState as CodeEditorState, FoldRange, HighlightStyleResolver, InputEdit, InputHighlighter,
     Rope,
@@ -74,7 +74,7 @@ impl InputHighlighter for XmlHighlighter {
         let len = slice_bytes.len();
         let mut i = 0;
         let mut raw_tokens = Vec::new();
-        let t = theme();
+        let scheme = editor_scheme();
 
         while i < len {
             // Check comment <!-- ... -->
@@ -90,7 +90,7 @@ impl InputHighlighter for XmlHighlighter {
                 raw_tokens.push((
                     start + c_start..start + i,
                     HighlightStyle {
-                        color: Some(t.text_muted),
+                        color: Some(scheme.comment),
                         font_style: Some(gpui_kit::FontStyle::Italic),
                         ..Default::default()
                     },
@@ -109,7 +109,7 @@ impl InputHighlighter for XmlHighlighter {
                 raw_tokens.push((
                     start + cd_start..start + i,
                     HighlightStyle {
-                        color: Some(t.json_number),
+                        color: Some(scheme.number),
                         ..Default::default()
                     },
                 ));
@@ -127,7 +127,7 @@ impl InputHighlighter for XmlHighlighter {
                 raw_tokens.push((
                     start + d_start..start + i,
                     HighlightStyle {
-                        color: Some(t.json_null),
+                        color: Some(scheme.null),
                         font_style: Some(gpui_kit::FontStyle::Italic),
                         ..Default::default()
                     },
@@ -141,7 +141,7 @@ impl InputHighlighter for XmlHighlighter {
                 raw_tokens.push((
                     start + tag_start..start + tag_start + tag_bracket_len,
                     HighlightStyle {
-                        color: Some(t.json_punctuation),
+                        color: Some(scheme.punctuation),
                         ..Default::default()
                     },
                 ));
@@ -161,7 +161,7 @@ impl InputHighlighter for XmlHighlighter {
                     raw_tokens.push((
                         start + name_start..start + i,
                         HighlightStyle {
-                            color: Some(t.accent_text),
+                            color: Some(scheme.accent),
                             font_weight: Some(gpui_kit::FontWeight::SEMIBOLD),
                             ..Default::default()
                         },
@@ -174,7 +174,7 @@ impl InputHighlighter for XmlHighlighter {
                         raw_tokens.push((
                             start + i..start + i + 2,
                             HighlightStyle {
-                                color: Some(t.json_punctuation),
+                                color: Some(scheme.punctuation),
                                 ..Default::default()
                             },
                         ));
@@ -199,7 +199,7 @@ impl InputHighlighter for XmlHighlighter {
                         raw_tokens.push((
                             start + attr_start..start + i,
                             HighlightStyle {
-                                color: Some(t.json_key),
+                                color: Some(scheme.key),
                                 ..Default::default()
                             },
                         ));
@@ -211,7 +211,7 @@ impl InputHighlighter for XmlHighlighter {
                         raw_tokens.push((
                             start + i..start + i + 1,
                             HighlightStyle {
-                                color: Some(t.json_punctuation),
+                                color: Some(scheme.punctuation),
                                 ..Default::default()
                             },
                         ));
@@ -233,7 +233,7 @@ impl InputHighlighter for XmlHighlighter {
                         raw_tokens.push((
                             start + val_start..start + i,
                             HighlightStyle {
-                                color: Some(t.json_string),
+                                color: Some(scheme.string),
                                 ..Default::default()
                             },
                         ));
@@ -247,7 +247,7 @@ impl InputHighlighter for XmlHighlighter {
                     raw_tokens.push((
                         start + i..start + i + 1,
                         HighlightStyle {
-                            color: Some(t.json_punctuation),
+                            color: Some(scheme.punctuation),
                             ..Default::default()
                         },
                     ));
@@ -545,13 +545,13 @@ mod tests {
         let styles = highlighter.styles(&range, &DummyResolver);
         assert!(!styles.is_empty(), "Styles should tokenize XML tags");
 
-        let t = theme();
+        let scheme = editor_scheme();
         let has_tag_highlight = styles
             .iter()
-            .any(|(r, s)| &xml_text[r.clone()] == "root" && s.color == Some(t.accent_text));
+            .any(|(r, s)| &xml_text[r.clone()] == "root" && s.color == Some(scheme.accent));
         let has_attr_value_highlight = styles
             .iter()
-            .any(|(r, s)| &xml_text[r.clone()] == "\"101\"" && s.color == Some(t.json_string));
+            .any(|(r, s)| &xml_text[r.clone()] == "\"101\"" && s.color == Some(scheme.string));
         assert!(has_tag_highlight, "Should highlight XML tag name");
         assert!(
             has_attr_value_highlight,
