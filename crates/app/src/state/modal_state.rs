@@ -1,6 +1,7 @@
 use super::ModalEvent;
 use crate::settings::AppSettings;
 use gpui_kit::Context;
+use zest_core::git::CloneCancellation;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WorkspaceSettingTarget {
@@ -28,6 +29,7 @@ pub enum ModalKind {
     WorkspaceSetting,
     Import,
     Export,
+    OpenGitWorkspace,
     About,
 }
 
@@ -117,6 +119,12 @@ pub struct ExportModalUi {
     pub target_folder_name: Option<String>,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct OpenGitWorkspaceUi {
+    pub operation: Option<CloneCancellation>,
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct ModalState {
     pub env_modal: EnvModalUi,
@@ -127,6 +135,7 @@ pub struct ModalState {
     pub workspace_setting_target: Option<WorkspaceSettingTarget>,
     pub import_modal: ImportModalUi,
     pub export_modal: ExportModalUi,
+    pub open_git_workspace: OpenGitWorkspaceUi,
     pub theme_preference: crate::theme::ThemePreference,
     pub split_layout_vertical: bool,
     pub network: NetworkPrefs,
@@ -143,6 +152,7 @@ impl Default for ModalState {
             workspace_setting_target: None,
             import_modal: ImportModalUi::default(),
             export_modal: ExportModalUi::default(),
+            open_git_workspace: OpenGitWorkspaceUi::default(),
             theme_preference: crate::theme::ThemePreference::System,
             split_layout_vertical: false,
             network: NetworkPrefs::default(),
@@ -215,6 +225,7 @@ impl ModalState {
                 self.export_modal.target_folder_id = None;
                 self.export_modal.target_folder_name = None;
             }
+            ModalKind::OpenGitWorkspace => self.open_git_workspace = OpenGitWorkspaceUi::default(),
             ModalKind::CommandPalette | ModalKind::Settings | ModalKind::About => {}
         }
     }
@@ -246,6 +257,9 @@ impl ModalState {
     /// `ModalEvent::EnvModalSelectionChanged` so `EnvVarTable` reconciles its
     /// rows and re-applies the target-variable focus.
     pub fn open(&mut self, kind: ModalKind, payload: Option<ModalPayload>, cx: &mut Context<Self>) {
+        if self.open_git_workspace.operation.is_some() {
+            return;
+        }
         self.active_modal = Some(kind);
         self.reset_transient_ui(kind);
         if let Some(payload) = payload {
@@ -260,6 +274,13 @@ impl ModalState {
     /// Closes `kind` if it is the active modal and resets its transient UI
     /// fields. Sticky state survives close/reopen.
     pub fn close(&mut self, kind: ModalKind, cx: &mut Context<Self>) {
+        if kind == ModalKind::OpenGitWorkspace {
+            if let Some(operation) = &self.open_git_workspace.operation {
+                operation.cancel();
+                cx.notify();
+                return;
+            }
+        }
         if self.active_modal == Some(kind) {
             self.active_modal = None;
         }

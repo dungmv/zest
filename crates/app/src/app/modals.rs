@@ -77,6 +77,13 @@ pub fn attach_modal_overlays(root: Div, entities: ModalOverlayEntities, cx: &mut
             )
             .into_any_element(),
         ),
+        Some(ModalKind::OpenGitWorkspace) => root.child(
+            OpenGitWorkspaceModal::new(
+                entities.workspace_state.clone(),
+                entities.modal_state.clone(),
+            )
+            .into_any_element(),
+        ),
         Some(ModalKind::About) => {
             root.child(AboutModal::new(entities.modal_state.clone()).into_any_element())
         }

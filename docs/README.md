@@ -20,7 +20,7 @@ Thư mục `docs/` này bao gồm toàn bộ thiết kế chi tiết, kiến tr�
 | [**specs/02-scripting-and-testing-engine.md**](./specs/02-scripting-and-testing-engine.md) | Pre-request Script, Test Script, Request Chaining (lấy token nhét vào env), JS Sandbox |
 | [**specs/03-protocols-graphql-websocket-grpc.md**](./specs/03-protocols-graphql-websocket-grpc.md) | Mở rộng giao thức: GraphQL (Introspection, Explorer), WebSocket (real-time stream), SSE, gRPC |
 | [**specs/04-advanced-auth-and-inheritance.md**](./specs/04-advanced-auth-and-inheritance.md) | OAuth 2.0 (PKCE, Refresh Token), AWS SigV4, mTLS Certs, Kế thừa Auth từ Folder/Workspace |
-| [**specs/05-git-sync-and-collaboration.md**](./specs/05-git-sync-and-collaboration.md) | Tích hợp Git UI trong app: Branching, Commit, Push/Pull, Visual Diff cho API changes |
+| [**specs/05-git-sync-and-collaboration.md**](./specs/05-git-sync-and-collaboration.md) | Mở workspace từ Git repo, quản lý nhánh, commit, push/pull và so sánh thay đổi API |
 | [**specs/06-developer-tools-codegen-diff-docs.md**](./specs/06-developer-tools-codegen-diff-docs.md) | JSONPath Filter, Dynamic Fake Vars (`{{$uuid}}`), API Docs Generator |
 | [**specs/07-ui-ux-enhancements.md**](./specs/07-ui-ux-enhancements.md) | Single-active Request & History Navigation, Preview ảnh/HTML, Cookie Manager nâng cao, Theme |
 | [**specs/08-collection-runner-and-testing-suite.md**](./specs/08-collection-runner-and-testing-suite.md) | Collection Runner, Data-Driven CSV/JSON, Headless CLI (Newman alt), Mock Server, Benchmark |

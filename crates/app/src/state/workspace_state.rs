@@ -4,7 +4,7 @@
 use super::WorkspaceEvent;
 use crate::settings::AppSettings;
 use gpui_kit::Context;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use zest_core::http::ReqwestExecutor;
 use zest_core::models::{Auth, KeyValuePair, StoredCookie, Workspace};
@@ -16,6 +16,13 @@ fn default_workspace_dir() -> PathBuf {
         .map(|d| d.join("zest"))
         .or_else(|| dirs::home_dir().map(|h| h.join("Documents").join("zest")))
         .unwrap_or_else(|| PathBuf::from("./zest"))
+}
+
+fn workspace_folder_name(path: &Path) -> String {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("Workspace")
+        .to_owned()
 }
 
 pub struct WorkspaceState {
@@ -157,14 +164,24 @@ impl WorkspaceState {
     pub fn open_workspace(&mut self, path: PathBuf, cx: &mut Context<Self>) {
         let path = path.canonicalize().unwrap_or(path);
         let store: Arc<dyn WorkspaceStore> = Arc::new(FsWorkspaceStore::new(&path));
-        let folder_name = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("Workspace")
-            .to_string();
         if !path.join("workspace.yaml").exists() {
-            let _ = store.init_workspace(&folder_name);
+            let _ = store.init_workspace(&workspace_folder_name(&path));
         }
+        self.request_workspace_switch(path, store, cx);
+    }
+
+    pub(crate) fn open_cloned_workspace(&self, path: PathBuf, cx: &mut Context<Self>) {
+        let store = Arc::new(FsWorkspaceStore::new(&path));
+        self.request_workspace_switch(path, store, cx);
+    }
+
+    fn request_workspace_switch(
+        &self,
+        path: PathBuf,
+        store: Arc<dyn WorkspaceStore>,
+        cx: &mut Context<Self>,
+    ) {
+        let folder_name = workspace_folder_name(&path);
         cx.emit(WorkspaceEvent::WorkspaceSwitchRequested {
             path,
             store,

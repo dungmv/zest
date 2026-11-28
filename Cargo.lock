@@ -10207,6 +10207,7 @@ dependencies = [
  "reqwest",
  "reqwest_cookie_store",
  "rquickjs",
+ "rustix",
  "serde",
  "serde_json",
  "serde_json_path",
@@ -10222,6 +10223,7 @@ dependencies = [
  "url",
  "urlencoding",
  "uuid",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

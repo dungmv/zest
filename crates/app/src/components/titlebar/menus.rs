@@ -49,6 +49,7 @@ pub(super) fn render_workspace_switcher(
         .dropdown_menu(move |menu, _window, _cx| {
             let ws_new = ws_s.clone();
             let ws_open = ws_s.clone();
+            let modal_open_git = modal_s.clone();
             let modal_settings = modal_s.clone();
             let ws_folder = ws_s.clone();
             let ws_clean = ws_s.clone();
@@ -141,6 +142,15 @@ pub(super) fn render_workspace_switcher(
                                 }
                             })
                             .detach();
+                        }),
+                )
+                .item(
+                    PopupMenuItem::new("Open Workspace from Git...")
+                        .icon(IconName::Download)
+                        .on_click(move |_, _, cx| {
+                            modal_open_git.update(cx, |state, cx| {
+                                state.open(ModalKind::OpenGitWorkspace, None, cx);
+                            });
                         }),
                 )
                 .item(

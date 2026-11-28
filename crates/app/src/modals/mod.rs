@@ -9,6 +9,7 @@ pub mod env_modal;
 pub mod export_modal;
 pub mod import_modal;
 pub mod modal;
+pub mod open_git_workspace;
 pub mod settings_modal;
 pub mod workspace_setting_modal;
 
@@ -19,5 +20,6 @@ pub use command_palette::*;
 pub use env_modal::*;
 pub use export_modal::*;
 pub use import_modal::*;
+pub use open_git_workspace::OpenGitWorkspaceModal;
 pub use settings_modal::*;
 pub use workspace_setting_modal::*;

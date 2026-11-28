@@ -1,5 +1,7 @@
-use crate::state::GitState;
+use crate::state::{GitState, ModalKind, ModalState, WorkspaceState};
 use gpui_kit::{App, Context, Entity};
+use std::path::PathBuf;
+use zest_core::git::{clone_workspace, CloneCancellation};
 
 /// Command router for Git VCS operations.
 ///
@@ -17,6 +19,57 @@ pub struct GitService {
 impl GitService {
     pub fn new(git: Entity<GitState>) -> Self {
         Self { git }
+    }
+
+    pub fn clone_and_open_workspace(
+        workspace: Entity<WorkspaceState>,
+        modal: Entity<ModalState>,
+        source: String,
+        parent_folder: PathBuf,
+        cx: &mut App,
+    ) {
+        let cancellation = CloneCancellation::default();
+        let started = modal.update(cx, |state, cx| {
+            if state.active_modal != Some(ModalKind::OpenGitWorkspace)
+                || state.open_git_workspace.operation.is_some()
+            {
+                return false;
+            }
+            state.open_git_workspace.error = None;
+            state.open_git_workspace.operation = Some(cancellation.clone());
+            cx.notify();
+            true
+        });
+        if !started {
+            return;
+        }
+
+        cx.spawn(async move |cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move { clone_workspace(&source, &parent_folder, &cancellation) })
+                .await;
+            cx.update(|cx| {
+                let path = modal.update(cx, |state, cx| {
+                    state.open_git_workspace.operation = None;
+                    match result {
+                        Ok(path) => {
+                            state.close(ModalKind::OpenGitWorkspace, cx);
+                            Some(path)
+                        }
+                        Err(error) => {
+                            state.open_git_workspace.error = Some(error.to_string());
+                            cx.notify();
+                            None
+                        }
+                    }
+                });
+                if let Some(path) = path {
+                    workspace.update(cx, |state, cx| state.open_cloned_workspace(path, cx));
+                }
+            });
+        })
+        .detach();
     }
 
     /// Dispatch a `loading`-guarded command. Errors surface in
