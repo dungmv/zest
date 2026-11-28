@@ -30,6 +30,15 @@ pub fn handle_workspace_event(
             let store = store.clone();
             let folder_name = folder_name.clone();
             this.workspace_switch_task = Some(cx.spawn(async move |this, cx| loop {
+                let Ok(edits) = this.update(cx, |this, cx| {
+                    this.state.collection.read(cx).pending_disk_edits()
+                }) else {
+                    break;
+                };
+                if let Some(mut edits) = edits {
+                    let _ = edits.changed().await;
+                    continue;
+                }
                 let waiting = this.update(cx, |this, cx| {
                     let waiting = this
                         .state
@@ -56,7 +65,7 @@ pub fn handle_workspace_event(
         WorkspaceEvent::WorkspaceMetaModified => {
             let (meta, name) = {
                 let ws = this.state.workspace.read(cx);
-                (ws.workspace_meta.clone(), ws.workspace_name().to_string())
+                (ws.workspace_meta().clone(), ws.workspace_name().to_string())
             };
             let headers = meta.headers.clone();
             let auth = meta.auth.clone();
@@ -78,7 +87,7 @@ fn activate_workspace(
     cx: &mut Context<AppView>,
 ) {
     this.state.workspace.update(cx, |ws, cx| {
-        ws.activate_workspace(path.to_path_buf(), store.clone(), folder_name, cx);
+        ws.activate_workspace(path.to_path_buf(), store.clone(), cx);
     });
     this.runner.engines.ws.disconnect_all();
     this.runner.engines =
@@ -125,7 +134,6 @@ pub fn handle_collection_event(
             local_state,
             environment,
             cookies,
-            folder_name,
             store,
             announce_opened,
             ..
@@ -140,13 +148,7 @@ pub fn handle_collection_event(
                 });
             }
             this.state.workspace.update(cx, |ws, cx| {
-                ws.apply_scan_result(
-                    workspace_meta.clone(),
-                    cookies.clone(),
-                    folder_name.clone(),
-                    store,
-                    cx,
-                );
+                ws.apply_scan_result(workspace_meta.clone(), cookies.clone(), store, cx);
             });
             let workspace_name = this.state.workspace.read(cx).workspace_name().to_string();
             let col_ent = this.state.collection.clone();
@@ -170,7 +172,7 @@ pub fn handle_collection_event(
                     .active_request
                     .as_ref()
                     .and_then(|id| col.find_request(id))
-                    .or_else(|| col.requests.first())
+                    .or_else(|| col.requests().first())
                     .map(|request| request.id.clone())
                     .unwrap_or_else(|| "scratch".to_string());
                 this.state
@@ -180,11 +182,7 @@ pub fn handle_collection_event(
         }
         CollectionEvent::WorkspaceMetaReloaded { meta, store } => {
             let persistence = this.state.persistence.read(cx);
-            if !Arc::ptr_eq(store, &persistence.store)
-                || persistence
-                    .coordinator
-                    .is_dirty(&crate::state::PersistTarget::WorkspaceMeta)
-            {
+            if !persistence.can_apply_workspace_meta(store) {
                 return;
             }
             let name = this.state.workspace.update(cx, |workspace, cx| {
@@ -228,7 +226,7 @@ pub fn handle_collection_event(
 
             // 3. Remap persistence state unsaved requests / active request
             let collection = this.state.collection.clone();
-            let pins = collection.read(cx).pins.clone();
+            let pins = collection.read(cx).pins().to_vec();
             this.state.persistence.update(cx, |per, cx| {
                 let pending: Vec<_> = pairs
                     .iter()
@@ -239,6 +237,13 @@ pub fn handle_collection_event(
                 for id in pending {
                     per.schedule_save_active_request(id.clone(), collection.clone(), cx);
                 }
+            });
+        }
+        CollectionEvent::RescanRequested => {
+            let persistence = this.state.persistence.clone();
+            let dirty = persistence.read(cx).dirty_request_ids();
+            this.state.collection.update(cx, |collection, cx| {
+                collection.reload_tree_preserving_async(persistence.downgrade(), dirty, cx);
             });
         }
         CollectionEvent::RequestsReloaded { req_ids } => {
@@ -256,12 +261,12 @@ pub fn handle_collection_event(
                         .as_ref()
                         .and_then(|act_id| {
                             col_ref
-                                .requests
+                                .requests()
                                 .iter()
                                 .find(|r| &r.id == act_id)
                                 .map(|r| r.id.clone())
                         })
-                        .or_else(|| col_ref.requests.first().map(|r| r.id.clone()))
+                        .or_else(|| col_ref.requests().first().map(|r| r.id.clone()))
                 };
                 if let Some(next_id) = next_id {
                     this.state.session.update(cx, |ed, cx| {
@@ -271,6 +276,27 @@ pub fn handle_collection_event(
             }
 
             let active_id = this.state.session.read(cx).active_request_id().to_string();
+            if req_ids.is_none()
+                && this
+                    .state
+                    .collection
+                    .read(cx)
+                    .find_request(&active_id)
+                    .is_none()
+            {
+                let next = this
+                    .state
+                    .collection
+                    .read(cx)
+                    .requests()
+                    .first()
+                    .map(|request| request.id.clone())
+                    .unwrap_or_else(|| "scratch".into());
+                this.state
+                    .session
+                    .update(cx, |session, cx| session.set_active_request_id(&next, cx));
+                return;
+            }
             let should_sync = match req_ids {
                 None => !this.state.persistence.read(cx).is_dirty(&active_id),
                 Some(ids) => ids.iter().any(|id| id == &active_id),
@@ -304,6 +330,19 @@ pub fn handle_collection_event(
                 .persistence
                 .update(cx, |persistence, cx| persistence.cancel_request(id, cx));
             this.runner.engines.ws.drop_session(id);
+            if this.state.session.read(cx).active_request_id() == id {
+                let next = this
+                    .state
+                    .collection
+                    .read(cx)
+                    .requests()
+                    .first()
+                    .map(|request| request.id.clone())
+                    .unwrap_or_else(|| "scratch".into());
+                this.state
+                    .session
+                    .update(cx, |session, cx| session.set_active_request_id(&next, cx));
+            }
         }
         CollectionEvent::RequestContentModified(id) => {
             let collection = this.state.collection.clone();
@@ -332,7 +371,7 @@ pub fn handle_collection_event(
                 .state
                 .collection
                 .read(cx)
-                .folders
+                .folders()
                 .iter()
                 .find(|f| f.id == fid)
                 .map(|f| {
@@ -355,7 +394,7 @@ pub fn handle_collection_event(
             }
         }
         CollectionEvent::PinsModified => {
-            let pins = this.state.collection.read(cx).pins.clone();
+            let pins = this.state.collection.read(cx).pins().to_vec();
             this.state.persistence.update(cx, |per, cx| {
                 per.schedule_save_pins(pins, cx);
             });
@@ -442,8 +481,8 @@ pub fn handle_session_event(
                 ),
             };
             this.state.response.update(cx, |resp, cx| {
-                let clamped_tab = ResponseTabKind::clamp_for(resp.active_tab, protocol);
-                if clamped_tab != resp.active_tab {
+                let clamped_tab = ResponseTabKind::clamp_for(resp.view().active_tab, protocol);
+                if clamped_tab != resp.view().active_tab {
                     resp.set_active_tab(clamped_tab, cx);
                 }
                 resp.restore_realtime_session(realtime_status, frames, realtime_headers, cx);

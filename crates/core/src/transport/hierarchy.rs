@@ -71,6 +71,26 @@ impl<'a> HeaderMerger<'a> {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InheritedAuthSource {
+    Workspace,
+    Folder(usize),
+}
+
+pub fn resolve_inherited_auth<'a>(
+    workspace: &'a Auth,
+    folders: impl DoubleEndedIterator<Item = &'a Auth> + ExactSizeIterator,
+) -> Option<(InheritedAuthSource, &'a Auth)> {
+    folders
+        .enumerate()
+        .rev()
+        .find(|(_, auth)| !auth.is_inherit())
+        .map(|(index, auth)| (InheritedAuthSource::Folder(index), auth))
+        .or_else(|| {
+            (!workspace.is_inherit()).then_some((InheritedAuthSource::Workspace, workspace))
+        })
+}
+
 /// Merges headers and resolves Auth across Workspace -> Folders -> Request hierarchy.
 /// - Headers: Child overrides parent with case-insensitive key matching. Preserves order.
 /// - Auth: Child inherits parent's auth if `Auth::Inherit`. If none found, defaults to `Auth::None`.
@@ -84,20 +104,10 @@ pub fn resolve_hierarchical_headers_and_auth<'a>(
     // 1. Resolve Auth
     let mut resolved_auth = request_auth.clone();
     if resolved_auth.is_inherit() {
-        let mut found_auth = None;
-        for (_, f_auth) in folder_chain.iter().rev() {
-            if !f_auth.is_inherit() {
-                found_auth = Some((*f_auth).clone());
-                break;
-            }
-        }
-        resolved_auth = found_auth.unwrap_or_else(|| {
-            if workspace_auth.is_inherit() {
-                Auth::None
-            } else {
-                workspace_auth.clone()
-            }
-        });
+        resolved_auth =
+            resolve_inherited_auth(workspace_auth, folder_chain.iter().map(|(_, auth)| *auth))
+                .map(|(_, auth)| auth.clone())
+                .unwrap_or(Auth::None);
     }
 
     // 2. Resolve Headers

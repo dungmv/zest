@@ -24,18 +24,7 @@ pub fn auth_kind_label(auth: &Auth) -> &'static str {
 
 impl CollectionState {
     pub fn get_folder_hierarchy(&self, folder_id: Option<&str>) -> Vec<&Folder> {
-        let mut chain = Vec::new();
-        let mut cur_id = folder_id.map(|s| s.to_string());
-        while let Some(id) = cur_id {
-            if let Some(folder) = self.folders.iter().find(|f| f.id == id) {
-                chain.push(folder);
-                cur_id = folder.parent_id.clone();
-            } else {
-                break;
-            }
-        }
-        chain.reverse();
-        chain
+        zest_core::storage::collection::folder_ancestors(&self.folders, folder_id)
     }
 
     pub fn resolve_request_hierarchy(&self, req: &RequestItem) -> (Vec<KeyValuePair>, Auth) {
@@ -82,29 +71,34 @@ impl CollectionState {
     /// Resolves the auth a request inherits when its own auth is `Auth::Inherit`:
     /// nearest non-inherit folder auth, else workspace auth.
     pub fn inherited_auth_source(&self, folder_id: Option<&str>) -> Option<InheritedAuthInfo> {
-        let folder_chain_refs = self.get_folder_hierarchy(folder_id);
-        for f in folder_chain_refs.iter().rev() {
-            if !f.auth.is_inherit() {
-                return Some(InheritedAuthInfo {
-                    source_name: f.name.clone(),
-                    source_folder_id: Some(f.id.clone()),
-                    auth: f.auth.clone(),
-                });
+        use zest_core::transport::hierarchy::{resolve_inherited_auth, InheritedAuthSource};
+
+        let folders = self.get_folder_hierarchy(folder_id);
+        let (source, auth) = resolve_inherited_auth(
+            &self.workspace_scope.auth,
+            folders.iter().map(|folder| &folder.auth),
+        )?;
+        let (source_name, source_folder_id) = match source {
+            InheritedAuthSource::Workspace => {
+                let name = self.workspace_scope.name.as_str();
+                (
+                    if name.is_empty() {
+                        "Workspace".into()
+                    } else {
+                        name.into()
+                    },
+                    None,
+                )
             }
-        }
-        let ws_auth = &self.workspace_scope.auth;
-        if ws_auth.is_inherit() {
-            return None;
-        }
-        let ws_name = if self.workspace_scope.name.is_empty() {
-            "Workspace".to_string()
-        } else {
-            self.workspace_scope.name.clone()
+            InheritedAuthSource::Folder(index) => {
+                let folder = folders[index];
+                (folder.name.clone(), Some(folder.id.clone()))
+            }
         };
         Some(InheritedAuthInfo {
-            source_name: ws_name,
-            source_folder_id: None,
-            auth: ws_auth.clone(),
+            source_name,
+            source_folder_id,
+            auth: auth.clone(),
         })
     }
 

@@ -127,10 +127,12 @@ impl RenderOnce for GitBranchModal {
         let (is_repo, current_branch, git_error, is_loading) = {
             let git = self.git_state.read(cx);
             (
-                git.status.as_ref().map(|s| s.is_repo).unwrap_or(false),
-                git.branch.clone().unwrap_or_else(|| "main".to_string()),
-                git.error.clone(),
-                git.loading,
+                git.status().map(|s| s.is_repo).unwrap_or(false),
+                git.branch()
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| "main".to_string()),
+                git.operation.error().map(str::to_owned),
+                git.operation.is_loading(),
             )
         };
 

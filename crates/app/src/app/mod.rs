@@ -20,6 +20,7 @@ use gpui_kit::component::resizable::{h_resizable, resizable_panel, v_resizable};
 use gpui_kit::*;
 
 pub struct AppView {
+    sidebar_cache: std::rc::Rc<std::cell::RefCell<SidebarFlatCache>>,
     pub(crate) state: AppState,
     pub(crate) composer_inputs: ComposerInputs,
     pub(crate) inspector_displays: InspectorDisplays,
@@ -122,6 +123,7 @@ impl AppView {
         }
 
         Self {
+            sidebar_cache: Default::default(),
             state,
             composer_inputs,
             inspector_displays,
@@ -223,7 +225,7 @@ impl Render for AppView {
 
         let sidebar_collapsed = self.state.sidebar.read(cx).sidebar_collapsed;
         let sidebar_width = self.state.sidebar.read(cx).sidebar_width;
-        let is_vertical_split = self.state.modal.read(cx).split_layout_vertical;
+        let is_vertical_split = crate::settings::AppPreferences::read(cx).split_layout_vertical;
 
         let ws_entity = self.state.workspace.clone();
         let col_entity = self.state.collection.clone();
@@ -269,6 +271,7 @@ impl Render for AppView {
                         .size(sidebar_width)
                         .size_range(px(200.)..px(480.))
                         .child(SidebarTree {
+                            cache: self.sidebar_cache.clone(),
                             workspace_state: col_entity.clone(),
                             persistence_state: self.state.persistence.clone(),
                             sidebar_state: sidebar_entity.clone(),

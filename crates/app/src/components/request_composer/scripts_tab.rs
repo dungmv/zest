@@ -10,7 +10,7 @@ pub(super) fn render_script_tab(
     cx: &mut Context<AppView>,
 ) -> AnyElement {
     let script_err = av.state.session.read(cx).script_error.clone();
-    let is_vert = av.state.modal.read(cx).split_layout_vertical;
+    let is_vert = crate::settings::AppPreferences::read(cx).split_layout_vertical;
     div()
         .size_full()
         .child(

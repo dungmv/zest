@@ -87,8 +87,8 @@ pub(super) fn render_workspace_switcher(
                     PopupMenuItem::new("Open Folder")
                         .icon(IconName::FolderOpen)
                         .on_click(move |_, _, cx| {
-                            ws_folder.update(cx, |state, _| {
-                                state.open_workspace_folder();
+                            ws_folder.update(cx, |state, cx| {
+                                state.open_workspace_folder(cx);
                             });
                         }),
                 )

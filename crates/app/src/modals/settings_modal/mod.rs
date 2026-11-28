@@ -198,8 +198,7 @@ impl RenderOnce for SettingsModal {
                                                 .into_any_element()
                                         }
                                         SettingsTab::Network => {
-                                            network_tab::render_network_tab(&modal_clone, cx)
-                                                .into_any_element()
+                                            network_tab::render_network_tab(cx).into_any_element()
                                         }
                                         SettingsTab::Cookies => cookies_tab::render_cookies_tab(
                                             &ws_clone,

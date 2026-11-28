@@ -18,7 +18,13 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(cx: &mut App) -> Self {
-        let workspace = cx.new(|_| WorkspaceState::new());
+        let settings = crate::settings::AppSettings::load();
+        cx.set_global(crate::settings::AppPreferences::from_settings(&settings));
+        let workspace = cx.new(|cx| {
+            let mut state = WorkspaceState::new(settings);
+            state.persist_recent_workspace(cx);
+            state
+        });
         let (ws_dir, ws_store, ws_name) = {
             let ws = workspace.read(cx);
             (

@@ -19,10 +19,10 @@ fn read_target_auth(
     cx: &App,
 ) -> Option<Auth> {
     match target {
-        WorkspaceSettingTarget::Workspace => Some(ws.read(cx).workspace_meta.auth.clone()),
+        WorkspaceSettingTarget::Workspace => Some(ws.read(cx).workspace_meta().auth.clone()),
         WorkspaceSettingTarget::Folder(fid) => col
             .read(cx)
-            .folders
+            .folders()
             .iter()
             .find(|f| &f.id == fid)
             .map(|f| f.auth.clone()),
@@ -38,12 +38,7 @@ fn save_target_auth(
 ) {
     match target {
         WorkspaceSettingTarget::Workspace => {
-            let cur_h = ws
-                .read(cx)
-                .active_workspace
-                .as_ref()
-                .map(|w| w.headers.clone())
-                .unwrap_or_default();
+            let cur_h = ws.read(cx).workspace_meta().headers.clone();
             ws.update(cx, |state, cx| {
                 state.save_workspace_settings(cur_h, new_auth, cx)
             });
@@ -51,7 +46,7 @@ fn save_target_auth(
         WorkspaceSettingTarget::Folder(fid) => {
             let cur_h = col
                 .read(cx)
-                .folders
+                .folders()
                 .iter()
                 .find(|f| &f.id == fid)
                 .map(|f| f.headers.clone())

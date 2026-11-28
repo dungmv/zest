@@ -72,7 +72,7 @@ fn rebuild_palette_cache(
     q: &str,
 ) {
     let by_id: std::collections::HashMap<&str, &zest_core::models::Folder> =
-        ws.folders.iter().map(|f| (f.id.as_str(), f)).collect();
+        ws.folders().iter().map(|f| (f.id.as_str(), f)).collect();
 
     // Memoized folder-id -> display path; the depth cap also guards against
     // corrupted parent chains forming cycles.
@@ -101,7 +101,7 @@ fn rebuild_palette_cache(
 
     let mut folder_paths: std::collections::HashMap<String, String> =
         std::collections::HashMap::new();
-    for f in &ws.folders {
+    for f in ws.folders() {
         resolve_path(&f.id, &by_id, &mut folder_paths, 0);
     }
 
@@ -115,7 +115,7 @@ fn rebuild_palette_cache(
         .collect();
 
     cache.requests = ws
-        .requests
+        .requests()
         .iter()
         .filter_map(|r| {
             let folder_path = r
@@ -124,7 +124,7 @@ fn rebuild_palette_cache(
                 .and_then(|fid| folder_paths.get(fid))
                 .cloned()
                 .unwrap_or_default();
-            let req_name = crate::state::effective_request_name(r);
+            let req_name = crate::components::common::request_label::effective_request_name(r);
             let full_path = if folder_path.is_empty() {
                 req_name.clone()
             } else {

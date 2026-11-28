@@ -39,11 +39,11 @@ pub(super) struct CollectionScanState {
 pub struct CollectionState {
     pub store: Arc<dyn WorkspaceStore>,
     pub workspace_path: PathBuf,
-    pub folders: Vec<Folder>,
-    pub requests: Vec<RequestItem>,
+    pub(super) folders: Vec<Folder>,
+    pub(super) requests: Vec<RequestItem>,
     pub scratch_request: RequestItem,
-    pub parse_errors: HashMap<String, String>,
-    pub pins: Vec<String>,
+    pub(super) parse_errors: HashMap<String, String>,
+    pub(super) pins: Vec<String>,
     /// Monotonically increasing counter bumped whenever the sidebar tree structure,
     /// request names/methods/status codes/examples, pins, or parse errors change.
     pub tree_version: usize,
@@ -52,6 +52,8 @@ pub struct CollectionState {
     pub url_version: usize,
     pub workspace_scope: WorkspaceScopeSnapshot,
     pub(super) scan: CollectionScanState,
+    disk_edits: Option<tokio::sync::watch::Receiver<()>>,
+    disk_revision: u64,
 }
 
 impl CollectionState {
@@ -81,16 +83,46 @@ impl CollectionState {
                 auth: Auth::None,
             },
             scan: CollectionScanState::default(),
+            disk_edits: None,
+            disk_revision: 0,
         }
     }
 
+    #[cfg(test)]
     pub fn new_for_path(path: PathBuf, store: Arc<dyn WorkspaceStore>) -> Self {
         let mut state = Self::new(store, path, "Test Workspace".to_string());
         state.reload_all_sync();
         state
     }
 
-    pub fn bump_tree_version(&mut self) {
+    pub fn requests(&self) -> &[RequestItem] {
+        &self.requests
+    }
+
+    pub fn folders(&self) -> &[Folder] {
+        &self.folders
+    }
+
+    pub fn pins(&self) -> &[String] {
+        &self.pins
+    }
+
+    pub fn parse_errors(&self) -> &HashMap<String, String> {
+        &self.parse_errors
+    }
+
+    #[cfg(test)]
+    pub(crate) fn replace_fixture_tree(
+        &mut self,
+        folders: Vec<Folder>,
+        requests: Vec<RequestItem>,
+    ) {
+        self.folders = folders;
+        self.requests = requests;
+        self.bump_tree_version();
+    }
+
+    pub(super) fn bump_tree_version(&mut self) {
         self.tree_version = self.tree_version.wrapping_add(1);
     }
 
@@ -119,6 +151,8 @@ impl CollectionState {
         cx: &mut Context<Self>,
     ) {
         self.scan = CollectionScanState::default();
+        self.disk_edits = None;
+        self.disk_revision = self.disk_revision.wrapping_add(1);
         self.store = store;
         self.workspace_path = path;
         self.folders.clear();
@@ -149,6 +183,62 @@ impl CollectionState {
         self.scan.load_in_flight
     }
 
+    pub(crate) fn pending_disk_edits(&self) -> Option<tokio::sync::watch::Receiver<()>> {
+        self.disk_edits
+            .as_ref()
+            .filter(|tail| tail.has_changed().is_ok())
+            .cloned()
+    }
+
+    pub(crate) fn disk_revision(&self) -> u64 {
+        self.disk_revision
+    }
+
+    pub(crate) fn after_disk_edits(
+        &mut self,
+        cx: &mut Context<Self>,
+        apply: impl FnOnce(&mut Self, &mut Context<Self>) + 'static,
+    ) {
+        self.edit_disk(
+            "Could Not Finish Collection Edit",
+            |_| Ok(()),
+            move |state, (), cx| apply(state, cx),
+            cx,
+        );
+    }
+
+    fn edit_disk<T: Send + 'static>(
+        &mut self,
+        title: &'static str,
+        work: impl FnOnce(&dyn WorkspaceStore) -> anyhow::Result<T> + Send + 'static,
+        apply: impl FnOnce(&mut Self, T, &mut Context<Self>) + 'static,
+        cx: &mut Context<Self>,
+    ) {
+        self.edit_disk_with_snapshot(title, |_| Some(work), apply, cx);
+    }
+
+    fn edit_disk_with_snapshot<T: Send + 'static, Work>(
+        &mut self,
+        title: &'static str,
+        prepare: impl FnOnce(&Self) -> Option<Work> + 'static,
+        apply: impl FnOnce(&mut Self, T, &mut Context<Self>) + 'static,
+        cx: &mut Context<Self>,
+    ) where
+        Work: FnOnce(&dyn WorkspaceStore) -> anyhow::Result<T> + Send + 'static,
+    {
+        crate::services::collection_io::enqueue(
+            &mut self.disk_edits,
+            self.store.clone(),
+            title,
+            prepare,
+            move |state, value, cx| {
+                state.disk_revision = state.disk_revision.wrapping_add(1);
+                apply(state, value, cx);
+            },
+            cx,
+        );
+    }
+
     pub fn find_request(&self, req_id: &str) -> Option<&RequestItem> {
         if req_id == "scratch" {
             return Some(&self.scratch_request);
@@ -166,7 +256,7 @@ impl CollectionState {
         self.requests.get(pos)
     }
 
-    pub fn find_request_mut(&mut self, req_id: &str) -> Option<&mut RequestItem> {
+    pub(super) fn find_request_mut(&mut self, req_id: &str) -> Option<&mut RequestItem> {
         if req_id == "scratch" {
             return Some(&mut self.scratch_request);
         }
@@ -257,3 +347,9 @@ impl CollectionState {
         cx.notify();
     }
 }
+
+#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+mod collision_tests;

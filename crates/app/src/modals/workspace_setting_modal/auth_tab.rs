@@ -45,18 +45,13 @@ fn save_target_auth(
 ) {
     match target {
         WorkspaceSettingTarget::Workspace => {
-            let cur_h = ws
-                .read(cx)
-                .active_workspace
-                .as_ref()
-                .map(|w| w.headers.clone())
-                .unwrap_or_default();
+            let cur_h = ws.read(cx).workspace_meta().headers.clone();
             ws.update(cx, |s, cx| s.save_workspace_settings(cur_h, new_auth, cx));
         }
         WorkspaceSettingTarget::Folder(fid) => {
             let cur_h = col
                 .read(cx)
-                .folders
+                .folders()
                 .iter()
                 .find(|f| &f.id == fid)
                 .map(|f| f.headers.clone())

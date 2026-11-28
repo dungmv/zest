@@ -625,8 +625,10 @@ fn subscribe_state_events(
     let modal_theme = targets.modal_state.clone();
     subscriptions.push(window.observe_window_appearance(move |window, cx| {
         let app_appearance = window.appearance();
-        modal_theme.update(cx, |modal, cx| {
-            if modal.theme_preference == crate::theme::ThemePreference::System {
+        modal_theme.update(cx, |_, cx| {
+            if crate::settings::AppPreferences::read(cx).theme
+                == crate::theme::ThemePreference::System
+            {
                 let mode = crate::theme::resolve_theme_mode(
                     crate::theme::ThemePreference::System,
                     app_appearance,

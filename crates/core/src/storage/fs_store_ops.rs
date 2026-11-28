@@ -125,7 +125,6 @@ impl WorkspaceStore for FsWorkspaceStore {
             return Ok(WorkspaceTree::default());
         }
 
-        let mut root_requests = Vec::new();
         let mut folders = Vec::new();
         let mut loc_files = Vec::new();
         let mut req_map: HashMap<String, RequestNode> = HashMap::new();
@@ -213,14 +212,8 @@ impl WorkspaceStore for FsWorkspaceStore {
             }
         }
 
-        let mut root_stems: Vec<String> = req_map.keys().cloned().collect();
-        root_stems.sort();
-        root_requests.reserve(root_stems.len());
-        for s in root_stems {
-            if let Some(r) = req_map.remove(&s) {
-                root_requests.push(r);
-            }
-        }
+        let root_order = self.load_folder_meta("").unwrap_or_default().order;
+        let root_requests = super::collection::order_requests(req_map, &root_order);
 
         folders.sort_by(|a, b| a.dir_name.cmp(&b.dir_name));
 
@@ -429,51 +422,73 @@ impl WorkspaceStore for FsWorkspaceStore {
     }
 
     fn load_environment(&self, name: &str) -> Result<EnvironmentFile> {
-        let path = self.environments_dir().join(format!("{}.yaml", name));
-        if !path.exists() {
-            return Ok(EnvironmentFile::default());
-        }
-        let raw = std::fs::read_to_string(&path)?;
+        Ok(self
+            .read_environment(name)?
+            .map(super::EnvironmentRead::into_file)
+            .unwrap_or_default())
+    }
+
+    fn read_environment(&self, name: &str) -> Result<Option<super::EnvironmentRead>> {
+        let path = self.environments_dir().join(format!("{name}.yaml"));
+        let raw = match std::fs::read_to_string(&path) {
+            Ok(raw) => raw,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(error.into()),
+        };
         self.writer.record_read(&path, raw.as_bytes());
-        let mut env: EnvironmentFile = serde_yaml::from_str(&raw)?;
-
-        // Inject secrets from .local/secrets/<name>.yaml
-        let secrets = self.load_secrets(name).unwrap_or_default();
-        for v in &mut env.variables {
-            if v.secret {
-                if let Some(secret_val) = secrets.get(&v.name) {
-                    v.value = Some(secret_val.clone());
-                }
-            }
-        }
-
-        Ok(env)
+        let file = serde_yaml::from_str(&raw)?;
+        Ok(Some(super::EnvironmentRead::new(
+            file,
+            self.load_secrets(name),
+        )))
     }
 
     fn save_environment(&self, name: &str, env: &EnvironmentFile) -> Result<()> {
-        std::fs::create_dir_all(self.environments_dir())?;
-        std::fs::create_dir_all(self.secrets_dir())?;
-
-        let mut committed_env = env.clone();
         let mut secrets = HashMap::new();
-
-        // Secret split:
-        // variables with secret: true have value: None in committed file,
-        // and secret value is written only to .local/secrets/<name>.yaml
-        for v in &mut committed_env.variables {
-            if v.secret {
-                if let Some(val) = v.value.take() {
-                    secrets.insert(v.name.clone(), val);
+        for variable in &env.variables {
+            if variable.secret {
+                if let Some(value) = &variable.value {
+                    secrets.insert(variable.name.clone(), value.clone());
                 }
             }
         }
+        self.save_environment_values(name, env, &secrets)
+    }
 
-        let path = self.environments_dir().join(format!("{}.yaml", name));
-        let yaml = to_yaml_string(&committed_env)?;
-        self.writer.write_str(&path, &yaml)?;
+    fn save_environment_values(
+        &self,
+        name: &str,
+        public: &EnvironmentFile,
+        secrets: &HashMap<String, String>,
+    ) -> Result<()> {
+        std::fs::create_dir_all(self.environments_dir())?;
+        std::fs::create_dir_all(self.secrets_dir())?;
+        let mut public = public.clone();
+        for variable in &mut public.variables {
+            if variable.secret {
+                variable.value = None;
+            }
+        }
 
-        self.save_secrets(name, &secrets)?;
-
+        let public_path = self.environments_dir().join(format!("{name}.yaml"));
+        let secrets_path = self.secrets_dir().join(format!("{name}.yaml"));
+        let yaml = to_yaml_string(&public)?;
+        let previous = match std::fs::read(&secrets_path) {
+            Ok(bytes) => Some(bytes),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.into()),
+        };
+        self.save_secrets(name, secrets)?;
+        if let Err(error) = self.writer.write_str(&public_path, &yaml) {
+            let rollback = match previous {
+                Some(bytes) => self.writer.write_bytes(&secrets_path, &bytes),
+                None => self.writer.remove_file(&secrets_path),
+            };
+            rollback.with_context(|| {
+                format!("Could not restore secrets after saving '{name}' failed: {error}")
+            })?;
+            return Err(error.into());
+        }
         Ok(())
     }
 

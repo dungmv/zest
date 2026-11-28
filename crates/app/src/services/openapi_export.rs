@@ -25,7 +25,7 @@ pub fn openapi_export_stats_for(
     // Exclude the export root itself from the folder count.
     let folders = scope_ids
         .as_ref()
-        .map_or(collection.folders.len(), |ids| ids.len() - 1);
+        .map_or(collection.folders().len(), |ids| ids.len() - 1);
     (exportable, folders, scoped_requests.len() - exportable)
 }
 
@@ -86,7 +86,7 @@ pub fn build_openapi_export_for(
     let (title, description) = match folder_id {
         Some(id) => (
             collection
-                .folders
+                .folders()
                 .iter()
                 .find(|f| f.id == id)
                 .map(|f| f.name.clone())
@@ -108,9 +108,9 @@ fn requests_in_scope<'a>(
     scope_ids: Option<&[String]>,
 ) -> Vec<&'a RequestItem> {
     match scope_ids {
-        None => collection.requests.iter().collect(),
+        None => collection.requests().iter().collect(),
         Some(ids) => collection
-            .requests
+            .requests()
             .iter()
             .filter(|r| {
                 r.folder_id
@@ -128,7 +128,7 @@ fn folder_subtree_ids(collection: &CollectionState, folder_id: &str) -> Vec<Stri
         let current = ids[i].clone();
         i += 1;
         let child_ids: Vec<String> = collection
-            .folders
+            .folders()
             .iter()
             .filter(|f| f.parent_id.as_deref() == Some(current.as_str()))
             .map(|f| f.id.clone())
@@ -141,3 +141,7 @@ fn folder_subtree_ids(collection: &CollectionState, folder_id: &str) -> Vec<Stri
     }
     ids
 }
+
+#[cfg(test)]
+#[path = "openapi_export_tests.rs"]
+mod tests;

@@ -14,6 +14,7 @@ mod params_tab;
 mod proto_tab;
 mod scripts_tab;
 mod tab_strip;
+pub(crate) mod tabs;
 mod ws_message_tab;
 
 pub(crate) use editor_diagnostics::{
@@ -43,14 +44,13 @@ impl AppView {
             .state
             .persistence
             .read(cx)
-            .conflicts
-            .get(&req_id_str)
-            .cloned();
+            .request_conflict(&req_id_str)
+            .map(str::to_owned);
         let active_parse_err = self
             .state
             .collection
             .read(cx)
-            .parse_errors
+            .parse_errors()
             .get(&req_id_str)
             .cloned();
         let corrupt_sec_err = self.state.env.read(cx).corrupt_secrets_warning.clone();

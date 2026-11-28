@@ -185,8 +185,8 @@ pub fn render_general_tab(
                                         .gap(px(4.))
                                         .text_xs()
                                         .on_click(move |_, _, cx| {
-                                            ws_open.update(cx, |ws, _| {
-                                                ws.open_workspace_folder();
+                                            ws_open.update(cx, |ws, cx| {
+                                                ws.open_workspace_folder(cx);
                                             });
                                         })
                                         .child(Icon::new(IconName::FolderOpen).size(px(12.)))

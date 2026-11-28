@@ -6,7 +6,7 @@ use super::http_engine::HttpEngine;
 use super::send_event::SendEvent;
 use super::ws_service::WsService;
 use crate::state::{
-    CollectionState, EnvironmentState, ModalState, RequestSessionState, ResponseState,
+    CollectionState, EnvironmentState, ModalState, RequestSessionState, ResponseState, SendId,
     WorkspaceState,
 };
 use gpui_kit::{App, Entity};
@@ -59,6 +59,7 @@ struct SendContext {
 struct PreparedSend {
     ctx: SendContext,
     cancel_rx: oneshot::Receiver<()>,
+    id: SendId,
 }
 
 impl Runner {
@@ -113,7 +114,7 @@ impl Runner {
             self.engines.http.clear_sse_frames(&ctx.req_id);
         }
 
-        let PreparedSend { ctx, cancel_rx } = self.begin_send(cx, ctx);
+        let PreparedSend { ctx, cancel_rx, id } = self.begin_send(cx, ctx);
         if protocol == Protocol::WebSocket {
             self.response_state.update(cx, |resp, cx| {
                 resp.set_ws_status(WebSocketStatus::Connecting, cx);
@@ -129,7 +130,7 @@ impl Runner {
             Protocol::Grpc => self.engines.grpc.invoke(req_item, env, cancel_rx),
             Protocol::Sse => self.engines.http.execute(req_item, env, cancel_rx),
         };
-        self.spawn_send_pump(cx, protocol, event_rx);
+        self.spawn_send_pump(cx, id, protocol, event_rx);
     }
 
     /// Shared preamble for every send path: fetch the active request, guard
@@ -138,7 +139,7 @@ impl Runner {
     /// no state is mutated until [`Runner::begin_send`].
     fn gather_send_context(&self, cx: &App) -> Option<SendContext> {
         let ed = self.session_state.read(cx);
-        if ed.is_sending || self.collection_state.read(cx).is_loading_workspace() {
+        if ed.is_sending() || self.collection_state.read(cx).is_loading_workspace() {
             return None;
         }
         let req_id = ed.active_request_id().to_string();
@@ -158,10 +159,10 @@ impl Runner {
 
         // Apply global network & execution settings
         {
-            let modal = self.modal_state.read(cx);
-            req_item.set_timeout_secs(modal.network.request_timeout_secs);
-            req_item.set_follow_redirects(modal.network.follow_redirects);
-            req_item.set_validate_tls(modal.network.validate_tls);
+            let pref = crate::settings::AppPreferences::read(cx);
+            req_item.set_timeout_secs(pref.request_timeout_secs);
+            req_item.set_follow_redirects(pref.follow_redirects);
+            req_item.set_validate_tls(pref.validate_tls);
         }
 
         let env = Some(self.env_state.read(cx).effective_environment());
@@ -179,10 +180,10 @@ impl Runner {
     fn begin_send(&self, cx: &mut App, ctx: SendContext) -> PreparedSend {
         let (cancel_tx, cancel_rx) = oneshot::channel();
         let req_id = ctx.req_id.clone();
-        self.session_state.update(cx, |state, cx| {
-            state.start_sending(Some(req_id), cancel_tx, cx);
+        let id = self.session_state.update(cx, |state, cx| {
+            state.start_sending(Some(req_id), cancel_tx, cx)
         });
-        PreparedSend { ctx, cancel_rx }
+        PreparedSend { ctx, cancel_rx, id }
     }
 
     /// Pumps one unified send-event stream to completion on the GPUI thread.
@@ -191,6 +192,7 @@ impl Runner {
     fn spawn_send_pump(
         &self,
         cx: &mut App,
+        send_id: SendId,
         protocol: Protocol,
         mut event_rx: mpsc::Receiver<SendEvent>,
     ) {
@@ -205,9 +207,23 @@ impl Runner {
         let http_engine = self.engines.http.clone();
 
         cx.spawn(async move |cx| {
+            let mut connection = None;
             while let Some(event) = event_rx.recv().await {
                 let current = cx.update(|cx| {
                     if !Arc::ptr_eq(&origin, &workspace_state.read(cx).store) {
+                        return false;
+                    }
+                    let owns_send = session_state.read(cx).is_current_send(send_id);
+                    let owns_connection =
+                        connection
+                            .as_ref()
+                            .is_some_and(|(request_id, outgoing): &(String, _)| {
+                                ws_service.owns_session(request_id, outgoing)
+                            });
+                    if !owns_send && !owns_connection {
+                        if let SendEvent::HandshakeConnected { outgoing, .. } = event {
+                            ws_service.close_outgoing(outgoing);
+                        }
                         return false;
                     }
                     match event {
@@ -217,25 +233,21 @@ impl Runner {
                             env_mutations,
                             pre_script_error,
                         } => {
-                            if let Some(err) = pre_script_error {
+                            apply_env_mutations(&env_state, &env_mutations, cx);
+                            if session_state.read(cx).active_request_id() == request_id {
                                 session_state.update(cx, |ed, cx| {
-                                    ed.set_script_error(Some(err), cx);
+                                    ed.set_script_error(pre_script_error, cx);
                                 });
-                            } else {
-                                session_state.update(cx, |ed, cx| {
-                                    ed.set_script_error(None, cx);
+                                response_state.update(cx, |resp, cx| {
+                                    resp.start_sending(Some(&request_id), cx);
+                                    resp.set_pre_request_logs(initial_logs, cx);
                                 });
                             }
-                            apply_env_mutations(&env_state, &env_mutations, cx);
-                            response_state.update(cx, |resp, cx| {
-                                resp.start_sending(Some(&request_id), cx);
-                                resp.set_pre_request_logs(initial_logs, cx);
-                            });
                         }
                         SendEvent::Progress(text) => {
-                            session_state.update(cx, |ed, cx| {
-                                ed.update_progress(text, cx);
-                            });
+                            if owns_send {
+                                session_state.update(cx, |ed, cx| ed.update_progress(text, cx));
+                            }
                         }
                         SendEvent::Frame { request_id, frame } => match protocol {
                             Protocol::WebSocket => {
@@ -284,7 +296,8 @@ impl Runner {
                             // mutations (pre-script ones arrived on Started)
                             apply_env_mutations(&env_state, &post_output.env_mutations, cx);
 
-                            if let Some(err) = &post_output.error {
+                            let active = session_state.read(cx).active_request_id() == req_id;
+                            if let Some(err) = post_output.error.as_ref().filter(|_| active) {
                                 session_state.update(cx, |ed, cx| {
                                     ed.set_script_error(Some(err.clone()), cx);
                                 });
@@ -293,15 +306,12 @@ impl Runner {
                             let record_for_disk = record.clone();
                             let cookies =
                                 workspace_state.update(cx, |ws, _cx| ws.sync_cookies_in_memory());
+                            super::workspace_io::save_cookies_later(origin.clone(), cookies, cx);
                             collection_state.update(cx, |col, cx| {
-                                if let Some(r) = col.find_request_mut(&req_id) {
-                                    r.last_status_code = Some(status);
-                                }
-                                col.bump_tree_version();
-                                // Disk writes (response cache + cookies) serialize
-                                // and hash sizable payloads; run them on the
-                                // background executor in one sequential task so
-                                // response-arrival frames never hitch on I/O.
+                                col.mutate_request(&req_id, |request| {
+                                    request.last_status_code = Some(status)
+                                });
+                                // Serialize the response sidecar off the UI thread.
                                 let store = origin.clone();
                                 let req_id_for_disk = req_id.clone();
                                 cx.background_executor()
@@ -309,16 +319,13 @@ impl Runner {
                                         let loc_file = LocFile::from_record(&record_for_disk);
                                         let _ =
                                             store.save_response_cache(&req_id_for_disk, &loc_file);
-                                        if let Ok(val) = serde_json::to_value(&cookies) {
-                                            let _ = store.save_cookies(&val);
-                                        }
                                     })
                                     .detach();
                                 cx.notify();
                             });
 
                             response_state.update(cx, |resp, cx| {
-                                resp.set_response_for_request(req_id.clone(), record, cx);
+                                resp.set_response_for_request(req_id.clone(), record, active, cx);
                             });
 
                             session_state.update(cx, |ed, cx| {
@@ -331,6 +338,7 @@ impl Runner {
                             response_headers,
                             duration_ms: _,
                         } => {
+                            connection = Some((request_id.clone(), outgoing.clone()));
                             ws_service.register_session(
                                 &request_id,
                                 outgoing,
@@ -402,31 +410,37 @@ impl Runner {
                             auto_service,
                             auto_method,
                         } => {
-                            session_state.update(cx, |ed, cx| {
-                                ed.set_grpc_schema(Some(std::sync::Arc::new(summary)), cx);
-                            });
+                            if session_state.read(cx).active_request_id() == request_id {
+                                session_state.update(cx, |ed, cx| {
+                                    ed.set_grpc_schema(Some(std::sync::Arc::new(summary)), cx);
+                                });
+                            }
                             if let (Some(svc), Some(mth)) = (auto_service, auto_method) {
-                                collection_state.update(cx, |col, _| {
+                                collection_state.update(cx, |col, cx| {
                                     col.update_active_request(&request_id, |r| {
                                         let payload = r.grpc_mut();
                                         payload.service = svc;
                                         payload.method = mth;
                                     });
-                                });
-                                session_state.update(cx, |ed, cx| {
-                                    ed.mark_dirty(cx);
+                                    if request_id != "scratch" {
+                                        cx.emit(
+                                            crate::state::CollectionEvent::RequestContentModified(
+                                                request_id,
+                                            ),
+                                        );
+                                    }
                                 });
                             }
                         }
                         SendEvent::Cancelled => {
-                            session_state.update(cx, |ed, cx| {
-                                ed.stop_sending(cx);
-                            });
+                            if owns_send {
+                                session_state.update(cx, |ed, cx| ed.stop_sending(cx));
+                            }
                         }
                         SendEvent::Failed { request_id, error } => {
-                            session_state.update(cx, |ed, cx| {
-                                ed.stop_sending(cx);
-                            });
+                            if owns_send {
+                                session_state.update(cx, |ed, cx| ed.stop_sending(cx));
+                            }
                             match protocol {
                                 Protocol::WebSocket => {
                                     ws_service.mark_failed(&request_id, &error);

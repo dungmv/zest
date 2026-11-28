@@ -86,7 +86,7 @@ pub fn render_error_banner(git_state: Entity<GitState>, err: String) -> gpui_kit
         .banner()
         .on_close(move |_, _, cx| {
             git_err.update(cx, |git, cx| {
-                git.error = None;
+                git.operation.clear_error();
                 cx.notify();
             });
         })

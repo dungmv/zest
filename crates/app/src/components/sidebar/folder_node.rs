@@ -242,8 +242,8 @@ fn build_folder_context_menu(
             let f_id_p = folder_id.to_string();
             m.item(PopupMenuItem::new(label).icon(Icon::new(icon)).on_click(
                 move |_, window, cx| {
-                    sb_p.update(cx, |state, _| {
-                        state.collapsed_folders.remove(&f_id_p);
+                    sb_p.update(cx, |state, cx| {
+                        state.expand_folder(&f_id_p, cx);
                     });
                     super::item_actions::create_and_rename_request(
                         proto,
@@ -292,22 +292,13 @@ fn build_folder_context_menu(
         PopupMenuItem::new("New Folder")
             .icon(IconName::FolderPlus)
             .on_click(move |_, window, cx| {
-                let ws_c = ws_ns.clone();
-                let created = ws_ns.update(cx, |state, cx| {
-                    state.create_folder(Some(f_id_ns.clone()), "new-folder".to_string(), cx)
-                });
-                if let Some(new_id) = created {
-                    sb_ns.update(cx, |state, cx| {
-                        state.collapsed_folders.remove(&f_id_ns);
-                        state.start_renaming_folder(
-                            new_id,
-                            "new-folder".to_string(),
-                            ws_c,
-                            window,
-                            cx,
-                        );
-                    });
-                }
+                super::item_actions::create_and_rename_folder(
+                    Some(f_id_ns.clone()),
+                    &ws_ns,
+                    &sb_ns,
+                    window,
+                    cx,
+                );
             }),
     )
     .item(

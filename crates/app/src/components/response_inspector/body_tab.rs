@@ -34,10 +34,11 @@ pub(super) fn render_body_tab(
 
     let jsonpath_input = use_jsonpath_input(ri, window, cx);
     let resp_s = ri.response_state.read(cx);
-    let view_mode = resp_s.view_mode;
+    let view_mode = resp_s.view().mode;
     let body_len = c_resp.body.len();
 
-    let (lines, is_json, is_binary, is_truncated) = if let Some(fmt) = &resp_s.formatted_body {
+    let (lines, is_json, is_binary, is_truncated) = if let Some(fmt) = &resp_s.view().formatted_body
+    {
         (
             fmt.lines.clone(),
             fmt.is_json,
@@ -50,6 +51,7 @@ pub(super) fn render_body_tab(
 
     let is_large_payload = is_truncated || body_len > 10 * 1024 * 1024 || lines.len() > 20000;
     let preview_kind = resp_s
+        .view()
         .formatted_body
         .as_ref()
         .and_then(|f| f.preview_kind)
@@ -64,14 +66,19 @@ pub(super) fn render_body_tab(
     // retained parsed value in CachedResponseFormat is what gets queried).
     let jsonpath_active = !is_preview_mode
         && resp_s
+            .view()
             .formatted_body
             .as_ref()
             .and_then(|f| f.cached_format.as_ref())
             .is_some_and(|cf| cf.parsed_json.is_some());
-    let show_jsonpath_bar = resp_s.ui.show_jsonpath_bar;
-    let jsonpath_matches = resp_s.formatted_body.as_ref().and_then(|f| f.match_count);
+    let show_jsonpath_bar = resp_s.view().show_jsonpath_bar;
+    let jsonpath_matches = resp_s
+        .view()
+        .formatted_body
+        .as_ref()
+        .and_then(|f| f.match_count);
     let is_viewing_example = resp_s.active_example_name.is_some();
-    let wrap_lines = resp_s.wrap_lines;
+    let wrap_lines = resp_s.view().wrap_lines;
 
     let toolbar = render_body_toolbar(
         ri,
@@ -147,8 +154,8 @@ fn render_sending_state(ri: &ResponseInspector, cx: &App) -> AnyElement {
     let progress_text = ri
         .editor_state
         .read(cx)
-        .send_progress
-        .clone()
+        .send_progress()
+        .map(str::to_owned)
         .unwrap_or_else(|| "Waiting for response from server...".to_string());
     let ed_s_cancel = ri.editor_state.clone();
 
@@ -203,9 +210,7 @@ fn render_sending_state(ri: &ResponseInspector, cx: &App) -> AnyElement {
                 .label("Cancel Request")
                 .on_click(move |_, _, cx: &mut App| {
                     ed_s_cancel.update(cx, |state, cx| {
-                        if let Some(tx) = state.cancel_tx.take() {
-                            let _ = tx.send(());
-                        }
+                        state.cancel_send();
                         state.stop_sending(cx);
                     });
                 }),
@@ -276,7 +281,7 @@ fn use_jsonpath_input(
         .0
         .clone();
 
-    let state_query = ri.response_state.read(cx).ui.jsonpath_query.clone();
+    let state_query = ri.response_state.read(cx).view().jsonpath_query.clone();
     if jsonpath_input.read(cx).value().as_str() != state_query.as_str() {
         jsonpath_input.update(cx, |inp, cx| {
             inp.set_value(state_query.clone(), window, cx);
@@ -376,7 +381,7 @@ fn render_body_content(
     }
 
     if is_large_payload {
-        let scroll_handle = ri.response_state.read(cx).scroll_handle.clone();
+        let scroll_handle = ri.response_state.read(cx).view().scroll_handle.clone();
         return div()
             .flex_1()
             .size_full()

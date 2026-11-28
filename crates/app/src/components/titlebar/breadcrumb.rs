@@ -1,4 +1,5 @@
-use crate::state::{effective_request_name, CollectionState, ModalKind, ModalState};
+use crate::components::common::request_label::effective_request_name;
+use crate::state::{CollectionState, ModalKind, ModalState};
 use crate::theme::theme;
 use gpui_kit::component::breadcrumb::{Breadcrumb, BreadcrumbItem};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -23,7 +24,7 @@ pub(super) fn render_center_section(
         let mut curr_fid = req.folder_id.clone();
         let mut folder_names = Vec::new();
         while let Some(fid) = curr_fid {
-            if let Some(f) = ws.folders.iter().find(|f| f.id == fid) {
+            if let Some(f) = ws.folders().iter().find(|f| f.id == fid) {
                 folder_names.push(f.name.clone());
                 curr_fid = f.parent_id.clone();
             } else {

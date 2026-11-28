@@ -1,6 +1,7 @@
 use crate::modals::Modal;
 use crate::services::UpdateService;
-use crate::state::{ModalKind, ModalState, UpdateStatus};
+use crate::services::UpdateStatus;
+use crate::state::{ModalKind, ModalState};
 use crate::theme::theme;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -47,7 +48,7 @@ impl RenderOnce for AboutModal {
         let os = std::env::consts::OS;
         let arch = std::env::consts::ARCH;
         let platform_label = format!("{os} ({arch})");
-        let update_status = modal_clone.read(cx).update_status.clone();
+        let update_status = crate::services::UpdateStatus::read(cx).clone();
 
         Modal::for_kind("about-modal", ModalKind::About, &self.modal_state)
             .w(px(460.))

@@ -22,7 +22,7 @@ pub(super) fn render_cookies_tab(
     let ed_s = ri.editor_state.read(cx);
     let _active_id = ed_s.active_request_id.clone();
     let _is_viewing_example = resp_s.active_example_name.is_some();
-    let _view_mode = resp_s.view_mode;
+    let _view_mode = resp_s.view().mode;
     let _resp_state_clone = ri.response_state.clone();
     let current_resp = current_resp.clone();
     if is_sending_this_request {

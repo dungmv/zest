@@ -80,12 +80,11 @@ impl GitService {
         command: impl FnOnce() -> Result<(), String> + Send + 'static,
         on_success: impl FnOnce(&mut GitState, &mut Context<GitState>) + Send + 'static,
     ) {
-        if self.git.read(cx).loading {
+        if self.git.read(cx).operation.is_loading() {
             return;
         }
         self.git.update(cx, |git, cx| {
-            git.loading = true;
-            git.error = None;
+            git.operation.start_command();
             cx.notify();
         });
 
@@ -101,17 +100,16 @@ impl GitService {
                     return;
                 }
                 git.update(cx, |git, cx| {
-                    git.loading = false;
-                    git.is_syncing = false;
-                    git.sync_message = None;
+                    git.operation.finish_command();
+                    git.operation.finish_sync();
                     match res {
                         Ok(()) => {
-                            git.error = None;
+                            git.operation.clear_error();
                             on_success(git, cx);
                             cx.notify();
                         }
                         Err(e) => {
-                            git.error = Some(e);
+                            git.operation.set_error(e);
                             cx.notify();
                         }
                     }
@@ -132,13 +130,11 @@ impl GitService {
         op: impl FnOnce() -> Result<String, String> + Send + 'static,
         on_success: impl FnOnce(&mut GitState, &mut Context<GitState>, String) + Send + 'static,
     ) {
-        if self.git.read(cx).is_syncing {
+        if self.git.read(cx).operation.is_syncing() {
             return;
         }
         self.git.update(cx, |git, cx| {
-            git.is_syncing = true;
-            git.sync_message = Some(op_label.to_string());
-            git.error = None;
+            git.operation.start_sync(op_label);
             cx.notify();
         });
 
@@ -151,17 +147,16 @@ impl GitService {
                     return;
                 }
                 git.update(cx, |git, cx| {
-                    git.is_syncing = false;
-                    git.sync_message = None;
+                    git.operation.finish_sync();
                     match res {
                         Ok(msg) => {
-                            git.error = None;
+                            git.operation.clear_error();
                             on_success(git, cx, msg);
                             cx.notify();
                         }
                         Err(e) => {
                             crate::notify::error(error_title, e.clone(), cx);
-                            git.error = Some(e);
+                            git.operation.set_error(e);
                             cx.notify();
                         }
                     }
@@ -188,7 +183,7 @@ impl GitService {
             cx,
             move || zest_core::git::git_create_branch(&ws_path, &n_task).map_err(|e| e.to_string()),
             move |git, cx| {
-                git.branch = Some(n);
+                git.set_branch(n);
                 git.close_modal(cx);
                 git.refresh_all(cx);
             },
@@ -226,14 +221,13 @@ impl GitService {
         cx: &mut App,
         on_success: impl FnOnce(&mut App) + Send + 'static,
     ) {
-        if self.git.read(cx).loading {
+        if self.git.read(cx).operation.is_loading() {
             return;
         }
         let ws_path = self.git.read(cx).repo_path.clone();
         let p = path.to_string();
         self.git.update(cx, |git, cx| {
-            git.loading = true;
-            git.error = None;
+            git.operation.start_command();
             cx.notify();
         });
 
@@ -253,10 +247,10 @@ impl GitService {
                 }
                 let success = res.is_ok();
                 git.update(cx, |git, cx| {
-                    git.loading = false;
+                    git.operation.finish_command();
                     match res {
                         Ok(()) => {
-                            git.error = None;
+                            git.operation.clear_error();
                             if let Some((sel, _)) = &git.modal.selected_file {
                                 if sel == &p {
                                     git.clear_file_selection();
@@ -267,7 +261,7 @@ impl GitService {
                         }
                         Err(e) => {
                             let err_str = e.to_string();
-                            git.error = Some(err_str.clone());
+                            git.operation.set_error(err_str.clone());
                             crate::notify::error("Git Discard Failed", err_str, cx);
                             cx.notify();
                         }
@@ -284,7 +278,7 @@ impl GitService {
     pub fn commit(&self, message: &str, cx: &mut App) {
         let (loading, ws_path) = {
             let git = self.git.read(cx);
-            (git.loading, git.repo_path.clone())
+            (git.operation.is_loading(), git.repo_path.clone())
         };
         if loading {
             return;
@@ -302,12 +296,10 @@ impl GitService {
         }
         let and_push = self.git.read(cx).modal.commit_and_push;
         self.git.update(cx, |git, cx| {
-            git.loading = true;
+            git.operation.start_command();
             if and_push {
-                git.is_syncing = true;
-                git.sync_message = Some("pushing...".to_string());
+                git.operation.start_sync("pushing...");
             }
-            git.error = None;
             cx.notify();
         });
 
@@ -342,12 +334,11 @@ impl GitService {
                     return;
                 }
                 git.update(cx, |git, cx| {
-                    git.loading = false;
-                    git.is_syncing = false;
-                    git.sync_message = None;
+                    git.operation.finish_command();
+                    git.operation.finish_sync();
                     match res {
                         Ok(_) => {
-                            git.error = None;
+                            git.operation.clear_error();
                             git.clear_file_selection();
                             git.modal.selected_commit_files.clear();
                             git.modal.commit_and_push = false;
@@ -359,7 +350,7 @@ impl GitService {
                             }
                         }
                         Err(e) => {
-                            git.error = Some(e.to_string());
+                            git.operation.set_error(e.to_string());
                             cx.notify();
                         }
                     }
@@ -370,16 +361,14 @@ impl GitService {
     }
 
     pub fn checkout(&self, branch: &str, cx: &mut App) {
-        if self.git.read(cx).loading {
+        if self.git.read(cx).operation.is_loading() {
             return;
         }
         let ws_path = self.git.read(cx).repo_path.clone();
         let b = branch.to_string();
         self.git.update(cx, |git, cx| {
-            git.loading = true;
-            git.is_syncing = true;
-            git.sync_message = Some("checking out...".to_string());
-            git.error = None;
+            git.operation.start_command();
+            git.operation.start_sync("checking out...");
             cx.notify();
         });
 
@@ -396,19 +385,18 @@ impl GitService {
                     return;
                 }
                 git.update(cx, |git, cx| {
-                    git.loading = false;
-                    git.is_syncing = false;
-                    git.sync_message = None;
+                    git.operation.finish_command();
+                    git.operation.finish_sync();
                     match res {
                         Ok(()) => {
-                            git.branch = Some(b);
-                            git.error = None;
+                            git.set_branch(b);
+                            git.operation.clear_error();
                             git.refresh_all(cx);
                             cx.notify();
                         }
                         Err(e) => {
                             let err_str = e.to_string();
-                            git.error = Some(err_str.clone());
+                            git.operation.set_error(err_str.clone());
                             crate::notify::error("Git Checkout Failed", err_str, cx);
                             cx.notify();
                         }

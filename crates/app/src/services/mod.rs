@@ -1,3 +1,4 @@
+pub(crate) mod collection_io;
 pub mod git_service;
 pub mod grpc_engine;
 pub mod http_engine;
@@ -7,6 +8,8 @@ pub mod runner;
 pub mod runtime;
 pub mod send_event;
 pub mod update_service;
+pub(crate) mod workspace_io;
+pub(crate) mod workspace_watcher;
 pub mod ws_service;
 
 pub use git_service::*;

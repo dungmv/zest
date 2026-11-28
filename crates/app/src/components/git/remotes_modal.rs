@@ -193,10 +193,10 @@ impl RenderOnce for GitRemotesModal {
         let (is_repo, remotes, git_error, is_loading) = {
             let git = self.git_state.read(cx);
             (
-                git.status.as_ref().map(|s| s.is_repo).unwrap_or(false),
+                git.status().map(|s| s.is_repo).unwrap_or(false),
                 git.remotes.clone(),
-                git.error.clone(),
-                git.loading,
+                git.operation.error().map(str::to_owned),
+                git.operation.is_loading(),
             )
         };
 

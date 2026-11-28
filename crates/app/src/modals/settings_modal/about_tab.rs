@@ -18,7 +18,7 @@ pub fn render_about_tab(
     let os = std::env::consts::OS;
     let arch = std::env::consts::ARCH;
     let platform_label = format!("{os} ({arch})");
-    let update_status = modal_clone.read(cx).update_status.clone();
+    let update_status = crate::services::UpdateStatus::read(cx).clone();
 
     div()
         .w_full()

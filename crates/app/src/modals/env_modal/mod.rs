@@ -65,7 +65,9 @@ impl RenderOnce for EnvironmentModal {
                 .map(|e| e.name.as_str())
                 .unwrap_or(selected_id.as_str())
         };
-        let active_conflict = per.env_conflicts.get(conflict_lookup_key).cloned();
+        let active_conflict = per
+            .environment_conflict(conflict_lookup_key)
+            .map(str::to_owned);
 
         let renaming_env_id = sidebar.renaming_env_id().map(ToString::to_string);
         let rename_env_input = sidebar.rename_env_input().cloned();

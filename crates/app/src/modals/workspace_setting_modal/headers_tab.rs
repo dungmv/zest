@@ -13,15 +13,10 @@ fn read_target_headers(
     cx: &App,
 ) -> Vec<KeyValuePair> {
     match target {
-        WorkspaceSettingTarget::Workspace => ws
-            .read(cx)
-            .active_workspace
-            .as_ref()
-            .map(|w| w.headers.clone())
-            .unwrap_or_default(),
+        WorkspaceSettingTarget::Workspace => ws.read(cx).workspace_meta().headers.clone(),
         WorkspaceSettingTarget::Folder(fid) => col
             .read(cx)
-            .folders
+            .folders()
             .iter()
             .find(|f| &f.id == fid)
             .map(|f| f.headers.clone())
@@ -38,12 +33,7 @@ fn save_target_headers(
 ) {
     match target {
         WorkspaceSettingTarget::Workspace => {
-            let a = ws
-                .read(cx)
-                .active_workspace
-                .as_ref()
-                .map(|w| w.auth.clone())
-                .unwrap_or(Auth::None);
+            let a = ws.read(cx).workspace_meta().auth.clone();
             ws.update(cx, |state, cx| {
                 state.save_workspace_settings(headers, a, cx)
             });
@@ -51,7 +41,7 @@ fn save_target_headers(
         WorkspaceSettingTarget::Folder(fid) => {
             let a = col
                 .read(cx)
-                .folders
+                .folders()
                 .iter()
                 .find(|f| &f.id == fid)
                 .map(|f| f.auth.clone())

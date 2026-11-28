@@ -1,9 +1,32 @@
-use crate::state::{ModalState, UpdateStatus};
+use crate::state::ModalState;
 use gpui_kit::{App, Entity};
 
-/// Runner-style command router for the app updater. Owns no state itself; the
-/// check outcome lives in [`ModalState::update_status`] so the About UI stays
-/// a pure observer of state.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum UpdateStatus {
+    #[default]
+    Idle,
+    Checking,
+    UpToDate {
+        checked_version: String,
+    },
+    UpdateAvailable {
+        current_version: String,
+        latest_version: String,
+        release_url: String,
+        release_name: Option<String>,
+    },
+    Error(String),
+}
+
+impl gpui_kit::Global for UpdateStatus {}
+
+impl UpdateStatus {
+    pub(crate) fn read(cx: &App) -> &Self {
+        cx.try_global().unwrap_or(&Self::Idle)
+    }
+}
+
+/// Coordinates the update check and refreshes the About view after completion.
 pub struct UpdateService {
     state: Entity<ModalState>,
 }
@@ -16,11 +39,11 @@ impl UpdateService {
     /// Checks GitHub for a newer release and stores the outcome in
     /// [`ModalState::update_status`]. No-op while a check is already running.
     pub fn check_for_updates(&self, cx: &mut App) {
-        if self.state.read(cx).update_status == UpdateStatus::Checking {
+        if *UpdateStatus::read(cx) == UpdateStatus::Checking {
             return;
         }
-        self.state.update(cx, |state, cx| {
-            state.update_status = UpdateStatus::Checking;
+        self.state.update(cx, |_, cx| {
+            cx.set_global(UpdateStatus::Checking);
             cx.notify();
         });
 
@@ -39,8 +62,8 @@ impl UpdateService {
                 .await
                 .unwrap_or_else(|_| Err("Background update task was cancelled".to_string()));
 
-            state.update(cx, |state, cx| {
-                state.update_status = match result {
+            state.update(cx, |_, cx| {
+                cx.set_global(match result {
                     Ok(zest_core::updater::UpdateCheckResult::UpToDate { current_version }) => {
                         UpdateStatus::UpToDate {
                             checked_version: current_version,
@@ -58,7 +81,7 @@ impl UpdateService {
                         release_name,
                     },
                     Err(err) => UpdateStatus::Error(err),
-                };
+                });
                 cx.notify();
             });
         })

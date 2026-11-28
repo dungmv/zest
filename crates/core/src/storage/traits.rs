@@ -66,7 +66,30 @@ pub trait WorkspaceStore: Send + Sync {
     /// Environments & Secrets
     fn list_environments(&self) -> Result<Vec<String>>;
     fn load_environment(&self, name: &str) -> Result<EnvironmentFile>;
+    fn read_environment(&self, name: &str) -> Result<Option<super::EnvironmentRead>> {
+        if !self
+            .list_environments()?
+            .iter()
+            .any(|candidate| candidate == name)
+            && name != "globals"
+        {
+            return Ok(None);
+        }
+        Ok(Some(super::EnvironmentRead::new(
+            self.load_environment(name)?,
+            self.load_secrets(name),
+        )))
+    }
     fn save_environment(&self, name: &str, env: &EnvironmentFile) -> Result<()>;
+    fn save_environment_values(
+        &self,
+        name: &str,
+        public: &EnvironmentFile,
+        secrets: &HashMap<String, String>,
+    ) -> Result<()> {
+        self.save_environment(name, public)?;
+        self.save_secrets(name, secrets)
+    }
     fn delete_environment(&self, name: &str) -> Result<()>;
     fn rename_environment(&self, old_name: &str, new_name: &str) -> Result<()>;
     fn load_secrets(&self, env_name: &str) -> Result<HashMap<String, String>>;

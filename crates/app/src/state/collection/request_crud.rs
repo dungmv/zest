@@ -1,9 +1,10 @@
 use super::CollectionState;
+use crate::services::collection_io;
 use crate::state::{CollectionEvent, RequestSessionState};
 use gpui_kit::{App, Context, Entity};
 use std::path::PathBuf;
-use zest_core::models::{HttpMethod, Protocol, RequestItem};
-use zest_core::storage::models::RequestFile;
+use zest_core::models::{Protocol, RequestItem};
+use zest_core::storage::{RequestFile, WorkspaceStore};
 
 /// Pairs `update_active_request` with a `mark_dirty` on the session state —
 /// the standard "edit the active request and flag it for persistence"
@@ -24,38 +25,27 @@ pub fn edit_active_request(
 }
 
 impl CollectionState {
-    /// Conventional HTTP verb persisted for a request of the given protocol.
-    /// WS handshake is a GET; gRPC and GraphQL ride on HTTP POST.
-    fn protocol_method(protocol: Protocol) -> HttpMethod {
-        match protocol {
-            Protocol::Http | Protocol::WebSocket | Protocol::Sse => HttpMethod::Get,
-            Protocol::Grpc | Protocol::GraphQL => HttpMethod::Post,
-        }
-    }
-
-    /// Creates a request of `protocol` in memory and on disk (scratch excepted).
+    #[cfg(test)]
     pub fn create_request_internal(
         &mut self,
         folder_rel: Option<String>,
         protocol: Protocol,
     ) -> RequestItem {
-        let method = Self::protocol_method(protocol);
-        let (_slug, rel_path) = self
-            .store
-            .create_request(folder_rel.as_deref(), "New Request", method, "", protocol)
-            .unwrap_or_else(|_| {
-                (
-                    format!("req-{}", uuid::Uuid::new_v4().simple()),
-                    "new-request.yaml".to_string(),
-                )
-            });
+        let (id, file) =
+            collection_io::create_request(self.store.as_ref(), folder_rel.as_deref(), protocol)
+                .expect("create request fixture");
+        self.insert_request(id, folder_rel, file, None)
+    }
 
-        let ws_name = self.workspace_scope.name.clone();
-        let mut item =
-            RequestItem::new_with_protocol(&ws_name, "New Request", method, "", protocol);
-        item.id = rel_path.clone();
-        item.folder_id = folder_rel;
-
+    fn insert_request(
+        &mut self,
+        id: String,
+        folder: Option<String>,
+        file: RequestFile,
+        status: Option<u16>,
+    ) -> RequestItem {
+        let mut item = file.into_item(&id, &self.workspace_scope.name, folder);
+        item.last_status_code = status;
         self.requests.push(item.clone());
         self.bump_tree_version();
         item
@@ -63,80 +53,110 @@ impl CollectionState {
 
     pub fn create_request(
         &mut self,
-        folder_rel: Option<String>,
+        folder: Option<String>,
         protocol: Protocol,
         cx: &mut Context<Self>,
-    ) -> RequestItem {
-        let item = self.create_request_internal(folder_rel, protocol);
-        cx.notify();
-        item
+        on_created: impl FnOnce(RequestItem, &mut App) + 'static,
+    ) {
+        let target = folder.clone();
+        self.edit_disk(
+            "Could Not Create Request",
+            move |store| collection_io::create_request(store, target.as_deref(), protocol),
+            move |state, (id, file), cx| {
+                let item = state.insert_request(id, folder, file, None);
+                cx.notify();
+                on_created(item, cx);
+            },
+            cx,
+        );
     }
 
+    #[cfg(test)]
     pub fn duplicate_request_internal(&mut self, req_id: &str) -> anyhow::Result<RequestItem> {
-        let existing = self
+        let request = self
             .find_request(req_id)
             .ok_or_else(|| anyhow::anyhow!("Request no longer exists"))?;
-        let folder = existing.folder_id.clone();
-        let status = existing.last_status_code;
-        let mut file = RequestFile::from_item(existing);
-        file.name = format!("{} (Copy)", file.name);
-        let (_, path) = self
-            .store
-            .create_request_file(folder.as_deref(), file.clone())?;
-        let mut duplicate = file.into_item(&path, &self.workspace_scope.name, folder);
-        duplicate.last_status_code = status;
-        self.requests.push(duplicate.clone());
-        self.bump_tree_version();
-        Ok(duplicate)
+        let folder = request.folder_id.clone();
+        let status = request.last_status_code;
+        let (id, file) = collection_io::duplicate_request(
+            self.store.as_ref(),
+            folder.as_deref(),
+            RequestFile::from_item(request),
+        )?;
+        Ok(self.insert_request(id, folder, file, status))
     }
 
     pub fn duplicate_request(
         &mut self,
         req_id: &str,
         cx: &mut Context<Self>,
-    ) -> Option<RequestItem> {
-        match self.duplicate_request_internal(req_id) {
-            Ok(request) => {
+        on_created: impl FnOnce(RequestItem, &mut App) + 'static,
+    ) {
+        let Some(existing) = self.find_request(req_id) else {
+            return;
+        };
+        let folder = existing.folder_id.clone();
+        let target = folder.clone();
+        let status = existing.last_status_code;
+        let file = RequestFile::from_item(existing);
+        self.edit_disk(
+            "Could Not Duplicate Request",
+            move |store| collection_io::duplicate_request(store, target.as_deref(), file),
+            move |state, (id, file), cx| {
+                let duplicate = state.insert_request(id, folder, file, status);
                 cx.notify();
-                Some(request)
-            }
-            Err(error) => {
-                cx.emit(CollectionEvent::CrudFailed {
-                    title: "Could Not Duplicate Request",
-                    message: error.to_string(),
-                });
-                None
-            }
-        }
+                on_created(duplicate, cx);
+            },
+            cx,
+        );
     }
 
+    #[cfg(test)]
     pub fn delete_request_internal(&mut self, req_id: &str) -> anyhow::Result<()> {
         self.store.delete_request(req_id)?;
+        self.remove_request(req_id);
+        Ok(())
+    }
+
+    fn remove_request(&mut self, req_id: &str) {
         self.requests.retain(|r| r.id != req_id);
         self.parse_errors.remove(req_id);
         self.pins.retain(|p| p != req_id);
         self.bump_tree_version();
-        Ok(())
     }
 
-    pub fn delete_request(&mut self, req_id: &str, cx: &mut Context<Self>) -> bool {
-        match self.delete_request_internal(req_id) {
-            Ok(()) => {
-                cx.emit(CollectionEvent::RequestDeleted(req_id.to_string()));
+    pub fn delete_request(
+        &mut self,
+        req_id: &str,
+        cx: &mut Context<Self>,
+        deleted: impl FnOnce(&mut Self, Option<String>, &mut Context<Self>) + 'static,
+    ) {
+        let id = req_id.to_string();
+        let disk_id = id.clone();
+        self.edit_disk(
+            "Could Not Delete Request",
+            move |store| store.delete_request(&disk_id),
+            move |state, (), cx| {
+                let index = state
+                    .requests
+                    .iter()
+                    .position(|item| item.id == id)
+                    .unwrap_or(0);
+                state.remove_request(&id);
+                let next = state
+                    .requests
+                    .get(index.min(state.requests.len().saturating_sub(1)))
+                    .map(|request| request.id.clone());
+                cx.emit(CollectionEvent::RequestDeleted(id));
                 cx.emit(CollectionEvent::PinsModified);
                 cx.notify();
-                true
-            }
-            Err(error) => {
-                cx.emit(CollectionEvent::CrudFailed {
-                    title: "Could Not Delete Request",
-                    message: error.to_string(),
-                });
-                false
-            }
-        }
+                deleted(state, next, cx);
+            },
+            cx,
+        );
     }
 
+    #[cfg(test)]
     pub fn rename_request_internal(&mut self, req_id: &str, new_name: &str) -> Option<String> {
         let trimmed = new_name.trim();
         if trimmed.is_empty() {
@@ -148,113 +168,111 @@ impl CollectionState {
         // before the file is renamed away from under them.
         self.flush_request_to_disk(req_id).ok()?;
         if let Ok(new_rel_path) = self.store.rename_request(req_id, trimmed) {
-            if let Some(r) = self.requests.iter_mut().find(|r| r.id == req_id) {
-                r.id = new_rel_path.clone();
-                r.name = trimmed.to_string();
-            }
-
-            if let Some(pos) = self.pins.iter().position(|p| p == req_id) {
-                self.pins[pos] = new_rel_path.clone();
-            }
-
-            if let Some(err) = self.parse_errors.remove(req_id) {
-                self.parse_errors.insert(new_rel_path.clone(), err);
-            }
-
-            self.bump_tree_version();
+            self.apply_request_rename(req_id, &new_rel_path, trimmed);
             Some(new_rel_path)
         } else {
             None
         }
     }
 
-    pub fn rename_request(
-        &mut self,
-        req_id: &str,
-        new_name: &str,
-        cx: &mut Context<Self>,
-    ) -> Option<String> {
-        let res = self.rename_request_internal(req_id, new_name);
-        if let Some(new_id) = &res {
-            if new_id != req_id {
-                cx.emit(CollectionEvent::IdsRemapped(vec![(
-                    req_id.to_string(),
-                    new_id.clone(),
-                )]));
-            }
-            cx.notify();
+    fn apply_request_rename(&mut self, old: &str, new: &str, name: &str) {
+        if let Some(request) = self.find_request_mut(old) {
+            request.id = new.to_string();
+            request.name = name.to_string();
         }
-        res
+        if let Some(pin) = self.pins.iter_mut().find(|pin| pin.as_str() == old) {
+            *pin = new.to_string();
+        }
+        if let Some(error) = self.parse_errors.remove(old) {
+            self.parse_errors.insert(new.to_string(), error);
+        }
+        self.bump_tree_version();
+    }
+
+    pub fn rename_request(&mut self, req_id: &str, new_name: &str, cx: &mut Context<Self>) {
+        let name = new_name.trim().to_string();
+        if name.is_empty() {
+            return;
+        }
+        if self.find_request(req_id).is_none() {
+            return;
+        }
+        let id = req_id.to_string();
+        let target = id.clone();
+        let disk_name = name.clone();
+        self.edit_disk(
+            "Could Not Rename Request",
+            move |store| store.rename_request(&target, &disk_name),
+            move |state, new, cx| {
+                state.apply_request_rename(&id, &new, &name);
+                if id == new {
+                    cx.emit(CollectionEvent::RequestContentModified(id));
+                } else {
+                    cx.emit(CollectionEvent::IdsRemapped(vec![(id, new)]));
+                }
+                cx.notify();
+            },
+            cx,
+        );
     }
 
     pub fn move_request(&mut self, src_req_id: &str, target_req_id: &str, cx: &mut Context<Self>) {
         if src_req_id == target_req_id {
             return;
         }
-        let src_req = self.requests.iter().find(|r| r.id == src_req_id).cloned();
-        let target_req = self
-            .requests
-            .iter()
-            .find(|r| r.id == target_req_id)
-            .cloned();
+        let src_req = self.requests.iter().find(|r| r.id == src_req_id);
+        let target_req = self.requests.iter().find(|r| r.id == target_req_id);
 
         if let (Some(src), Some(target)) = (src_req, target_req) {
             let src_eff = self.effective_folder_id(&src.folder_id);
             let target_eff = self.effective_folder_id(&target.folder_id);
             if src_eff != target_eff {
-                if let Some(new_id) =
-                    self.move_request_across_folders(src_req_id, target.folder_id.clone())
-                {
-                    cx.emit(CollectionEvent::IdsRemapped(vec![(
-                        src_req_id.to_string(),
-                        new_id,
-                    )]));
-                }
+                self.move_request_to_folder(src_req_id, target.folder_id.clone(), cx);
             } else {
-                let folder_id = src.folder_id.clone();
-                let mut stems: Vec<String> = self
-                    .requests
-                    .iter()
-                    .filter(|r| r.folder_id == folder_id)
-                    .map(|r| {
-                        PathBuf::from(&r.id)
-                            .file_stem()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or("req")
-                            .to_string()
-                    })
-                    .collect();
-
-                let src_stem = PathBuf::from(src_req_id)
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("req")
-                    .to_string();
-                let target_stem = PathBuf::from(target_req_id)
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("req")
-                    .to_string();
-
-                if let Some(s_pos) = stems.iter().position(|s| s == &src_stem) {
-                    stems.remove(s_pos);
-                    let t_pos = stems
-                        .iter()
-                        .position(|s| s == &target_stem)
-                        .unwrap_or(stems.len());
-                    stems.insert(t_pos, src_stem);
-                    let _ = self.store.reorder_folder(folder_id.as_deref(), &stems);
-                    let src_idx = self.requests.iter().position(|r| r.id == src_req_id);
-                    let target_idx = self.requests.iter().position(|r| r.id == target_req_id);
-                    if let (Some(si), Some(ti)) = (src_idx, target_idx) {
-                        let item = self.requests.remove(si);
-                        self.requests.insert(ti, item);
-                    }
-                    self.bump_tree_version();
-                }
+                let source_id = src_req_id.to_string();
+                let target_id = target_req_id.to_string();
+                self.edit_disk_with_snapshot(
+                    "Could Not Reorder Requests",
+                    move |state| {
+                        let folder = state.find_request(&source_id)?.folder_id.clone();
+                        let mut requests: Vec<_> = state
+                            .requests
+                            .iter()
+                            .filter(|request| request.folder_id == folder)
+                            .collect();
+                        let source = requests.iter().position(|r| r.id == source_id)?;
+                        let target = requests.iter().position(|r| r.id == target_id)?;
+                        let request = requests.remove(source);
+                        requests.insert(target, request);
+                        let order: Vec<_> = requests
+                            .iter()
+                            .map(|request| {
+                                PathBuf::from(&request.id)
+                                    .file_stem()
+                                    .and_then(|stem| stem.to_str())
+                                    .unwrap_or("req")
+                                    .to_string()
+                            })
+                            .collect();
+                        Some(move |store: &dyn WorkspaceStore| {
+                            store.reorder_folder(folder.as_deref(), &order)?;
+                            Ok((source_id, target_id))
+                        })
+                    },
+                    |state, (source_id, target_id), cx| {
+                        let source = state.requests.iter().position(|r| r.id == source_id);
+                        let target = state.requests.iter().position(|r| r.id == target_id);
+                        if let (Some(source), Some(target)) = (source, target) {
+                            let request = state.requests.remove(source);
+                            state.requests.insert(target, request);
+                            state.bump_tree_version();
+                            cx.notify();
+                        }
+                    },
+                    cx,
+                );
             }
         }
-        cx.notify();
     }
 
     pub fn rename_example_internal(
@@ -314,8 +332,12 @@ impl CollectionState {
         self.pins.contains(&req_id.to_string())
     }
 
-    pub fn reorder_pins(&mut self, new_pins: Vec<String>, cx: &mut Context<Self>) {
-        self.pins = new_pins;
+    pub fn reorder_pins(&mut self, from: usize, to: usize, cx: &mut Context<Self>) {
+        if from >= self.pins.len() || to >= self.pins.len() || from == to {
+            return;
+        }
+        let item = self.pins.remove(from);
+        self.pins.insert(to, item);
         cx.emit(CollectionEvent::PinsModified);
         self.bump_tree_version();
         cx.notify();
@@ -325,6 +347,7 @@ impl CollectionState {
         self.find_request(req_id).map(RequestFile::from_item)
     }
 
+    #[cfg(test)]
     pub(super) fn flush_request_to_disk(&self, req_id: &str) -> anyhow::Result<()> {
         let request = self
             .find_request(req_id)

@@ -74,8 +74,8 @@ impl RenderOnce for RequestBar {
             let method = req.map(|r| r.method).unwrap_or(HttpMethod::Get);
             let protocol = req.map(|r| r.protocol).unwrap_or(Protocol::Http);
             let ws_connected =
-                self.response_state.read(cx).realtime.ws_status == WebSocketStatus::Connected;
-            (method, ed.is_sending, protocol, ws_connected)
+                self.response_state.read(cx).realtime().ws_status == WebSocketStatus::Connected;
+            (method, ed.is_sending(), protocol, ws_connected)
         };
         let is_ws = protocol == Protocol::WebSocket;
         // Only WS/gRPC render the realtime Connect/Disconnect affordances;
@@ -350,9 +350,7 @@ impl RenderOnce for RequestBar {
                             .on_click(move |_, window, cx| {
                                 if is_sending {
                                     ed_s.update(cx, |state, cx| {
-                                        if let Some(tx) = state.cancel_tx.take() {
-                                            let _ = tx.send(());
-                                        }
+                                        state.cancel_send();
                                         state.stop_sending(cx);
                                     });
                                 } else if is_ws && ws_connected {

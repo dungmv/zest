@@ -32,6 +32,7 @@ use gpui_kit::{
     ListSizingBehavior, ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
 use row_dispatch::render_flat_sidebar_row;
+use std::{cell::RefCell, rc::Rc};
 use zest_core::models::Protocol;
 
 /// Built directly via struct literal at the call site — the eight entity
@@ -39,6 +40,7 @@ use zest_core::models::Protocol;
 /// re-emit them.
 #[derive(IntoElement)]
 pub struct SidebarTree {
+    pub cache: Rc<RefCell<SidebarFlatCache>>,
     pub workspace_state: Entity<CollectionState>,
     pub persistence_state: Entity<PersistenceState>,
     pub sidebar_state: Entity<SidebarState>,
@@ -57,16 +59,16 @@ impl RenderOnce for SidebarTree {
             let sb = self.sidebar_state.read(cx);
             let git = self.git_state.read(cx);
 
-            let has_nothing = ws.folders.is_empty() && ws.requests.is_empty();
-            let flat_rows = sb.cached_flat_rows(ws, per, git);
+            let has_nothing = ws.folders().is_empty() && ws.requests().is_empty();
+            let flat_rows = self.cache.borrow_mut().rows(sb, ws, per, git);
             let scroll_handle = sb.scroll_handle.clone();
-            let filter_query_raw = sb.filter_query.clone();
-            let git_branch = git.branch.as_deref().unwrap_or("main");
+            let filter_query_raw = sb.filter_query().to_owned();
+            let git_branch = git.branch().unwrap_or("main");
             let footer_el = render_sidebar_footer(
                 git_branch,
-                git.status.as_ref(),
-                git.is_syncing,
-                git.sync_message.as_deref(),
+                git.status(),
+                git.operation.is_syncing(),
+                git.operation.sync_message(),
                 &self.git_state,
             );
 
@@ -195,20 +197,15 @@ impl RenderOnce for SidebarTree {
                                         PopupMenuItem::new("New HTTP")
                                             .icon(Icon::new(IconName::Globe))
                                             .on_click(move |_, window, cx| {
-                                                let ws_c = ws_req.clone();
-                                                let req = ws_req.update(cx, |state, cx| {
-                                                    state.create_request(None, Protocol::Http, cx)
-                                                });
-                                                let req_id = req.id.clone();
-                                                let req_name = req.name.clone();
-                                                ed_req.update(cx, |state, cx| {
-                                                    state.set_active_request_id(&req_id, cx);
-                                                });
-                                                sb_req.update(cx, |state, cx| {
-                                                    state.start_renaming_request(
-                                                        req_id, req_name, ws_c, window, cx,
-                                                    );
-                                                });
+                                                super::item_actions::create_and_rename_request(
+                                                    Protocol::Http,
+                                                    None,
+                                                    &ws_req,
+                                                    &ed_req,
+                                                    &sb_req,
+                                                    window,
+                                                    cx,
+                                                );
                                             }),
                                     )
                                     .item(
@@ -275,25 +272,9 @@ impl RenderOnce for SidebarTree {
                                         PopupMenuItem::new("New Folder")
                                             .icon(Icon::new(IconName::Folder))
                                             .on_click(move |_, window, cx| {
-                                                let ws_c = ws_folder.clone();
-                                                let created = ws_folder.update(cx, |state, cx| {
-                                                    state.create_folder(
-                                                        None,
-                                                        "new-folder".to_string(),
-                                                        cx,
-                                                    )
-                                                });
-                                                if let Some(new_id) = created {
-                                                    sb_folder.update(cx, |state, cx| {
-                                                        state.start_renaming_folder(
-                                                            new_id,
-                                                            "new-folder".to_string(),
-                                                            ws_c,
-                                                            window,
-                                                            cx,
-                                                        );
-                                                    });
-                                                }
+                                                super::item_actions::create_and_rename_folder(
+                                                    None, &ws_folder, &sb_folder, window, cx,
+                                                );
                                             }),
                                     )
                                 },
@@ -342,20 +323,15 @@ impl RenderOnce for SidebarTree {
                                         .font_weight(gpui_kit::FontWeight::MEDIUM)
                                         .text_color(t.text_secondary)
                                         .on_click(move |_, window, cx| {
-                                            let ws_c = ws_new.clone();
-                                            let req = ws_new.update(cx, |state, cx| {
-                                                state.create_request(None, Protocol::Http, cx)
-                                            });
-                                            let req_id = req.id.clone();
-                                            let req_name = req.name.clone();
-                                            ed_new.update(cx, |state, cx| {
-                                                state.set_active_request_id(&req_id, cx);
-                                            });
-                                            sb_new.update(cx, |state, cx| {
-                                                state.start_renaming_request(
-                                                    req_id, req_name, ws_c, window, cx,
-                                                );
-                                            });
+                                            super::item_actions::create_and_rename_request(
+                                                Protocol::Http,
+                                                None,
+                                                &ws_new,
+                                                &ed_new,
+                                                &sb_new,
+                                                window,
+                                                cx,
+                                            );
                                         })
                                         .child("+ New Request"),
                                 ),
@@ -377,8 +353,8 @@ impl RenderOnce for SidebarTree {
                                         active_example_name: resp_ref
                                             .active_example_name
                                             .as_deref(),
-                                        pins: &ws_ref.pins,
-                                        parse_errors: &ws_ref.parse_errors,
+                                        pins: ws_ref.pins(),
+                                        parse_errors: ws_ref.parse_errors(),
                                         renaming: SidebarRenameCtx {
                                             req_id: sb_ref.renaming_request_id(),
                                             folder_id: sb_ref.renaming_folder_id(),
@@ -398,8 +374,8 @@ impl RenderOnce for SidebarTree {
                                         },
                                         selection: SidebarSelectionCtx {
                                             is_multi_select: sb_ref.is_multi_selected(),
-                                            selected_requests: &sb_ref.selected_requests,
-                                            selected_folders: &sb_ref.selected_folders,
+                                            selected_requests: sb_ref.selected_requests(),
+                                            selected_folders: sb_ref.selected_folders(),
                                         },
                                     };
 

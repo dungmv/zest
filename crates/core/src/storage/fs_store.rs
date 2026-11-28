@@ -144,7 +144,6 @@ impl FsWorkspaceStore {
         };
 
         let mut req_map: HashMap<String, RequestNode> = HashMap::new();
-        let mut found_stems = Vec::new();
         let mut subfolder_nodes = Vec::new();
         let mut loc_files = Vec::new();
 
@@ -220,8 +219,7 @@ impl FsWorkspaceStore {
                     parse_error,
                 };
 
-                req_map.insert(stem.clone(), node);
-                found_stems.push(stem);
+                req_map.insert(stem, node);
             }
         }
 
@@ -236,23 +234,7 @@ impl FsWorkspaceStore {
         // Order requests:
         // Follow _folder.yaml `order:`. Requests missing from it are appended alphabetically.
         // Entries pointing to missing files are ignored silently.
-        let mut ordered_requests = Vec::with_capacity(req_map.len());
-        let mut included_stems = std::collections::HashSet::with_capacity(folder_meta.order.len());
-
-        for stem in &folder_meta.order {
-            if let Some(req) = req_map.remove(stem) {
-                ordered_requests.push(req);
-                included_stems.insert(stem.clone());
-            }
-        }
-
-        let mut remaining_stems: Vec<String> = req_map.keys().cloned().collect();
-        remaining_stems.sort();
-        for stem in remaining_stems {
-            if let Some(req) = req_map.remove(&stem) {
-                ordered_requests.push(req);
-            }
-        }
+        let ordered_requests = super::collection::order_requests(req_map, &folder_meta.order);
 
         subfolder_nodes.sort_by(|a, b| a.dir_name.cmp(&b.dir_name));
 

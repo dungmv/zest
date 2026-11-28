@@ -8,8 +8,8 @@ use gpui_kit::{div, px, App, Entity, IntoElement, ParentElement, Styled};
 
 pub fn render_general_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl IntoElement {
     let t = theme();
-    let cur_pref = modal_state.read(cx).theme_preference;
-    let is_vertical_split = modal_state.read(cx).split_layout_vertical;
+    let cur_pref = crate::settings::AppPreferences::read(cx).theme;
+    let is_vertical_split = crate::settings::AppPreferences::read(cx).split_layout_vertical;
 
     let modal_clone = modal_state.clone();
 
@@ -225,8 +225,8 @@ pub fn render_general_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
                                                 .icon(IconName::PanelRight)
                                                 .checked(!is_vertical_split)
                                                 .on_click(move |_, _, cx| {
-                                                    m_horiz.update(cx, |st, cx| {
-                                                        st.set_split_layout_vertical(false, cx);
+                                                    m_horiz.update(cx, |_, cx| {
+                                                        crate::settings::AppPreferences::change(cx, |pref| pref.split_layout_vertical = false);
                                                     });
                                                 }),
                                         )
@@ -235,8 +235,8 @@ pub fn render_general_tab(modal_state: &Entity<ModalState>, cx: &App) -> impl In
                                                 .icon(IconName::PanelBottom)
                                                 .checked(is_vertical_split)
                                                 .on_click(move |_, _, cx| {
-                                                    m_vert.update(cx, |st, cx| {
-                                                        st.set_split_layout_vertical(true, cx);
+                                                    m_vert.update(cx, |_, cx| {
+                                                        crate::settings::AppPreferences::change(cx, |pref| pref.split_layout_vertical = true);
                                                     });
                                                 }),
                                         )

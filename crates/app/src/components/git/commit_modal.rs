@@ -205,8 +205,7 @@ impl GitCommitModal {
                             let ws = ws_disc.clone();
                             svc_disc.discard_file(&p_disc, true, cx, move |cx| {
                                 ws.update(cx, |ws, cx| {
-                                    ws.reload_tree();
-                                    cx.notify();
+                                    ws.request_rescan(cx);
                                 });
                             });
                         })
@@ -228,7 +227,7 @@ fn render_changes_view(
     let git = modal.git_state.read(cx);
     let selected_file = git.modal.selected_file.as_ref();
     let commit_and_push = git.modal.commit_and_push;
-    let is_loading = git.loading;
+    let is_loading = git.operation.is_loading();
     let can_commit = !git.modal.selected_commit_files.is_empty() && !is_loading;
     let view_mode = *mode_entity.read(cx);
 
@@ -434,11 +433,14 @@ impl RenderOnce for GitCommitModal {
         let t = theme();
         let git_clone = self.git_state.clone();
         let git = self.git_state.read(cx);
-        let is_repo = git.status.as_ref().is_some_and(|status| status.is_repo);
-        let branch_name = git.branch.clone().unwrap_or_else(|| "main".to_string());
-        let is_loading = git.loading;
-        let git_error = git.error.clone();
-        let total_changes = git.status.as_ref().map_or(0, |status| {
+        let is_repo = git.status().is_some_and(|status| status.is_repo);
+        let branch_name = git
+            .branch()
+            .map(str::to_owned)
+            .unwrap_or_else(|| "main".to_string());
+        let is_loading = git.operation.is_loading();
+        let git_error = git.operation.error().map(str::to_owned);
+        let total_changes = git.status().map_or(0, |status| {
             status.staged_files.len() + status.unstaged_files.len() + status.untracked_files.len()
         });
 

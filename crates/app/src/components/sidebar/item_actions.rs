@@ -12,14 +12,44 @@ pub fn create_and_rename_request(
     window: &mut Window,
     cx: &mut App,
 ) {
-    let req = ws_entity.update(cx, |ws, cx| ws.create_request(folder_id, protocol, cx));
-    let req_id = req.id.clone();
-    let req_name = req.name.clone();
-    ed_entity.update(cx, |ed, cx| {
-        ed.set_active_request_id(&req_id, cx);
+    let window = window.window_handle();
+    let collection = ws_entity.clone();
+    let session = ed_entity.clone();
+    let sidebar = sb_entity.clone();
+    ws_entity.update(cx, |state, cx| {
+        state.create_request(folder_id, protocol, cx, move |request, cx| {
+            session.update(cx, |state, cx| state.set_active_request_id(&request.id, cx));
+            let _ = window.update(cx, |_, window, cx| {
+                sidebar.update(cx, |state, cx| {
+                    state.start_renaming_request(request.id, request.name, collection, window, cx);
+                });
+            });
+        });
     });
-    sb_entity.update(cx, |sb, cx| {
-        sb.start_renaming_request(req_id, req_name, ws_entity.clone(), window, cx);
+}
+
+pub fn create_and_rename_folder(
+    parent: Option<String>,
+    collection: &Entity<CollectionState>,
+    sidebar: &Entity<SidebarState>,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let window = window.window_handle();
+    let target = collection.clone();
+    let sidebar = sidebar.clone();
+    let expand = parent.clone();
+    collection.update(cx, |state, cx| {
+        state.create_folder(parent, "new-folder".into(), cx, move |id, cx| {
+            let _ = window.update(cx, |_, window, cx| {
+                sidebar.update(cx, |state, cx| {
+                    if let Some(parent) = expand {
+                        state.expand_folder(&parent, cx);
+                    }
+                    state.start_renaming_folder(id, "new-folder".into(), target, window, cx);
+                });
+            });
+        });
     });
 }
 
@@ -29,41 +59,31 @@ pub fn delete_multi_selected_items(
     sb_entity: &Entity<SidebarState>,
     cx: &mut App,
 ) {
-    let (req_ids, folder_ids) = sb_entity.update(cx, |sb, cx| {
-        let reqs: Vec<String> = sb.selected_requests.drain().collect();
-        let folders: Vec<String> = sb.selected_folders.drain().collect();
-        sb.ui_version = sb.ui_version.wrapping_add(1);
-        cx.notify();
-        (reqs, folders)
-    });
+    let (req_ids, folder_ids) = sb_entity.update(cx, |sb, cx| sb.take_selection(cx));
 
     let active_id = ed_entity.read(cx).active_request_id().to_string();
 
+    let session = ed_entity.clone();
     ws_entity.update(cx, |ws, cx| {
         for f_id in &folder_ids {
             ws.delete_folder(f_id, cx);
         }
         for r_id in &req_ids {
-            ws.delete_request(r_id, cx);
+            ws.delete_request(r_id, cx, |_, _, _| {});
         }
-    });
-
-    let active_still_exists = ws_entity.read(cx).find_request(&active_id).is_some();
-    if !active_still_exists {
-        ws_entity.update(cx, |ws, cx| {
-            if let Some(first_req) = ws.requests.first() {
-                let first_id = first_req.id.clone();
-                ed_entity.update(cx, |ed, cx| {
-                    ed.set_active_request_id(&first_id, cx);
-                });
-            } else {
-                let new_req = ws.create_request(None, Protocol::Http, cx);
-                ed_entity.update(cx, |ed, cx| {
-                    ed.set_active_request_id(&new_req.id, cx);
-                });
+        ws.after_disk_edits(cx, move |ws, cx| {
+            if session.read(cx).active_request_id() == active_id
+                && ws.find_request(&active_id).is_none()
+            {
+                select_after_delete(
+                    ws,
+                    ws.requests().first().map(|request| request.id.clone()),
+                    session,
+                    cx,
+                );
             }
         });
-    }
+    });
 }
 
 pub fn delete_request_item(
@@ -72,36 +92,33 @@ pub fn delete_request_item(
     req_id: &str,
     cx: &mut App,
 ) {
-    let is_active = ed_entity.read(cx).active_request_id() == req_id;
-
-    let next_req_id = ws_entity.update(cx, |ws, cx| {
-        let deleted_idx = ws.requests.iter().position(|r| r.id == req_id);
-        if !ws.delete_request(req_id, cx) {
-            return Some(req_id.to_string());
-        }
-        if let Some(idx) = deleted_idx {
-            if !ws.requests.is_empty() {
-                let new_idx = idx.min(ws.requests.len() - 1);
-                Some(ws.requests[new_idx].id.clone())
-            } else {
-                None
+    let session = ed_entity.clone();
+    let id = req_id.to_string();
+    ws_entity.update(cx, |ws, cx| {
+        ws.delete_request(req_id, cx, move |ws, next, cx| {
+            if session.read(cx).active_request_id() == id {
+                select_after_delete(ws, next, session, cx);
             }
-        } else {
-            ws.requests.first().map(|r| r.id.clone())
-        }
+        });
     });
+}
 
-    if is_active {
-        if let Some(id) = next_req_id {
-            ed_entity.update(cx, |ed, cx| {
-                ed.set_active_request_id(&id, cx);
+fn select_after_delete(
+    collection: &mut CollectionState,
+    next: Option<String>,
+    session: Entity<RequestSessionState>,
+    cx: &mut gpui_kit::Context<CollectionState>,
+) {
+    if let Some(id) = next {
+        session.update(cx, |state, cx| state.set_active_request_id(&id, cx));
+    } else {
+        let previous = session.read(cx).active_request_id().to_owned();
+        collection.create_request(None, Protocol::Http, cx, move |new, cx| {
+            session.update(cx, |state, cx| {
+                if state.active_request_id() == previous {
+                    state.set_active_request_id(&new.id, cx);
+                }
             });
-        } else {
-            let new_req =
-                ws_entity.update(cx, |ws, cx| ws.create_request(None, Protocol::Http, cx));
-            ed_entity.update(cx, |ed, cx| {
-                ed.set_active_request_id(&new_req.id, cx);
-            });
-        }
+        });
     }
 }

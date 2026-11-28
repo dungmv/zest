@@ -30,8 +30,8 @@ impl RenderOnce for ConsolePanel {
         let (total_items, list_state) = {
             let resp_s = self.response_state.read(cx);
             (
-                resp_s.test_results.len() + resp_s.console_logs.len(),
-                resp_s.console_list.clone(),
+                resp_s.console().test_results.len() + resp_s.console().logs.len(),
+                resp_s.console().list.clone(),
             )
         };
 
@@ -49,12 +49,13 @@ impl RenderOnce for ConsolePanel {
                         // are built per frame (tests first, then logs).
                         list(list_state, move |idx, _window, cx| {
                             let resp_s = resp_state.read(cx);
-                            let tests_len = resp_s.test_results.len();
+                            let tests_len = resp_s.console().test_results.len();
                             if idx < tests_len {
-                                render_test_card(&resp_s.test_results[idx]).into_any_element()
+                                render_test_card(&resp_s.console().test_results[idx])
+                                    .into_any_element()
                             } else {
                                 let log_idx = idx - tests_len;
-                                match resp_s.console_logs.get(log_idx) {
+                                match resp_s.console().logs.get(log_idx) {
                                     Some(entry) => {
                                         render_log_card(log_idx, entry).into_any_element()
                                     }

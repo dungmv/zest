@@ -1,30 +1,20 @@
 //! Async background scanning and watcher-driven tree reconciliation for [`CollectionState`].
 
 use super::{CollectionState, WorkspaceScopeSnapshot};
-use crate::state::{CollectionEvent, EnvironmentSnapshot, PersistenceState};
+use crate::services::{
+    workspace_io::{self, WorkspaceScan},
+    workspace_watcher::RequestReload,
+};
+use crate::state::{CollectionEvent, PersistenceState};
 use gpui_kit::{Context, WeakEntity};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use zest_core::models::{Folder, RequestItem, StoredCookie};
-use zest_core::storage::models::{FolderNode, LocalState, WorkspaceMeta, WorkspaceTree};
-use zest_core::storage::WorkspaceStore;
-
-/// Read-only snapshot of everything the workspace store holds. Produced by
-/// [`CollectionState::scan_workspace_blocking`] on a background thread and
-/// applied on the UI thread.
-pub(crate) struct WorkspaceScan {
-    pub(crate) workspace_meta: Option<WorkspaceMeta>,
-    local_state: LocalState,
-    environment: EnvironmentSnapshot,
-    pub(crate) pins: Vec<String>,
-    pub(crate) cookies: Vec<StoredCookie>,
-    pub(crate) tree: Option<WorkspaceTree>,
-    pub(crate) folder_name: String,
-    pub(crate) store: Arc<dyn WorkspaceStore>,
-}
+use zest_core::models::RequestItem;
+use zest_core::storage::collection::CollectionSnapshot;
 
 impl CollectionState {
     /// Synchronous reload used by unit tests and `new_for_path`.
+    #[cfg(test)]
     pub fn reload_all_sync(&mut self) {
         if let Ok(meta) = self.store.load_workspace_meta() {
             let folder_name = self
@@ -45,33 +35,6 @@ impl CollectionState {
         }
         self.pins = self.store.load_pins().unwrap_or_default();
         self.reload_tree();
-    }
-
-    pub(crate) fn scan_workspace_blocking(
-        store: Arc<dyn WorkspaceStore>,
-        folder_name: String,
-    ) -> WorkspaceScan {
-        let workspace_meta = store.load_workspace_meta().ok();
-        let workspace_name = workspace_meta
-            .as_ref()
-            .map(|meta| meta.name.as_str())
-            .filter(|name| !name.trim().is_empty())
-            .unwrap_or(&folder_name);
-        let environment = EnvironmentSnapshot::load(store.as_ref(), workspace_name);
-        WorkspaceScan {
-            workspace_meta,
-            local_state: store.load_state().unwrap_or_default(),
-            environment,
-            pins: store.load_pins().unwrap_or_default(),
-            cookies: store
-                .load_cookies()
-                .ok()
-                .and_then(|val| serde_json::from_value::<Vec<StoredCookie>>(val).ok())
-                .unwrap_or_default(),
-            tree: store.scan_tree().ok(),
-            folder_name,
-            store,
-        }
     }
 
     /// Applies collection-side fields of a background scan (`workspace_scope`,
@@ -115,16 +78,22 @@ impl CollectionState {
             .unwrap_or("Workspace")
             .to_string();
         let workspace_path = self.workspace_path.clone();
+        let disk_revision = self.disk_revision();
         cx.spawn(async move |this, cx| {
             let mut scan = cx
                 .background_executor()
-                .spawn(async move { Self::scan_workspace_blocking(store, folder_name) })
+                .spawn(async move { workspace_io::scan_workspace_blocking(store, folder_name) })
                 .await;
             this.update(cx, |col, cx| {
                 if !Arc::ptr_eq(&scan.store, &col.store) {
                     return;
                 }
                 col.scan.load_in_flight = false;
+                if col.disk_revision() != disk_revision {
+                    let announce = col.scan.load_pending.take().unwrap_or(false) || announce_opened;
+                    col.load_workspace_async(cx, announce);
+                    return;
+                }
                 if col.apply_collection_scan(&mut scan) {
                     cx.emit(CollectionEvent::WorkspaceScanLoaded {
                         workspace_meta: scan.workspace_meta.take(),
@@ -148,6 +117,10 @@ impl CollectionState {
         .detach();
     }
 
+    pub fn request_rescan(&self, cx: &mut Context<Self>) {
+        cx.emit(CollectionEvent::RescanRequested);
+    }
+
     /// Watcher-driven tree rescan off the UI thread, preserving dirty in-memory
     /// requests. Coalesces overlapping rescans.
     pub fn reload_tree_preserving_async(
@@ -162,11 +135,13 @@ impl CollectionState {
         }
         self.scan.rescan_in_flight = true;
         let store = self.store.clone();
+        let name = self.workspace_scope.name.clone();
+        let disk_revision = self.disk_revision();
         cx.spawn(async move |this, cx| {
             let scan_store = store.clone();
             let tree = cx
                 .background_executor()
-                .spawn(async move { scan_store.scan_tree() })
+                .spawn(async move { workspace_io::scan_collection(scan_store.as_ref(), &name) })
                 .await;
             this.update(cx, |col, cx| {
                 if !Arc::ptr_eq(&store, &col.store) {
@@ -180,8 +155,18 @@ impl CollectionState {
                     .map(|persistence| persistence.read(cx).dirty_request_ids())
                     .unwrap_or_default();
                 preserved.extend(current_dirty.iter().cloned());
-                if let Ok(tree) = tree {
-                    col.apply_tree(tree, col.capture_kept_requests(&preserved));
+                if col.disk_revision() != disk_revision {
+                    col.scan.rescan_pending = true;
+                } else if let Ok(tree) = tree {
+                    let missing = col.apply_tree(tree, col.capture_kept_requests(&preserved));
+                    if let Some(persistence) = persistence.upgrade() {
+                        persistence.update(cx, |state, cx| {
+                            for id in missing {
+                                state.changed_request_deleted(&id);
+                            }
+                            cx.notify();
+                        });
+                    }
                     cx.emit(CollectionEvent::RequestsReloaded { req_ids: None });
                     cx.notify();
                 }
@@ -194,15 +179,69 @@ impl CollectionState {
         .detach();
     }
 
+    #[cfg(test)]
     pub fn reload_tree(&mut self) {
         self.reload_tree_preserving(&HashSet::new());
     }
 
+    #[cfg(test)]
     pub fn reload_tree_preserving(&mut self, dirty: &HashSet<String>) {
         let kept_requests = self.capture_kept_requests(dirty);
-        if let Ok(tree) = self.store.scan_tree() {
+        if let Ok(tree) =
+            workspace_io::scan_collection(self.store.as_ref(), &self.workspace_scope.name)
+        {
             self.apply_tree(tree, kept_requests);
         }
+    }
+
+    pub(crate) fn apply_request_disk_changes(
+        &mut self,
+        files: impl IntoIterator<Item = RequestReload>,
+        deleted: &HashSet<String>,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let mut reloaded = Vec::new();
+        let mut needs_rescan = false;
+        let mut changed = !deleted.is_empty();
+        for reload in files {
+            changed = true;
+            if let Ok(file) = reload.file {
+                self.parse_errors.remove(&reload.id);
+                let workspace_name = self.workspace_scope.name.clone();
+                if let Some(request) = self.find_request_mut(&reload.id) {
+                    let status = request.last_status_code.or(reload.last_status);
+                    *request =
+                        file.into_item(&reload.id, &workspace_name, request.folder_id.clone());
+                    request.last_status_code = status;
+                    reloaded.push(reload.id);
+                } else {
+                    needs_rescan = true;
+                }
+            } else if let Err(error) = reload.file {
+                self.parse_errors.insert(reload.id, error);
+            }
+        }
+        for id in deleted {
+            self.parse_errors.remove(id);
+            cx.emit(CollectionEvent::RequestDeleted(id.clone()));
+        }
+        self.requests
+            .retain(|request| !deleted.contains(&request.id));
+        let old_pin_count = self.pins.len();
+        self.pins.retain(|id| !deleted.contains(id));
+        if self.pins.len() != old_pin_count {
+            cx.emit(CollectionEvent::PinsModified);
+        }
+        if changed {
+            self.bump_tree_version();
+            cx.notify();
+        }
+        if !reloaded.is_empty() {
+            cx.emit(CollectionEvent::RequestsReloaded {
+                req_ids: Some(reloaded),
+            });
+        }
+        needs_rescan
     }
 
     fn capture_kept_requests(&self, dirty: &HashSet<String>) -> HashMap<String, RequestItem> {
@@ -217,88 +256,16 @@ impl CollectionState {
         }
     }
 
-    fn apply_tree(&mut self, tree: WorkspaceTree, mut kept_requests: HashMap<String, RequestItem>) {
-        let ws_name = self.workspace_scope.name.clone();
-        let total_reqs = tree.count_requests();
-        let total_folders = tree.count_folders();
-        let mut all_requests = Vec::with_capacity(total_reqs);
-        let mut all_folders = Vec::with_capacity(total_folders);
-        let mut errors = HashMap::new();
-
-        for req_node in tree.root_requests {
-            let mut item = req_node.file.into_item(&req_node.rel_path, &ws_name, None);
-            item.last_status_code = req_node.last_status_code;
-            all_requests.push(item);
-            if let Some(err) = req_node.parse_error {
-                errors.insert(req_node.rel_path, err);
-            }
-        }
-
-        fn process_folder(
-            folder_node: FolderNode,
-            parent_id: Option<String>,
-            ws_name: &str,
-            all_folders: &mut Vec<Folder>,
-            all_requests: &mut Vec<RequestItem>,
-            errors: &mut HashMap<String, String>,
-        ) {
-            let mut f = Folder::new(ws_name, &folder_node.file.name);
-            f.id = folder_node.rel_path.clone();
-            f.parent_id = parent_id;
-            f.headers = folder_node.file.headers;
-            f.auth = folder_node.file.auth;
-            all_folders.push(f);
-
-            let folder_rel = folder_node.rel_path;
-            for req_node in folder_node.requests {
-                let mut item =
-                    req_node
-                        .file
-                        .into_item(&req_node.rel_path, ws_name, Some(folder_rel.clone()));
-                item.last_status_code = req_node.last_status_code;
-                all_requests.push(item);
-                if let Some(err) = req_node.parse_error {
-                    errors.insert(req_node.rel_path, err);
-                }
-            }
-
-            for sub in folder_node.subfolders {
-                process_folder(
-                    sub,
-                    Some(folder_rel.clone()),
-                    ws_name,
-                    all_folders,
-                    all_requests,
-                    errors,
-                );
-            }
-        }
-
-        for f_node in tree.folders {
-            process_folder(
-                f_node,
-                None,
-                &ws_name,
-                &mut all_folders,
-                &mut all_requests,
-                &mut errors,
-            );
-        }
-
-        if !kept_requests.is_empty() {
-            for req in &mut all_requests {
-                if let Some(mut kept) = kept_requests.remove(&req.id) {
-                    kept.folder_id = req.folder_id.clone();
-                    kept.last_status_code = kept.last_status_code.or(req.last_status_code);
-                    errors.remove(&req.id);
-                    *req = kept;
-                }
-            }
-        }
-
-        self.requests = all_requests;
-        self.folders = all_folders;
-        self.parse_errors = errors;
+    fn apply_tree(
+        &mut self,
+        mut tree: CollectionSnapshot,
+        kept_requests: HashMap<String, RequestItem>,
+    ) -> Vec<String> {
+        let missing_ids = tree.preserve_requests(kept_requests);
+        self.requests = tree.requests;
+        self.folders = tree.folders;
+        self.parse_errors = tree.parse_errors;
         self.bump_tree_version();
+        missing_ids
     }
 }

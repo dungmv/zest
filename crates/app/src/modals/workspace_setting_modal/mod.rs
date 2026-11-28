@@ -70,21 +70,13 @@ impl RenderOnce for WorkspaceSettingModal {
             WorkspaceSettingTarget::Workspace => {
                 let ws = ws_clone.read(cx);
                 let name = ws.workspace_name().to_string();
-                let headers = ws
-                    .active_workspace
-                    .as_ref()
-                    .map(|w| w.headers.clone())
-                    .unwrap_or_default();
-                let auth = ws
-                    .active_workspace
-                    .as_ref()
-                    .map(|w| w.auth.clone())
-                    .unwrap_or(Auth::None);
+                let headers = ws.workspace_meta().headers.clone();
+                let auth = ws.workspace_meta().auth.clone();
                 (format!("Workspace Settings: {}", name), None, headers, auth)
             }
             WorkspaceSettingTarget::Folder(f_id) => {
                 let col = col_clone.read(cx);
-                let folder = col.folders.iter().find(|f| &f.id == f_id).cloned();
+                let folder = col.folders().iter().find(|f| &f.id == f_id).cloned();
                 let name = folder
                     .as_ref()
                     .map(|f| f.name.clone())
@@ -138,11 +130,7 @@ impl RenderOnce for WorkspaceSettingModal {
 
         let (workspace_name, workspace_path_str) = {
             let ws_r = ws_clone.read(cx);
-            let w_name = ws_r
-                .active_workspace
-                .as_ref()
-                .map(|w| w.name.clone())
-                .unwrap_or_else(|| "default".to_string());
+            let w_name = ws_r.workspace_name().to_owned();
             let w_path = ws_r.workspace_path.to_string_lossy().to_string();
             (w_name, w_path)
         };

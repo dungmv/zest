@@ -43,18 +43,22 @@ fn workspace_open_collapses_root_and_nested_folders(cx: &mut gpui_kit::TestAppCo
     let path = tmp.path().to_path_buf();
     let store = Arc::new(FsWorkspaceStore::new(&path));
     let mut collection = CollectionState::new_for_path(path.clone(), store.clone());
-    collection.folders = vec![
-        make_folder("auth", None, "Auth"),
-        make_folder("auth/oauth", Some("auth"), "OAuth"),
-    ];
+    collection.replace_fixture_tree(
+        vec![
+            make_folder("auth", None, "Auth"),
+            make_folder("auth/oauth", Some("auth"), "OAuth"),
+        ],
+        Vec::new(),
+    );
     let collection = cx.new(|_| collection);
+    let mut cache = SidebarFlatCache::default();
     let sidebar = cx.new(|_| SidebarState::new());
     let persistence = PersistenceState::new(store, path.clone());
     let git = GitState::new(path);
 
     sidebar.update(cx, |sidebar, cx| {
         sidebar.collapse_workspace_folders(&collection, cx);
-        let rows = sidebar.cached_flat_rows(collection.read(cx), &persistence, &git);
+        let rows = cache.rows(sidebar, collection.read(cx), &persistence, &git);
         assert!(matches!(
             rows.as_slice(),
             [
@@ -67,7 +71,7 @@ fn workspace_open_collapses_root_and_nested_folders(cx: &mut gpui_kit::TestAppCo
         ));
 
         sidebar.toggle_folder_collapsed("auth", cx);
-        let rows = sidebar.cached_flat_rows(collection.read(cx), &persistence, &git);
+        let rows = cache.rows(sidebar, collection.read(cx), &persistence, &git);
         assert!(matches!(
             rows.as_slice(),
             [
@@ -85,7 +89,7 @@ fn workspace_open_collapses_root_and_nested_folders(cx: &mut gpui_kit::TestAppCo
         ));
 
         sidebar.collapse_workspace_folders(&collection, cx);
-        let rows = sidebar.cached_flat_rows(collection.read(cx), &persistence, &git);
+        let rows = cache.rows(sidebar, collection.read(cx), &persistence, &git);
         assert_eq!(rows.len(), 2);
     });
 }

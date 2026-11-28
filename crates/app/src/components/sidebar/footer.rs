@@ -132,7 +132,10 @@ pub fn render_sidebar_footer(
                     let (branches_list, current_b) = {
                         let g = git_menu.read(cx);
                         let branches = g.branches.clone();
-                        let current = g.branch.clone().unwrap_or_else(|| active_b.clone());
+                        let current = g
+                            .branch()
+                            .map(str::to_owned)
+                            .unwrap_or_else(|| active_b.clone());
                         (branches, current)
                     };
 

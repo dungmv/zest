@@ -43,7 +43,7 @@ impl InspectorDisplays {
     ) {
         let (display_text, is_json, is_xml) = {
             let resp_s = response_state.read(cx);
-            if let Some(fmt) = &resp_s.formatted_body {
+            if let Some(fmt) = &resp_s.view().formatted_body {
                 if fmt.is_truncated {
                     // Large/truncated payloads render in the virtualized list
                     // (`body_tab.rs`), never in `CodeEditorState`. Keep the

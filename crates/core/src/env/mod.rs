@@ -9,6 +9,6 @@ pub use interpolation::{
     scan_variables, InterpolationResult, VariableInterpolator, VariableSpan,
 };
 pub use resolve::{
-    find_variable_span_at, list_candidates, resolve_variable, ResolvedVariable, VariableCandidate,
-    VariableScope, SECRET_MASK,
+    find_variable_span_at, list_candidates, merge_effective_environment, resolve_variable,
+    ResolvedVariable, VariableCandidate, VariableScope, SECRET_MASK,
 };

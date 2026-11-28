@@ -350,13 +350,14 @@ fn build_request_context_menu(
             PopupMenuItem::new("Duplicate")
                 .icon(IconName::Copy)
                 .on_click(move |_, _, cx| {
-                    if let Some(dup) =
-                        ws_d.update(cx, |state, cx| state.duplicate_request(&r_id_d, cx))
-                    {
-                        ed_d.update(cx, |state, cx| {
-                            state.set_active_request_id(&dup.id, cx);
-                        });
-                    }
+                    let session = ed_d.clone();
+                    ws_d.update(cx, |state, cx| {
+                        state.duplicate_request(&r_id_d, cx, move |request, cx| {
+                            session.update(cx, |state, cx| {
+                                state.set_active_request_id(&request.id, cx)
+                            });
+                        })
+                    });
                 }),
         );
 
@@ -364,7 +365,6 @@ fn build_request_context_menu(
         let git_disc = git.clone();
         let ws_disc = ws.clone();
         let per_disc = per.clone();
-        let ed_disc = ed.clone();
         let r_id_disc = req_id.to_string();
         let r_name_disc = req_name.to_string();
 
@@ -378,7 +378,6 @@ fn build_request_context_menu(
                         &git_disc,
                         &ws_disc,
                         &per_disc,
-                        &ed_disc,
                         cx,
                     );
                 }),
@@ -401,14 +400,13 @@ fn discard_request_changes(
     git: &Entity<GitState>,
     ws: &Entity<CollectionState>,
     per: &Entity<PersistenceState>,
-    ed: &Entity<RequestSessionState>,
     cx: &mut App,
 ) {
     let norm_req = req_id.replace('\\', "/");
     let coll_rel = format!("collections/{}", norm_req);
     let path_to_discard = {
         let g = git.read(cx);
-        if let Some(git_st) = &g.status {
+        if let Some(git_st) = g.status() {
             let matches = |p: &str| -> bool {
                 let p = p.replace('\\', "/");
                 p == norm_req
@@ -437,36 +435,14 @@ fn discard_request_changes(
     let r_id_task = req_id.to_string();
     let per_cb = per.clone();
     let ws_cb = ws.clone();
-    let ed_cb = ed.clone();
     let req_name_cb = req_name.to_string();
     let svc = GitService::new(git.clone());
     svc.discard_file(&path_to_discard, false, cx, move |cx| {
         per_cb.update(cx, |p, cx| {
             p.mark_clean(&r_id_task, cx);
-            if p.conflicts.remove(&r_id_task).is_some() {
-                cx.notify();
-            }
+            p.clear_request_conflict(&r_id_task, cx);
         });
-        ws_cb.update(cx, |w, cx| {
-            w.reload_tree();
-            let active_id = ed_cb.read(cx).active_request_id().to_string();
-            if active_id == r_id_task {
-                if w.find_request(&r_id_task).is_some() {
-                    ed_cb.update(cx, |e, cx| {
-                        e.sync_composer_inputs(crate::state::ComposerSyncScope::All, cx);
-                    });
-                } else {
-                    ed_cb.update(cx, |e, cx| {
-                        if let Some(first_req) = w.requests.first() {
-                            e.set_active_request_id(&first_req.id, cx);
-                        } else {
-                            e.set_active_request_id("scratch", cx);
-                        }
-                    });
-                }
-            }
-            cx.notify();
-        });
+        ws_cb.update(cx, |w, cx| w.request_rescan(cx));
         crate::notify::info(
             "Git Discard",
             format!("Discarded changes in '{}'", req_name_cb),

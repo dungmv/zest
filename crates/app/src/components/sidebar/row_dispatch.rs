@@ -106,8 +106,8 @@ pub(super) fn render_flat_sidebar_row(
                                     state.toggle_pin(&req_id, cx);
                                 }
                             });
-                            sb_drop.update(cx, |state, _cx| {
-                                state.pinned_collapsed = false;
+                            sb_drop.update(cx, |state, cx| {
+                                state.expand_pins(cx);
                             });
                         })
                         .child(
@@ -184,14 +184,7 @@ pub(super) fn render_flat_sidebar_row(
                     let from_idx = drag.index;
                     let to_idx = target_idx;
                     ws_p_drop.update(cx, |state, cx| {
-                        if from_idx < state.pins.len() && to_idx < state.pins.len() {
-                            let item = state.pins.remove(from_idx);
-                            state.pins.insert(to_idx, item);
-                            let _ = state.store.save_pins(&state.pins);
-                            cx.emit(crate::state::CollectionEvent::PinsModified);
-                            state.bump_tree_version();
-                            cx.notify();
-                        }
+                        state.reorder_pins(from_idx, to_idx, cx);
                     });
                 })
                 .child(pill)

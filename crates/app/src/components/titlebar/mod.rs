@@ -81,27 +81,9 @@ impl RenderOnce for AppTitleBar {
         let t = theme();
         let ws = self.workspace_state.read(cx);
         let env_read = self.env_state.read(cx);
-        let modal = self.modal_state.read(cx);
         let sidebar_collapsed = self.sidebar_state.read(cx).sidebar_collapsed;
 
-        let folder_name = ws
-            .workspace_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("Workspace")
-            .to_string();
-
-        let ws_name = ws
-            .active_workspace
-            .as_ref()
-            .map(|w| {
-                if !w.name.trim().is_empty() {
-                    w.name.clone()
-                } else {
-                    folder_name.clone()
-                }
-            })
-            .unwrap_or(folder_name);
+        let ws_name = ws.workspace_name().to_owned();
 
         let env_name = env_read
             .active_environment()
@@ -235,8 +217,7 @@ impl RenderOnce for AppTitleBar {
             .pr(px(8.))
             // Split layout toggle button
             .child({
-                let modal_s = modal_clone.clone();
-                let is_vert = modal.split_layout_vertical;
+                let is_vert = crate::settings::AppPreferences::read(cx).split_layout_vertical;
                 Button::new("btn-split-toggle")
                     .ghost()
                     .compact()
@@ -250,7 +231,9 @@ impl RenderOnce for AppTitleBar {
                         "Split Layout: Side-by-Side (Horizontal)"
                     })
                     .on_click(move |_, _, cx| {
-                        modal_s.update(cx, |state, cx| state.toggle_split_layout(cx));
+                        crate::settings::AppPreferences::change(cx, |pref| {
+                            pref.split_layout_vertical = !pref.split_layout_vertical
+                        });
                     })
                     .child(if is_vert {
                         Icon::new(IconName::PanelBottom).size(px(16.))

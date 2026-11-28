@@ -312,8 +312,7 @@ impl RenderOnce for ExportModal {
                                                     ws_exec.read_with(cx, |ws, _| {
                                                         (
                                                             ws.workspace_name().to_string(),
-                                                            ws.workspace_description()
-                                                                .map(str::to_string),
+                                                            None.map(str::to_string),
                                                         )
                                                     });
                                                 let result = col_exec.update(cx, |col, _cx| {

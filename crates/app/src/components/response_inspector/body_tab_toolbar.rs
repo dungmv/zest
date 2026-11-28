@@ -220,7 +220,7 @@ pub(super) fn render_body_toolbar(ri: &ResponseInspector, props: BodyToolbarProp
                                 rs_w.update(cx, |state, cx| {
                                     state.toggle_wrap_lines(cx);
                                 });
-                                let new_wrap = rs_w.read(cx).wrap_lines;
+                                let new_wrap = rs_w.read(cx).view().wrap_lines;
                                 r_ed.update(cx, |ed, cx| {
                                     ed.set_soft_wrap(new_wrap, window, cx);
                                 });
@@ -239,6 +239,7 @@ pub(super) fn render_body_toolbar(ri: &ResponseInspector, props: BodyToolbarProp
                             .on_click(move |_, _, cx: &mut App| {
                                 let copy_text = rs_c
                                     .read(cx)
+                                    .view()
                                     .formatted_body
                                     .as_ref()
                                     .map(|f| f.display_text.to_string())

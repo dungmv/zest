@@ -1,5 +1,6 @@
 use super::git_status::{compute_all_git_statuses, GitStatusIndex, SidebarGitStatus};
 use super::request_node::{SidebarExampleItem, SidebarReqItem};
+use crate::state::{CollectionState, GitState, PersistenceState, SidebarState};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use zest_core::git::GitStatusResult;
@@ -80,7 +81,7 @@ pub fn build_sidebar_req_items(
 
     for r in requests {
         let initial_name = {
-            let eff = crate::state::effective_request_name(r);
+            let eff = crate::components::common::request_label::effective_request_name(r);
             if !r.name.trim().is_empty() && r.name != "New Request" && r.name != "Untitled Request"
             {
                 r.name.clone()
@@ -366,3 +367,53 @@ pub fn flatten_sidebar_tree(input: FlatTreeInput<'_>) -> Vec<FlatSidebarRow> {
 #[cfg(test)]
 #[path = "flat_tree_tests.rs"]
 mod tests;
+
+impl SidebarFlatCache {
+    pub fn rows(
+        &mut self,
+        sidebar: &SidebarState,
+        ws: &CollectionState,
+        per: &PersistenceState,
+        git: &GitState,
+    ) -> Arc<Vec<FlatSidebarRow>> {
+        let has_query = !sidebar.filter_query().is_empty();
+        let url_ver = if has_query { ws.url_version } else { 0 };
+        let key = SidebarCacheKey {
+            tree_version: ws.tree_version,
+            url_version_if_filtering: url_ver,
+            git_status_version: git.status_version(),
+            unsaved_version: per.unsaved_version(),
+            ui_version: sidebar.view_revision(),
+        };
+
+        if self.key == Some(key) {
+            return self.rows.clone();
+        }
+
+        let req_ver = (ws.tree_version, url_ver);
+        if self.req_items_version != Some(req_ver) {
+            let (raw_items, arc_items) = build_sidebar_req_items(ws.requests());
+            self.req_raw_items = Arc::new(raw_items);
+            self.req_items = Arc::new(arc_items);
+            self.req_items_version = Some(req_ver);
+        }
+
+        let query_lower = sidebar.filter_query().to_lowercase();
+        let rows = flatten_sidebar_tree(FlatTreeInput {
+            folders: ws.folders(),
+            raw_requests: &self.req_raw_items,
+            arc_requests: &self.req_items,
+            pins: ws.pins(),
+            query_lower: &query_lower,
+            collapsed_folders: sidebar.collapsed_folders(),
+            collapsed_requests: sidebar.collapsed_requests(),
+            pinned_collapsed: sidebar.is_pinned_collapsed(),
+            git_status: git.status(),
+            unsaved_requests: per.unsaved_requests(),
+        });
+        let arc_rows = Arc::new(rows);
+        self.key = Some(key);
+        self.rows = arc_rows.clone();
+        arc_rows
+    }
+}

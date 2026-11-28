@@ -246,7 +246,13 @@ impl WsService {
         }
     }
 
-    fn close_outgoing(&self, outgoing: Sender<WsOutgoing>) {
+    pub(super) fn owns_session(&self, request_id: &str, outgoing: &Sender<WsOutgoing>) -> bool {
+        self.lock_sessions().get(request_id).is_some_and(|session| {
+            session.status == WebSocketStatus::Connected && session.outgoing.same_channel(outgoing)
+        })
+    }
+
+    pub(super) fn close_outgoing(&self, outgoing: Sender<WsOutgoing>) {
         self.tokio_rt.spawn(async move {
             let _ = outgoing.send(WsOutgoing::Close).await;
         });

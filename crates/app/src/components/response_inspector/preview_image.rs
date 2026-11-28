@@ -20,12 +20,14 @@ pub(super) fn render_image_preview(
 ) -> AnyElement {
     let t = theme();
     let resp_s = response_state.read(cx);
-    let zoom = resp_s.ui.image_zoom;
+    let zoom = resp_s.view().image_zoom;
     let preview_image = resp_s
+        .view()
         .formatted_body
         .as_ref()
         .and_then(|f| f.preview_image.clone());
     let dimensions = resp_s
+        .view()
         .formatted_body
         .as_ref()
         .and_then(|f| f.image_dimensions);

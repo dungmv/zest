@@ -1,3 +1,6 @@
+pub mod collection;
+pub mod coordinator;
+mod environment;
 pub mod fingerprints;
 pub mod fs_ops;
 pub mod fs_store;
@@ -8,6 +11,7 @@ pub mod slug;
 pub mod traits;
 pub mod watcher;
 
+pub use environment::{EnvironmentRead, EnvironmentSnapshot};
 pub use fingerprints::{DiskFingerprints, Fingerprint};
 pub use fs_store::FsWorkspaceStore;
 pub use models::*;

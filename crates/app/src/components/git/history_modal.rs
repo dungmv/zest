@@ -385,13 +385,15 @@ impl RenderOnce for GitHistoryModal {
         let (is_repo, branch_name, history, selected_commit, git_error, expanded_files, is_loading) = {
             let git = self.git_state.read(cx);
             (
-                git.status.as_ref().map(|s| s.is_repo).unwrap_or(false),
-                git.branch.clone().unwrap_or_else(|| "main".to_string()),
+                git.status().map(|s| s.is_repo).unwrap_or(false),
+                git.branch()
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| "main".to_string()),
                 git.history.clone(),
                 git.modal.selected_commit.clone(),
-                git.error.clone(),
+                git.operation.error().map(str::to_owned),
                 git.modal.expanded_history_files.clone(),
-                git.loading,
+                git.operation.is_loading(),
             )
         };
 
